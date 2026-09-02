@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Guide the Ball</title>
+<style>
+  :root{
+    --bg:#0d1022; --panel:#181c33; --panel-2:#212745; --ink:#e9ecff; --muted:#9099c2;
+    --obstacle:#ff4d5e; --target:#2fd97a; --ramp:#3ec8ff; --wall:#93a0b8;
+    --ball:#ffffff; --accent:#ffc93c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:radial-gradient(120% 80% at 50% 0%, #1c2145 0%, var(--bg) 65%);
+    color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex;justify-content:center;align-items:flex-start;padding:10px;overscroll-behavior:none;
+  }
+  .app{width:min(430px,100%);display:flex;flex-direction:column;gap:9px}
+
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .title{font-size:15px;font-weight:700;letter-spacing:.02em;min-width:0}
+  .title span{color:var(--muted);font-weight:500}
+  .counter{background:var(--panel);border:1px solid #2c3358;border-radius:999px;
+           padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+  .counter b{color:var(--accent);font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;width:100%;border-radius:14px;overflow:hidden;
+         border:1px solid #2c3358;box-shadow:0 10px 34px rgba(0,0,0,.45)}
+  canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
+
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+           background:rgba(8,10,22,.72);backdrop-filter:blur(3px);padding:18px}
+  /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
+  .overlay[hidden]{display:none}
+  .card{background:var(--panel);border:1px solid #333b66;border-radius:16px;
+        padding:20px 18px;text-align:center;width:100%;max-width:290px;
+        box-shadow:0 14px 40px rgba(0,0,0,.5)}
+  .card .big{font-size:24px;font-weight:800;margin-bottom:4px}
+  .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .card .row{display:flex;gap:8px}
+  .win .big{color:var(--target)}
+  .lose .big{color:var(--obstacle)}
+
+  button{font:inherit;font-weight:650;color:var(--ink);background:var(--panel-2);
+         border:1px solid #39416e;border-radius:11px;padding:11px 12px;cursor:pointer;
+         flex:1;transition:filter .12s,transform .06s}
+  button:hover:not(:disabled){filter:brightness(1.18)}
+  button:active:not(:disabled){transform:translateY(1px)}
+  button:disabled{opacity:.38;cursor:not-allowed}
+  button[hidden]{display:none}
+  .primary{background:linear-gradient(180deg,#4a8cff,#2f6ae0);border-color:#5f9bff}
+  .controls{display:flex;gap:8px}
+  .controls .primary{flex:1.6}
+
+  .legend{background:var(--panel);border:1px solid #2c3358;border-radius:12px;
+          padding:9px 11px;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px}
+  .legend i{display:inline-flex;align-items:center;gap:7px;font-style:normal;color:#cdd4f5}
+  .sw{width:15px;height:15px;flex:none;display:block}
+  .sw.ob{border-radius:50%;background:var(--obstacle);box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
+  .sw.tg{border-radius:3px;background:rgba(47,217,122,.28);border:2px solid var(--target)}
+  .sw.rp{height:6px;width:18px;border-radius:3px;background:var(--ramp);transform:rotate(-20deg)}
+  .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
+  .sw.bl{border-radius:50%;background:var(--ball)}
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="hud">
+    <div class="title" id="level-title">Guide the Ball</div>
+    <div class="counter">Ramps left: <b id="ramps-left">1</b></div>
+  </div>
+
+  <div class="stage">
+    <canvas id="board" aria-label="Game board"></canvas>
+    <div class="overlay" id="overlay" hidden>
+      <div class="card" id="card">
+        <div class="big" id="ov-title">Target hit!</div>
+        <div class="sub" id="ov-sub"></div>
+        <div class="row">
+          <button id="btn-retry">Retry</button>
+          <button id="btn-adjust">Adjust</button>
+          <button id="btn-next" class="primary" hidden>Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btn-drop" class="primary">Drop Ball</button>
+    <button id="btn-undo">Undo</button>
+    <button id="btn-clear">Clear</button>
+  </div>
+
+  <div class="legend">
+    <i><span class="sw tg"></span>Green box = Target (goal)</i>
+    <i><span class="sw ob"></span>Red circle = Obstacle (random bounce)</i>
+    <i><span class="sw rp"></span>Blue bar = Your ramp</i>
+    <i><span class="sw wl"></span>Grey bar = Wall (fixed, blocks the ball)</i>
+    <i><span class="sw bl"></span>White = Ball</i>
+  </div>
+
+  <p class="hint" id="hint">Drag on the board to draw a ramp, then press Drop Ball.</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   PHYSICS CONSTANTS
+   The ball's SPEED is fixed for the whole drop. Only its
+   direction ever changes - and only when it hits something.
+   ============================================================ */
+const W = 480, H = 800;              // logical board size (portrait, 3:5)
+const BALL_R    = 9;
+const SPEED     = 8.75;              // px per 1/60s step - never changes
+// CURVE is how hard gravity bends the ball's direction. At 0 the ball travels
+// in perfectly straight lines and only ever changes direction when it hits
+// something - a ramp sets an angle and the ball holds it.
+const CURVE     = 0;
+const GRAV_BIAS = CURVE * SPEED * SPEED;
+const RAMP_HT   = 4.5;               // player ramp half-thickness
+const WALL_HT   = 5;                 // static wall half-thickness
+// Enough substeps that the ball never advances more than ~1.5px at a time,
+// however fast it is going - otherwise it tunnels through thin segments.
+const SUBSTEPS  = Math.max(5, Math.ceil(SPEED / 1.5));
+const MAX_STEPS = 60 * 14;           // 14s of bouncing, then it's a loss
+const MIN_RAMP  = 28, MAX_RAMP = 160;
+// Obstacle bounces mirror off the circle like a real bounce, then scatter by
+// up to OB_JITTER. OB_MAX_DEV keeps the result pointing away from the circle
+// so the ball can never bounce back into the thing it just hit.
+const OB_JITTER  = 32 * Math.PI / 180;
+const OB_MAX_DEV = 78 * Math.PI / 180;
+
+/* ============================================================
+   LEVELS
+   Each: id, name, maxBlocks, spawn, obstacles, target, targetType.
+   Wall segments are generated from targetType by buildWalls() and
+   are REAL collidable geometry - see resolveCollisions().
+   ============================================================ */
+const LEVELS = [
+  /* ---- Act 1: Learn to Aim (open targets) ---- */
+  { id:1, name:'First Drop', maxBlocks:1, targetType:'OPEN',
+    spawn:{x:140,y:40}, obstacles:[],
+    target:{x:262,y:664,w:140,h:52} },
+
+  { id:2, name:'Long Reach', maxBlocks:1, targetType:'OPEN',
+    spawn:{x:104,y:40}, obstacles:[],
+    target:{x:300,y:664,w:140,h:54} },
+
+  { id:3, name:'Watch Out', maxBlocks:1, targetType:'OPEN',
+    spawn:{x:132,y:40}, obstacles:[{x:262,y:470,r:38}],
+    target:{x:322,y:668,w:92,h:48} },
+
+  { id:4, name:'Two Steps', maxBlocks:2, targetType:'OPEN',
+    spawn:{x:392,y:40}, obstacles:[],
+    target:{x:38,y:678,w:96,h:48} },
+
+  { id:5, name:'Around It', maxBlocks:2, targetType:'OPEN',
+    spawn:{x:120,y:40}, obstacles:[{x:340,y:600,r:54}],
+    target:{x:292,y:670,w:120,h:50} }
+];
+
+/* Build the static wall segments for a level's target type.
+   OPEN        - nothing.
+   SIDE_WALL   - one tall wall on one side; entry must come from elsewhere.
+   POCKET      - an L (one side + a lid), so entry must be from the open side.
+   NARROW_GAP  - walled perimeter with a single small opening in the lid.
+   ENCLOSED    - both sides + floor walled, open only at the top: a cup. */
+function buildWalls(lv){
+  const t = lv.target, m = 13;
+  const L = t.x - m, R = t.x + t.w + m;
+  const TOP = t.y - m, BOT = t.y + t.h + m;
+  const up = lv.wallH || 110;                 // how far side walls rise
+  const side = lv.wallSide || 'left';
+  const seg = (x1,y1,x2,y2) => ({ x1:x1, y1:y1, x2:x2, y2:y2 });
+  switch (lv.targetType){
+    case 'SIDE_WALL':
+      return side === 'left' ? [ seg(L, BOT, L, TOP - up) ]
+                             : [ seg(R, BOT, R, TOP - up) ];
+    case 'POCKET':
+      return side === 'left'
+        ? [ seg(L, BOT, L, TOP - up), seg(L, TOP, R, TOP) ]
+        : [ seg(R, BOT, R, TOP - up), seg(L, TOP, R, TOP) ];
+    case 'NARROW_GAP': {
+      const gx = t.x + (lv.gapX !== undefined ? lv.gapX : t.w / 2);
+      const gw = lv.gapW || 46;
+      return [ seg(L, BOT, L, TOP - up), seg(R, BOT, R, TOP - up),
+               seg(L, TOP, gx - gw/2, TOP), seg(gx + gw/2, TOP, R, TOP) ];
+    }
+    case 'ENCLOSED':
+      return [ seg(L, BOT, L, TOP - up), seg(R, BOT, R, TOP - up),
+               seg(L, BOT, R, BOT) ];
+    default:
+      return [];
+  }
+}
+LEVELS.forEach(function(lv){ lv.walls = buildWalls(lv); });
+
+/* ---------------- math helpers ---------------- */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function closestOnSeg(px, py, x1, y1, x2, y2){
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx*dx + dy*dy;
+  let t = len2 ? ((px - x1)*dx + (py - y1)*dy) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return { x: x1 + t*dx, y: y1 + t*dy };
+}
+function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+
+/* ============================================================
+   SIMULATION - pure, no rendering. Shared by the live game and
+   the headless solver sweep in the test harness.
+   ============================================================ */
+function makeBall(lv, seed){
+  return {
+    x: lv.spawn.x, y: lv.spawn.y,
+    px: lv.spawn.x, py: lv.spawn.y,        // previous step, for render interpolation
+    vx: 0, vy: SPEED,
+    steps: 0, hits: 0,
+    spdMin: Infinity, spdMax: -Infinity,   // speed-invariant audit
+    bounces: [],                           // {inAng,nAng,outAng} per obstacle hit
+    rng: mulberry32(seed),
+    result: null                           // null | 'win' | 'out' | 'timeout'
+  };
+}
+function noteSpeed(b){
+  const m = Math.hypot(b.vx, b.vy);
+  if (m < b.spdMin) b.spdMin = m;
+  if (m > b.spdMax) b.spdMax = m;
+}
+/** Re-normalise the velocity back to the fixed SPEED. */
+function renorm(b){
+  const m = Math.hypot(b.vx, b.vy) || 1;
+  b.vx = b.vx / m * SPEED;
+  b.vy = b.vy / m * SPEED;
+}
+function inTarget(b, lv){
+  const t = lv.target;
+  return b.x >= t.x && b.x <= t.x + t.w && b.y >= t.y && b.y <= t.y + t.h;
+}
+
+/** Bounce off a static line segment: mirror the direction about the
+    surface normal. The angle changes, the speed never does. Used for
+    BOTH player ramps and level walls - identical physics. */
+function segmentBounce(b, s, halfT){
+  const c = closestOnSeg(b.x, b.y, s.x1, s.y1, s.x2, s.y2);
+  let nx = b.x - c.x, ny = b.y - c.y;
+  let d = Math.hypot(nx, ny);
+  const min = BALL_R + halfT;
+  if (d >= min) return false;
+  if (d < 1e-6){                          // dead-centre: use the segment's perpendicular
+    const ax = s.y2 - s.y1, ay = -(s.x2 - s.x1);
+    const am = Math.hypot(ax, ay) || 1;
+    nx = ax / am; ny = ay / am;
+  } else { nx /= d; ny /= d; }
+  const pen = min - d;                    // how far it sank in this substep
+  b.x = c.x + nx * min;
+  b.y = c.y + ny * min;
+  const dot = b.vx*nx + b.vy*ny;
+  if (dot < 0){ b.vx -= 2*dot*nx; b.vy -= 2*dot*ny; }
+  renorm(b);
+  // Re-spend the travel the push-out just undid, along the new heading.
+  b.x += b.vx / SPEED * pen;
+  b.y += b.vy / SPEED * pen;
+  return true;
+}
+
+function resolveCollisions(b, lv, ramps){
+  /* The board has no walls - the ball is free to leave by any edge, which
+     ends the run. Only ramps, level walls and obstacles change its direction. */
+  for (let i = 0; i < ramps.length; i++)     segmentBounce(b, ramps[i], RAMP_HT);
+  for (let i = 0; i < lv.walls.length; i++)  segmentBounce(b, lv.walls[i], WALL_HT);
+
+  /* red obstacles: mirror off the circle, then scatter */
+  for (let i = 0; i < lv.obstacles.length; i++){
+    const o = lv.obstacles[i];
+    let nx = b.x - o.x, ny = b.y - o.y;
+    let d = Math.hypot(nx, ny);
+    const min = BALL_R + o.r;
+    if (d < min){
+      if (d < 1e-6){ nx = 0; ny = -1; } else { nx /= d; ny /= d; }
+      b.x = o.x + nx * (min + 0.5);         // nudge clear so we can't re-trigger
+      b.y = o.y + ny * (min + 0.5);
+      const inAng = Math.atan2(b.vy, b.vx);
+      const dot = b.vx*nx + b.vy*ny;
+      let bx = b.vx, by = b.vy;
+      if (dot < 0){ bx = b.vx - 2*dot*nx; by = b.vy - 2*dot*ny; }
+      let a = Math.atan2(by, bx) + (b.rng()*2 - 1) * OB_JITTER;
+      const nAng = Math.atan2(ny, nx);
+      let rel = a - nAng;
+      rel = Math.atan2(Math.sin(rel), Math.cos(rel));   // wrap to [-PI, PI]
+      if (rel >  OB_MAX_DEV) rel =  OB_MAX_DEV;
+      else if (rel < -OB_MAX_DEV) rel = -OB_MAX_DEV;
+      a = nAng + rel;
+      b.bounces.push({ inAng: inAng, nAng: nAng, outAng: a });
+      b.vx = Math.cos(a) * SPEED;
+      b.vy = Math.sin(a) * SPEED;
+      b.hits++;
+      renorm(b);
+    }
+  }
+}
+
+/** Advance one 1/60s step. Sets b.result when the run ends. */
+function stepBall(b, lv, ramps){
+  for (let i = 0; i < SUBSTEPS; i++){
+    b.vy += GRAV_BIAS / SUBSTEPS;   // direction nudge, spread across the step...
+    renorm(b);                      // ...speed immediately restored
+    b.x += b.vx / SUBSTEPS;
+    b.y += b.vy / SUBSTEPS;
+    resolveCollisions(b, lv, ramps);
+    noteSpeed(b);
+    if (inTarget(b, lv)) { b.result = 'win'; return; }
+    if (b.x < -BALL_R || b.x > W + BALL_R ||
+        b.y < -BALL_R || b.y > H + BALL_R) { b.result = 'out'; return; }
+  }
+  b.steps++;
+  if (b.steps >= MAX_STEPS) b.result = 'timeout';
+}
+
+/** Run a whole drop headlessly and report the outcome. */
+function simulate(ramps, seed, levelIdx){
+  const lv = LEVELS[levelIdx === undefined ? levelIndex : levelIdx];
+  const b = makeBall(lv, seed >>> 0);
+  while (!b.result) stepBall(b, lv, ramps);
+  return { result: b.result, steps: b.steps, hits: b.hits,
+           spdMin: b.spdMin, spdMax: b.spdMax,
+           bounces: b.bounces, x: b.x, y: b.y };
+}
+
+/* ============================================================
+   PROGRESS (localStorage)
+   ============================================================ */
+const SAVE_KEY = 'gtb.progress.v1';
+function loadHighest(){
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    return clamp(v.highest | 0, 0, LEVELS.length - 1);
+  } catch (e){ return 0; }
+}
+function saveHighest(i){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ highest: i })); }
+  catch (e){ /* private mode / blocked storage - progress just won't persist */ }
+}
+
+/* ============================================================
+   GAME STATE
+   ============================================================ */
+let levelIndex = 0;
+let highest    = 0;
+let phase  = 'plan';    // 'plan' | 'drop' | 'over'
+let ramps  = [];
+let draft  = null;
+let ball   = null;
+let seedOverride = null;
+
+const canvas  = document.getElementById('board');
+const ctx     = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const card    = document.getElementById('card');
+const elLeft  = document.getElementById('ramps-left');
+const elTitle = document.getElementById('level-title');
+const elHint  = document.getElementById('hint');
+const btnDrop = document.getElementById('btn-drop');
+const btnUndo = document.getElementById('btn-undo');
+const btnClear= document.getElementById('btn-clear');
+const btnNext = document.getElementById('btn-next');
+
+const dpr = Math.min(window.devicePixelRatio || 1, 3);
+canvas.width  = W * dpr;
+canvas.height = H * dpr;
+ctx.scale(dpr, dpr);
+
+function level(){ return LEVELS[levelIndex]; }
+
+function syncUI(){
+  const lv = level();
+  const planning = phase === 'plan';
+  elTitle.innerHTML = 'Level ' + lv.id + ' <span>&mdash; ' + lv.name + '</span>';
+  elLeft.textContent = lv.maxBlocks - ramps.length;
+  btnDrop.disabled  = !planning;
+  btnUndo.disabled  = !planning || ramps.length === 0;
+  btnClear.disabled = !planning || ramps.length === 0;
+  if (phase === 'drop')      elHint.textContent = 'Watching the drop…';
+  else if (phase === 'over') elHint.textContent = 'Retry replays the same ramps. Adjust lets you redraw.';
+  else if (ramps.length >= lv.maxBlocks)
+    elHint.textContent = 'No ramps left — undo one to redraw, or drop the ball.';
+  else elHint.textContent = 'Drag on the board to draw a ramp, then press Drop Ball.';
+}
+
+function setLevel(i){
+  levelIndex = clamp(i, 0, LEVELS.length - 1);
+  ramps = []; draft = null; ball = null;
+  phase = 'plan'; overlay.hidden = true;
+  if (levelIndex > highest){ highest = levelIndex; saveHighest(highest); }
+  syncUI();
+}
+
+/* ---------------- input: mouse + touch via pointer events ---------------- */
+function toBoard(e){
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: clamp((e.clientX - r.left) * (W / r.width), 0, W),
+    y: clamp((e.clientY - r.top)  * (H / r.height), 0, H)
+  };
+}
+function truncate(p, q){
+  const dx = q.x - p.x, dy = q.y - p.y;
+  const len = Math.hypot(dx, dy);
+  if (len <= MAX_RAMP) return q;
+  return { x: p.x + dx / len * MAX_RAMP, y: p.y + dy / len * MAX_RAMP };
+}
+
+canvas.addEventListener('pointerdown', function(e){
+  if (phase !== 'plan' || ramps.length >= level().maxBlocks) return;
+  canvas.setPointerCapture(e.pointerId);
+  const p = toBoard(e);
+  draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove', function(e){
+  if (!draft) return;
+  const p = truncate({ x: draft.x1, y: draft.y1 }, toBoard(e));
+  draft.x2 = p.x; draft.y2 = p.y;
+  e.preventDefault();
+});
+function endDraft(){
+  if (!draft) return;
+  const len = Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1);
+  if (len >= MIN_RAMP && ramps.length < level().maxBlocks) ramps.push(draft);
+  draft = null;
+  syncUI();
+}
+canvas.addEventListener('pointerup',     function(e){ endDraft(); e.preventDefault(); });
+canvas.addEventListener('pointercancel', function(){ draft = null; });
+
+/* ---------------- actions ---------------- */
+function drop(){
+  if (phase !== 'plan') return;
+  draft = null;
+  const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
+  ball  = makeBall(level(), seed);
+  phase = 'drop';
+  overlay.hidden = true;
+  syncUI();
+}
+function finish(result){
+  phase = 'over';
+  const win  = result === 'win';
+  const last = levelIndex >= LEVELS.length - 1;
+  if (win && !last && levelIndex + 1 > highest){ highest = levelIndex + 1; saveHighest(highest); }
+  card.className = 'card ' + (win ? 'win' : 'lose');
+  document.getElementById('ov-title').textContent = win ? 'Target hit!' : 'Missed';
+  document.getElementById('ov-sub').textContent =
+    win ? (last ? 'That was the last level for now.' : 'On to level ' + LEVELS[levelIndex+1].id + '.')
+        : result === 'timeout' ? 'The ball bounced too long without landing.'
+        : 'The ball left the board without reaching the target.';
+  btnNext.hidden = !win || last;
+  overlay.hidden = false;
+  syncUI();
+}
+btnDrop.addEventListener('click', drop);
+btnUndo.addEventListener('click', function(){ if (phase === 'plan'){ ramps.pop(); syncUI(); } });
+btnClear.addEventListener('click', function(){ if (phase === 'plan'){ ramps = []; syncUI(); } });
+document.getElementById('btn-retry').addEventListener('click', function(){
+  phase = 'plan'; overlay.hidden = true; drop();
+});
+document.getElementById('btn-adjust').addEventListener('click', function(){
+  phase = 'plan'; ball = null; overlay.hidden = true; syncUI();
+});
+btnNext.addEventListener('click', function(){ setLevel(levelIndex + 1); });
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+const STEP_MS = 1000 / 60;
+let last = performance.now(), acc = 0;
+const lastDraw = { x: 0, y: 0 };          // where the ball was actually painted
+
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+function drawSeg(s, color, halfT, glow){
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = halfT * 2;
+  if (glow){ ctx.shadowColor = glow; ctx.shadowBlur = 10; }
+  ctx.beginPath();
+  ctx.moveTo(s.x1, s.y1);
+  ctx.lineTo(s.x2, s.y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render(){
+  const lv = level();
+
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#141936');
+  g.addColorStop(1, '#0b0e1e');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(255,255,255,.035)';
+  ctx.lineWidth = 1;
+  for (let y = 50; y < H; y += 50){
+    ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke();
+  }
+
+  /* target */
+  const t = lv.target;
+  ctx.save();
+  ctx.fillStyle = 'rgba(47,217,122,.20)';
+  ctx.strokeStyle = '#2fd97a';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = 'rgba(47,217,122,.5)';
+  ctx.shadowBlur = 14;
+  roundRect(t.x, t.y, t.w, t.h, 9);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(220,255,235,.92)';
+  ctx.font = '700 12px ui-sans-serif,system-ui,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('TARGET', t.x + t.w / 2, t.y + t.h / 2);
+
+  /* static walls - structural, not player-placed */
+  for (let i = 0; i < lv.walls.length; i++)
+    drawSeg(lv.walls[i], '#93a0b8', WALL_HT, 'rgba(0,0,0,.5)');
+
+  /* obstacles */
+  for (let i = 0; i < lv.obstacles.length; i++){
+    const o = lv.obstacles[i];
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,77,94,.55)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#ff4d5e';
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(0,0,0,.30)';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 7, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  /* ramps */
+  for (let i = 0; i < ramps.length; i++) drawSeg(ramps[i], '#3ec8ff', RAMP_HT, 'rgba(62,200,255,.55)');
+  if (draft){
+    const len = Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1);
+    drawSeg(draft, len < MIN_RAMP ? 'rgba(62,200,255,.45)' : '#3ec8ff', RAMP_HT, null);
+  }
+
+  /* spawn marker (planning only) */
+  if (phase === 'plan'){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.28)';
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(lv.spawn.x, lv.spawn.y + 14);
+    ctx.lineTo(lv.spawn.x, lv.spawn.y + 78);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(lv.spawn.x, lv.spawn.y, BALL_R + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* ball - drawn between the last two physics states, so motion stays smooth
+     on high-refresh displays where rAF outruns the fixed 60Hz simulation. */
+  let b = ball || lv.spawn;
+  if (ball && phase === 'drop'){
+    const a = acc / STEP_MS;
+    b = { x: ball.px + (ball.x - ball.px) * a,
+          y: ball.py + (ball.y - ball.py) * a };
+  }
+  lastDraw.x = b.x; lastDraw.y = b.y;
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,255,255,.65)';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+/* ---------------- fixed-timestep loop ---------------- */
+function frame(now){
+  let dt = now - last;
+  last = now;
+  if (dt > 250) dt = 250;               // tab was backgrounded
+
+  if (phase === 'drop' && ball){
+    acc += dt;
+    while (acc >= STEP_MS){
+      acc -= STEP_MS;
+      ball.px = ball.x; ball.py = ball.y;
+      stepBall(ball, level(), ramps);
+      if (ball.result){ finish(ball.result); break; }
+    }
+  } else {
+    acc = 0;
+  }
+
+  render();
+  requestAnimationFrame(frame);
+}
+
+highest = loadHighest();
+setLevel(highest);
+requestAnimationFrame(frame);
+
+/* ============================================================
+   TEST HOOK - used by the Playwright suite / solver sweep.
+   ============================================================ */
+window.__gtb = {
+  LEVELS: LEVELS,
+  CONSTS: { W:W, H:H, BALL_R:BALL_R, SPEED:SPEED, GRAV_BIAS:GRAV_BIAS, CURVE:CURVE,
+            SUBSTEPS:SUBSTEPS, OB_JITTER:OB_JITTER, OB_MAX_DEV:OB_MAX_DEV,
+            MIN_RAMP:MIN_RAMP, MAX_RAMP:MAX_RAMP, RAMP_HT:RAMP_HT, WALL_HT:WALL_HT },
+  simulate: simulate,
+  buildWalls: buildWalls,   // lets tests build any target type on any level
+  state: function(){
+    const lv = level();
+    return { phase: phase, levelIndex: levelIndex, levelId: lv.id, highest: highest,
+             ramps: ramps.map(function(r){ return Object.assign({}, r); }),
+             maxBlocks: lv.maxBlocks, rampsLeft: lv.maxBlocks - ramps.length,
+             walls: lv.walls.length, targetType: lv.targetType,
+             result: ball ? ball.result : null,
+             ball: ball ? { x: ball.x, y: ball.y, px: ball.px, py: ball.py,
+                            speed: Math.hypot(ball.vx, ball.vy) } : null,
+             draw: { x: lastDraw.x, y: lastDraw.y } };
+  },
+  setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
+  setRamps: function(list){ ramps = list.map(function(r){ return Object.assign({}, r); }); syncUI(); },
+  setLevel: setLevel,
+  clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY); } catch (e){} highest = 0; },
+  reset: function(){ ramps = []; ball = null; draft = null;
+                     phase = 'plan'; overlay.hidden = true; syncUI(); }
+};
+})();
+</script>
+</body>
+</html>

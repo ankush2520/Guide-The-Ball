@@ -1,0 +1,14 @@
+{
+  "name": "guide-the-ball",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs",
+    "test": "node tests/play.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  },
+  "description": "Hyper-casual web game. The whole game is index.html - self-contained, no build step. npm is only for the Playwright tests."
+}
