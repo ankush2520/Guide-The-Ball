@@ -64,18 +64,36 @@
   .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
   .sw.bl{border-radius:50%;background:var(--ball)}
   .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0}
+
+  button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
+               cursor:pointer;font-size:15px;font-weight:700;color:var(--ink)}
+  button.title:after{content:' \25BE';color:var(--muted);font-size:12px}
+  .selcard{max-width:330px}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
+  .grid button{flex:none;padding:10px 0;font-size:13px;font-variant-numeric:tabular-nums}
+  .grid button.done{border-color:#2fd97a;color:#8dffbe}
+  .grid button.cur{background:linear-gradient(180deg,#4a8cff,#2f6ae0);border-color:#5f9bff}
+  .grid button:disabled{opacity:.3}
 </style>
 </head>
 <body>
 <div class="app">
 
   <div class="hud">
-    <div class="title" id="level-title">Guide the Ball</div>
+    <button class="title" id="level-title" title="Choose a level">Guide the Ball</button>
     <div class="counter">Ramps left: <b id="ramps-left">1</b></div>
   </div>
 
   <div class="stage">
     <canvas id="board" aria-label="Game board"></canvas>
+    <div class="overlay" id="select" hidden>
+      <div class="card selcard">
+        <div class="big">Levels</div>
+        <div class="sub" id="sel-sub">Cleared levels stay unlocked.</div>
+        <div class="grid" id="lvgrid"></div>
+        <div class="row"><button id="btn-close-sel">Close</button></div>
+      </div>
+    </div>
     <div class="overlay" id="overlay" hidden>
       <div class="card" id="card">
         <div class="big" id="ov-title">Target hit!</div>
@@ -143,63 +161,191 @@ const OB_MAX_DEV = 78 * Math.PI / 180;
    are REAL collidable geometry - see resolveCollisions().
    ============================================================ */
 const LEVELS = [
-  /* ---- Act 1: Learn to Aim (open targets) ---- */
+  /* =============== Act 1 - Learn to Aim (open targets) ===============
+     Spawn/target sides deliberately alternate so no two boards feel alike. */
+
+  // 1. spawn left  -> target low-right.  Simplest possible case.
   { id:1, name:'First Drop', maxBlocks:1, targetType:'OPEN',
-    spawn:{x:140,y:40}, obstacles:[],
-    target:{x:262,y:664,w:140,h:52} },
+    spawn:{x:140,y:40}, obstacles:[], target:{x:330,y:686,r:46} },
 
+  // 2. spawn right -> target low-left.  Mirrors level 1, longer reach.
   { id:2, name:'Long Reach', maxBlocks:1, targetType:'OPEN',
-    spawn:{x:104,y:40}, obstacles:[],
-    target:{x:300,y:664,w:140,h:54} },
+    spawn:{x:372,y:40}, obstacles:[], target:{x:118,y:700,r:42} },
 
+  // 3. spawn centre -> target far left and HIGHER up the board.
   { id:3, name:'Watch Out', maxBlocks:1, targetType:'OPEN',
-    spawn:{x:132,y:40}, obstacles:[{x:262,y:470,r:38}],
-    target:{x:322,y:668,w:92,h:48} },
+    spawn:{x:232,y:40}, obstacles:[{x:170,y:452,r:36}], target:{x:92,y:636,r:27} },
 
+  // 4. spawn far left -> target far right, the longest traverse yet.
   { id:4, name:'Two Steps', maxBlocks:2, targetType:'OPEN',
-    spawn:{x:392,y:40}, obstacles:[],
-    target:{x:38,y:678,w:96,h:48} },
+    spawn:{x:68,y:40}, obstacles:[], target:{x:398,y:712,r:38} },
 
+  // 5. spawn right -> target left, obstacle sitting on the obvious line.
   { id:5, name:'Around It', maxBlocks:2, targetType:'OPEN',
-    spawn:{x:120,y:40}, obstacles:[{x:340,y:600,r:54}],
-    target:{x:292,y:670,w:120,h:50} }
+    spawn:{x:344,y:40}, obstacles:[{x:250,y:560,r:52}], target:{x:140,y:664,r:40} },
+
+  /* =============== Act 2 - Dodge and Guide (obstacle-focused) =============== */
+
+  // 6. thread the lane between two obstacles, target high-right.
+  { id:6, name:'The Gap', maxBlocks:2, targetType:'OPEN',
+    spawn:{x:120,y:40}, obstacles:[{x:214,y:424,r:36},{x:356,y:424,r:36}],
+    target:{x:368,y:604,r:40} },
+
+  // 7. precision spike - budget DROPS to one ramp.
+  { id:7, name:'One Shot', maxBlocks:1, targetType:'OPEN',
+    spawn:{x:404,y:40}, obstacles:[{x:300,y:404,r:40},{x:152,y:560,r:36}],
+    target:{x:196,y:700,r:22} },
+
+  // 8. obstacles clustered mid-board; go around via the side.
+  { id:8, name:'Staircase', maxBlocks:3, targetType:'OPEN',
+    spawn:{x:240,y:40}, obstacles:[{x:228,y:420,r:44},{x:282,y:524,r:42}],
+    target:{x:426,y:620,r:46} },
+
+  // 9. loose vertical line of three - real clip risk on the way down.
+  { id:9, name:'Tight Corridor', maxBlocks:2, targetType:'OPEN',
+    spawn:{x:84,y:40}, obstacles:[{x:206,y:300,r:32},{x:214,y:440,r:32},{x:206,y:580,r:32}],
+    target:{x:300,y:716,r:40} },
+
+  // 10. corner to opposite corner, target high on the far side.
+  { id:10, name:'Cross Court', maxBlocks:2, targetType:'OPEN',
+    spawn:{x:428,y:40}, obstacles:[{x:296,y:430,r:38},{x:170,y:302,r:36}],
+    target:{x:60,y:628,r:40} },
+
+  /* =============== Act 3 - Threading the Needle (walls) =============== */
+
+  // 11. SIDE_WALL alone, no obstacles: isolate the new mechanic.
+  { id:11, name:'One Way In', maxBlocks:2, targetType:'SIDE_WALL', wallSide:'left',
+    spawn:{x:156,y:40}, obstacles:[], target:{x:392,y:668,r:40} },
+
+  // 12. POCKET guarded on the right; spawn is on the right, so come around.
+  { id:12, name:'The Pocket', maxBlocks:2, targetType:'POCKET', wallSide:'right',
+    spawn:{x:396,y:40}, obstacles:[{x:330,y:470,r:38}], target:{x:250,y:690,r:46} },
+
+  // 13. first NARROW_GAP, target high-left.
+  { id:13, name:'Threading It', maxBlocks:3, targetType:'NARROW_GAP', gapW:52,
+    spawn:{x:260,y:40}, obstacles:[{x:180,y:420,r:36}], target:{x:94,y:596,r:38} },
+
+  // 14. NARROW_GAP again, budget drops to two and the gap narrows.
+  { id:14, name:'Steady Hands', maxBlocks:2, targetType:'NARROW_GAP', gapW:44,
+    spawn:{x:96,y:40}, obstacles:[{x:222,y:380,r:36},{x:304,y:520,r:34}],
+    target:{x:352,y:736,r:38} },
+
+  // 15. the cup: only a near-vertical drop gets in.
+  { id:15, name:'The Basket', maxBlocks:3, targetType:'ENCLOSED',
+    spawn:{x:384,y:40}, obstacles:[{x:300,y:398,r:38},{x:140,y:500,r:36}],
+    target:{x:200,y:648,r:40} },
+
+  /* =============== Act 4 - Guide Master =============== */
+
+  // 16. back to OPEN - an obstacle-weaving showcase, stationary.
+  { id:16, name:'Breather', maxBlocks:2, targetType:'OPEN',
+    spawn:{x:216,y:40}, obstacles:[{x:302,y:340,r:34},{x:248,y:482,r:36},{x:370,y:566,r:32}],
+    target:{x:286,y:596,r:46} },
+
+  // 17. FIRST MOVING TARGET - slow, short glide, plus its SIDE_WALL.
+  { id:17, name:'Full House', maxBlocks:3, targetType:'SIDE_WALL', wallSide:'left',
+    spawn:{x:128,y:40}, obstacles:[{x:240,y:380,r:36},{x:330,y:502,r:34}],
+    target:{x:300,y:660,r:46},
+    move:{ points:[{x:300,y:660},{x:392,y:660}], speed:32 } },
+
+  // 18. stationary on purpose - precision without timing, for pacing.
+  { id:18, name:'No Room', maxBlocks:2, targetType:'NARROW_GAP', gapW:38,
+    spawn:{x:400,y:40}, obstacles:[{x:300,y:360,r:36},{x:232,y:482,r:34},{x:118,y:462,r:32}],
+    target:{x:128,y:566,r:38} },
+
+  // 19. moving faster and further, busiest board in the set.
+  { id:19, name:'The Gauntlet', maxBlocks:3, targetType:'POCKET', wallSide:'right',
+    spawn:{x:248,y:40},
+    obstacles:[{x:158,y:320,r:32},{x:302,y:360,r:34},{x:198,y:470,r:34},{x:344,y:520,r:32}],
+    target:{x:150,y:726,r:44},
+    move:{ points:[{x:150,y:726},{x:356,y:726}], speed:60 } },
+
+  // 20. finale - three waypoints, so the path is longer and less predictable.
+  { id:20, name:"Master's Drop", maxBlocks:3, targetType:'ENCLOSED',
+    spawn:{x:92,y:40},
+    obstacles:[{x:200,y:330,r:34},{x:332,y:430,r:34},{x:152,y:452,r:32}],
+    target:{x:170,y:620,r:34},
+    move:{ points:[{x:170,y:620},{x:270,y:560},{x:366,y:620}], speed:110 } }
 ];
 
-/* Build the static wall segments for a level's target type.
+/* ---------- target motion ----------
+   A moving target glides in STRAIGHT LINES between fixed waypoints at a
+   constant speed, looping A->B->A for two points or A->B->C->A for three.
+   Pure linear interpolation - nothing in this game rotates or orbits.
+   Position is a function of time, evaluated every frame during planning as
+   well as during the drop, so the player can watch the path before committing.
+   Motion parameters live in each level's `move` block, never inline. */
+function initMove(lv){
+  if (!lv.move) return;
+  const pts = lv.move.points;
+  const segs = [];
+  let total = 0;
+  for (let i = 0; i < pts.length; i++){
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const L = Math.hypot(b.x - a.x, b.y - a.y);
+    segs.push({ ax:a.x, ay:a.y, dx:b.x - a.x, dy:b.y - a.y, L:L });
+    total += L;
+  }
+  lv.move.segs = segs;
+  lv.move.total = total;
+  lv.target.x = pts[0].x; lv.target.y = pts[0].y;   // base position = first waypoint
+}
+function targetAt(lv, t){
+  const m = lv.move;
+  if (!m) return lv.target;
+  let d = (m.speed * t) % m.total;
+  if (d < 0) d += m.total;
+  for (let i = 0; i < m.segs.length; i++){
+    const sg = m.segs[i];
+    if (d <= sg.L || i === m.segs.length - 1){
+      const k = sg.L ? clamp(d / sg.L, 0, 1) : 0;
+      return { x: sg.ax + sg.dx * k, y: sg.ay + sg.dy * k, r: lv.target.r };
+    }
+    d -= sg.L;
+  }
+  return lv.target;
+}
+
+/* Build the static wall segments around a CIRCULAR target centred at c.
    OPEN        - nothing.
-   SIDE_WALL   - one tall wall on one side; entry must come from elsewhere.
+   SIDE_WALL   - one tall bar guarding a side; entry must come from elsewhere.
    POCKET      - an L (one side + a lid), so entry must be from the open side.
-   NARROW_GAP  - walled perimeter with a single small opening in the lid.
-   ENCLOSED    - both sides + floor walled, open only at the top: a cup. */
-function buildWalls(lv){
-  const t = lv.target, m = 13;
-  const L = t.x - m, R = t.x + t.w + m;
-  const TOP = t.y - m, BOT = t.y + t.h + m;
-  const up = lv.wallH || 110;                 // how far side walls rise
+   NARROW_GAP  - bars on both sides plus a lid with a single small opening.
+   ENCLOSED    - both sides + a floor, open only at the top: a cup.
+   Walls are rebuilt from the target's CURRENT centre, so they travel with a
+   moving target instead of being left behind. */
+function buildWalls(lv, c){
+  c = c || lv.target;
+  const d  = c.r + 16;                        // standoff from the outer ring
+  const up = lv.wallH || 112;                 // how far side bars rise
   const side = lv.wallSide || 'left';
   const seg = (x1,y1,x2,y2) => ({ x1:x1, y1:y1, x2:x2, y2:y2 });
   switch (lv.targetType){
     case 'SIDE_WALL':
-      return side === 'left' ? [ seg(L, BOT, L, TOP - up) ]
-                             : [ seg(R, BOT, R, TOP - up) ];
+      return side === 'left' ? [ seg(c.x-d, c.y+d, c.x-d, c.y-up) ]
+                             : [ seg(c.x+d, c.y+d, c.x+d, c.y-up) ];
     case 'POCKET':
       return side === 'left'
-        ? [ seg(L, BOT, L, TOP - up), seg(L, TOP, R, TOP) ]
-        : [ seg(R, BOT, R, TOP - up), seg(L, TOP, R, TOP) ];
+        ? [ seg(c.x-d, c.y+d, c.x-d, c.y-d), seg(c.x-d, c.y-d, c.x+d, c.y-d) ]
+        : [ seg(c.x+d, c.y+d, c.x+d, c.y-d), seg(c.x-d, c.y-d, c.x+d, c.y-d) ];
     case 'NARROW_GAP': {
-      const gx = t.x + (lv.gapX !== undefined ? lv.gapX : t.w / 2);
-      const gw = lv.gapW || 46;
-      return [ seg(L, BOT, L, TOP - up), seg(R, BOT, R, TOP - up),
-               seg(L, TOP, gx - gw/2, TOP), seg(gx + gw/2, TOP, R, TOP) ];
+      // gapW is the CLEAR window the ball centre can pass through, not the raw
+      // span between bars - the bar ends are pushed out by the ball radius and
+      // the wall thickness so the number means what it says when tuning.
+      const gx = c.x + (lv.gapX || 0);
+      const half = (lv.gapW || 46) / 2 + WALL_HT + BALL_R;
+      return [ seg(c.x-d, c.y+d, c.x-d, c.y-up), seg(c.x+d, c.y+d, c.x+d, c.y-up),
+               seg(c.x-d, c.y-d, gx-half, c.y-d), seg(gx+half, c.y-d, c.x+d, c.y-d) ];
     }
     case 'ENCLOSED':
-      return [ seg(L, BOT, L, TOP - up), seg(R, BOT, R, TOP - up),
-               seg(L, BOT, R, BOT) ];
+      return [ seg(c.x-d, c.y+d, c.x-d, c.y-up), seg(c.x+d, c.y+d, c.x+d, c.y-up),
+               seg(c.x-d, c.y+d, c.x+d, c.y+d) ];
     default:
       return [];
   }
 }
-LEVELS.forEach(function(lv){ lv.walls = buildWalls(lv); });
+// static levels can cache their walls; moving ones rebuild each step
+LEVELS.forEach(function(lv){ initMove(lv); lv.walls = buildWalls(lv, lv.target); });
 
 /* ---------------- math helpers ---------------- */
 function mulberry32(a){
@@ -223,8 +369,9 @@ function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
    SIMULATION - pure, no rendering. Shared by the live game and
    the headless solver sweep in the test harness.
    ============================================================ */
-function makeBall(lv, seed){
+function makeBall(lv, seed, t0){
   return {
+    t0: t0 || 0,                           // target-motion phase when the drop began
     x: lv.spawn.x, y: lv.spawn.y,
     px: lv.spawn.x, py: lv.spawn.y,        // previous step, for render interpolation
     vx: 0, vy: SPEED,
@@ -246,9 +393,10 @@ function renorm(b){
   b.vx = b.vx / m * SPEED;
   b.vy = b.vy / m * SPEED;
 }
-function inTarget(b, lv){
-  const t = lv.target;
-  return b.x >= t.x && b.x <= t.x + t.w && b.y >= t.y && b.y <= t.y + t.h;
+/* Both the ball and the target are circles now, so the win check is simply
+   "is the ball's centre inside the outer ring". */
+function inTarget(b, c){
+  return Math.hypot(b.x - c.x, b.y - c.y) <= c.r;
 }
 
 /** Bounce off a static line segment: mirror the direction about the
@@ -277,11 +425,11 @@ function segmentBounce(b, s, halfT){
   return true;
 }
 
-function resolveCollisions(b, lv, ramps){
+function resolveCollisions(b, lv, ramps, walls){
   /* The board has no walls - the ball is free to leave by any edge, which
      ends the run. Only ramps, level walls and obstacles change its direction. */
-  for (let i = 0; i < ramps.length; i++)     segmentBounce(b, ramps[i], RAMP_HT);
-  for (let i = 0; i < lv.walls.length; i++)  segmentBounce(b, lv.walls[i], WALL_HT);
+  for (let i = 0; i < ramps.length; i++)  segmentBounce(b, ramps[i], RAMP_HT);
+  for (let i = 0; i < walls.length; i++)  segmentBounce(b, walls[i], WALL_HT);
 
   /* red obstacles: mirror off the circle, then scatter */
   for (let i = 0; i < lv.obstacles.length; i++){
@@ -315,14 +463,19 @@ function resolveCollisions(b, lv, ramps){
 
 /** Advance one 1/60s step. Sets b.result when the run ends. */
 function stepBall(b, lv, ramps){
+  // the target (and any walls bolted to it) are re-evaluated every step from
+  // the elapsed motion clock, so a moving target is tracked, never snapshotted
+  const t = b.t0 + b.steps / 60;
+  const c = targetAt(lv, t);
+  const walls = lv.move ? buildWalls(lv, c) : lv.walls;
   for (let i = 0; i < SUBSTEPS; i++){
     b.vy += GRAV_BIAS / SUBSTEPS;   // direction nudge, spread across the step...
     renorm(b);                      // ...speed immediately restored
     b.x += b.vx / SUBSTEPS;
     b.y += b.vy / SUBSTEPS;
-    resolveCollisions(b, lv, ramps);
+    resolveCollisions(b, lv, ramps, walls);
     noteSpeed(b);
-    if (inTarget(b, lv)) { b.result = 'win'; return; }
+    if (inTarget(b, c)) { b.result = 'win'; b.hitX = c.x; b.hitY = c.y; return; }
     if (b.x < -BALL_R || b.x > W + BALL_R ||
         b.y < -BALL_R || b.y > H + BALL_R) { b.result = 'out'; return; }
   }
@@ -331,12 +484,12 @@ function stepBall(b, lv, ramps){
 }
 
 /** Run a whole drop headlessly and report the outcome. */
-function simulate(ramps, seed, levelIdx){
+function simulate(ramps, seed, levelIdx, t0){
   const lv = LEVELS[levelIdx === undefined ? levelIndex : levelIdx];
-  const b = makeBall(lv, seed >>> 0);
+  const b = makeBall(lv, seed >>> 0, t0 || 0);
   while (!b.result) stepBall(b, lv, ramps);
   return { result: b.result, steps: b.steps, hits: b.hits,
-           spdMin: b.spdMin, spdMax: b.spdMax,
+           spdMin: b.spdMin, spdMax: b.spdMax, secs: b.steps / 60,
            bounces: b.bounces, x: b.x, y: b.y };
 }
 
@@ -389,11 +542,12 @@ function syncUI(){
   const lv = level();
   const planning = phase === 'plan';
   elTitle.innerHTML = 'Level ' + lv.id + ' <span>&mdash; ' + lv.name + '</span>';
+  if (typeof selPanel !== 'undefined' && !selPanel.hidden) buildGrid();
   elLeft.textContent = lv.maxBlocks - ramps.length;
   btnDrop.disabled  = !planning;
   btnUndo.disabled  = !planning || ramps.length === 0;
   btnClear.disabled = !planning || ramps.length === 0;
-  if (phase === 'drop')      elHint.textContent = 'Watching the drop…';
+  if (phase === 'drop' || phase === 'capture') elHint.textContent = 'Watching the drop…';
   else if (phase === 'over') elHint.textContent = 'Retry replays the same ramps. Adjust lets you redraw.';
   else if (ramps.length >= lv.maxBlocks)
     elHint.textContent = 'No ramps left — undo one to redraw, or drop the ball.';
@@ -402,7 +556,7 @@ function syncUI(){
 
 function setLevel(i){
   levelIndex = clamp(i, 0, LEVELS.length - 1);
-  ramps = []; draft = null; ball = null;
+  ramps = []; draft = null; ball = null; capture = null;
   phase = 'plan'; overlay.hidden = true;
   if (levelIndex > highest){ highest = levelIndex; saveHighest(highest); }
   syncUI();
@@ -449,11 +603,19 @@ canvas.addEventListener('pointercancel', function(){ draft = null; });
 /* ---------------- actions ---------------- */
 function drop(){
   if (phase !== 'plan') return;
-  draft = null;
+  draft = null; capture = null;
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
   phase = 'drop';
   overlay.hidden = true;
+  syncUI();
+}
+/* A win is swallowed by the target first; the overlay waits for the animation. */
+function land(result){
+  if (result !== 'win'){ finish(result); return; }
+  const c = targetAt(level(), ball.t0 + ball.steps / 60);
+  phase = 'capture';
+  capture = { t: 0, bx: ball.x, by: ball.y, cx: c.x, cy: c.y };
   syncUI();
 }
 function finish(result){
@@ -482,11 +644,37 @@ document.getElementById('btn-adjust').addEventListener('click', function(){
 });
 btnNext.addEventListener('click', function(){ setLevel(levelIndex + 1); });
 
+/* ---------------- level select ---------------- */
+const selPanel = document.getElementById('select');
+const lvGrid   = document.getElementById('lvgrid');
+function buildGrid(){
+  lvGrid.innerHTML = '';
+  for (let i = 0; i < LEVELS.length; i++){
+    const b = document.createElement('button');
+    b.textContent = LEVELS[i].id;
+    b.disabled = i > highest;                       // locked past your best
+    if (i < highest) b.className = 'done';
+    if (i === levelIndex) b.className = 'cur';
+    b.title = b.disabled ? 'Locked' : LEVELS[i].name;
+    b.addEventListener('click', function(){ setLevel(i); selPanel.hidden = true; });
+    lvGrid.appendChild(b);
+  }
+  document.getElementById('sel-sub').textContent =
+    'Unlocked ' + (highest + 1) + ' of ' + LEVELS.length + '. Clear a level to open the next.';
+}
+elTitle.addEventListener('click', function(){ buildGrid(); selPanel.hidden = false; });
+document.getElementById('btn-close-sel').addEventListener('click', function(){ selPanel.hidden = true; });
+
 /* ============================================================
    RENDERING
    ============================================================ */
-const STEP_MS = 1000 / 60;
+const STEP_MS     = 1000 / 60;
+const CAPTURE_MS  = 620;      // length of the "swallowed" animation
+const TARGET_MOTES  = 6;      // motes at fixed angles, breathing in and out
+const TARGET_PULSE_S = 1.9;   // seconds per outward pulse ring
 let last = performance.now(), acc = 0;
+let clock = 0;                // seconds since load - drives all target motion
+let capture = null;           // {t, bx, by, cx, cy} while the capture plays
 const lastDraw = { x: 0, y: 0 };          // where the ball was actually painted
 
 function roundRect(x, y, w, h, r){
@@ -526,27 +714,86 @@ function render(){
     ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke();
   }
 
-  /* target */
-  const t = lv.target;
-  ctx.save();
-  ctx.fillStyle = 'rgba(47,217,122,.20)';
-  ctx.strokeStyle = '#2fd97a';
-  ctx.lineWidth = 3;
-  ctx.shadowColor = 'rgba(47,217,122,.5)';
-  ctx.shadowBlur = 14;
-  roundRect(t.x, t.y, t.w, t.h, 9);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-  ctx.fillStyle = 'rgba(220,255,235,.92)';
-  ctx.font = '700 12px ui-sans-serif,system-ui,sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('TARGET', t.x + t.w / 2, t.y + t.h / 2);
+  const c = targetAt(lv, clock);
 
-  /* static walls - structural, not player-placed */
-  for (let i = 0; i < lv.walls.length; i++)
-    drawSeg(lv.walls[i], '#93a0b8', WALL_HT, 'rgba(0,0,0,.5)');
+  /* ---- target: a bullseye portal. Concentric rings, a pulsing core, a
+     slowly counter-rotating outer ring and a few drifting motes, so it reads
+     as "land here" and stays alive even before the ball is dropped. ---- */
+  const pulse = 0.5 + 0.5 * Math.sin(clock * 2.3);
+
+  ctx.save();
+  ctx.translate(c.x, c.y);
+
+  // soft halo
+  const halo = ctx.createRadialGradient(0, 0, c.r * 0.15, 0, 0, c.r * 1.55);
+  halo.addColorStop(0,   'rgba(47,217,122,' + (0.30 + pulse * 0.16) + ')');
+  halo.addColorStop(0.55,'rgba(47,217,122,0.10)');
+  halo.addColorStop(1,   'rgba(47,217,122,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(0, 0, c.r * 1.55, 0, Math.PI * 2); ctx.fill();
+
+  // outer ring - dashed and fixed; nothing here rotates
+  ctx.save();
+  ctx.strokeStyle = 'rgba(47,217,122,.95)';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([11, 8]);
+  ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+
+  // breathing pulse ring: expands outward and fades, then repeats. Radial
+  // motion only - it never spins.
+  const bk = (clock % TARGET_PULSE_S) / TARGET_PULSE_S;
+  ctx.strokeStyle = 'rgba(120,255,180,' + (1 - bk) * 0.5 + ')';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(0, 0, c.r * (0.55 + bk * 0.75), 0, Math.PI * 2); ctx.stroke();
+
+  // middle ring
+  ctx.strokeStyle = 'rgba(47,217,122,.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, c.r * 0.66, 0, Math.PI * 2); ctx.stroke();
+
+  // inner ring + pulsing core
+  ctx.fillStyle = 'rgba(47,217,122,.16)';
+  ctx.beginPath(); ctx.arc(0, 0, c.r * 0.66, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.shadowColor = 'rgba(47,217,122,.9)';
+  ctx.shadowBlur = 10 + pulse * 14;
+  ctx.fillStyle = 'rgba(120,255,180,' + (0.75 + pulse * 0.25) + ')';
+  ctx.beginPath(); ctx.arc(0, 0, c.r * (0.20 + pulse * 0.05), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // motes sit at FIXED angles and breathe in and out along their radius -
+  // radial drift, never an orbit
+  for (let i = 0; i < TARGET_MOTES; i++){
+    const a  = i * (Math.PI * 2 / TARGET_MOTES) + 0.4;
+    const rr = c.r * 1.18 + Math.sin(clock * 1.5 + i * 1.9) * (c.r * 0.14);
+    ctx.fillStyle = 'rgba(150,255,195,' + (0.28 + 0.34 * (0.5 + 0.5*Math.sin(clock*2 + i))) + ')';
+    ctx.beginPath(); ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr, 2.3, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  /* capture shockwave - expanding rings when the ball is swallowed */
+  if (capture){
+    const k = capture.t / CAPTURE_MS;
+    for (let i = 0; i < 3; i++){
+      const kk = k - i * 0.16;
+      if (kk <= 0 || kk >= 1) continue;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(120,255,180,' + (1 - kk) * 0.85 + ')';
+      ctx.lineWidth = 3 * (1 - kk) + 0.5;
+      ctx.beginPath();
+      ctx.arc(capture.cx, capture.cy, c.r * (0.5 + kk * 1.5), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /* static walls - structural, not player-placed. Rebuilt from the target's
+     live centre so they travel with a moving target. */
+  const liveWalls = lv.move ? buildWalls(lv, c) : lv.walls;
+  for (let i = 0; i < liveWalls.length; i++)
+    drawSeg(liveWalls[i], '#93a0b8', WALL_HT, 'rgba(0,0,0,.5)');
 
   /* obstacles */
   for (let i = 0; i < lv.obstacles.length; i++){
@@ -589,18 +836,30 @@ function render(){
   /* ball - drawn between the last two physics states, so motion stays smooth
      on high-refresh displays where rAF outruns the fixed 60Hz simulation. */
   let b = ball || lv.spawn;
+  let rad = BALL_R, alpha = 1;
   if (ball && phase === 'drop'){
     const a = acc / STEP_MS;
     b = { x: ball.px + (ball.x - ball.px) * a,
           y: ball.py + (ball.y - ball.py) * a };
+  } else if (capture){
+    // swallowed: slide to the centre while shrinking and fading out
+    const k = Math.min(1, capture.t / (CAPTURE_MS * 0.55));
+    const e = k * k * (3 - 2 * k);
+    b = { x: capture.bx + (capture.cx - capture.bx) * e,
+          y: capture.by + (capture.cy - capture.by) * e };
+    rad = BALL_R * (1 - e);
+    alpha = 1 - e;
   }
   lastDraw.x = b.x; lastDraw.y = b.y;
-  ctx.save();
-  ctx.shadowColor = 'rgba(255,255,255,.65)';
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
+  if (rad > 0.2){
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = 'rgba(255,255,255,.65)';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(b.x, b.y, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 }
 
 /* ---------------- fixed-timestep loop ---------------- */
@@ -608,17 +867,23 @@ function frame(now){
   let dt = now - last;
   last = now;
   if (dt > 250) dt = 250;               // tab was backgrounded
-
+  clock += dt / 1000;                   // keeps running in every phase, so the
+                                        // target animates while you are planning
   if (phase === 'drop' && ball){
     acc += dt;
     while (acc >= STEP_MS){
       acc -= STEP_MS;
       ball.px = ball.x; ball.py = ball.y;
       stepBall(ball, level(), ramps);
-      if (ball.result){ finish(ball.result); break; }
+      if (ball.result){ land(ball.result); break; }
     }
   } else {
     acc = 0;
+  }
+
+  if (capture){
+    capture.t += dt;
+    if (capture.t >= CAPTURE_MS){ capture = null; finish('win'); }
   }
 
   render();
@@ -636,15 +901,20 @@ window.__gtb = {
   LEVELS: LEVELS,
   CONSTS: { W:W, H:H, BALL_R:BALL_R, SPEED:SPEED, GRAV_BIAS:GRAV_BIAS, CURVE:CURVE,
             SUBSTEPS:SUBSTEPS, OB_JITTER:OB_JITTER, OB_MAX_DEV:OB_MAX_DEV,
-            MIN_RAMP:MIN_RAMP, MAX_RAMP:MAX_RAMP, RAMP_HT:RAMP_HT, WALL_HT:WALL_HT },
+            MIN_RAMP:MIN_RAMP, MAX_RAMP:MAX_RAMP, RAMP_HT:RAMP_HT, WALL_HT:WALL_HT,
+            CAPTURE_MS:CAPTURE_MS },
   simulate: simulate,
-  buildWalls: buildWalls,   // lets tests build any target type on any level
+  buildWalls: buildWalls,
+  targetAt: targetAt,
+  clock: function(){ return clock; },   // lets tests build any target type on any level
   state: function(){
     const lv = level();
     return { phase: phase, levelIndex: levelIndex, levelId: lv.id, highest: highest,
              ramps: ramps.map(function(r){ return Object.assign({}, r); }),
              maxBlocks: lv.maxBlocks, rampsLeft: lv.maxBlocks - ramps.length,
-             walls: lv.walls.length, targetType: lv.targetType,
+             walls: (lv.move ? buildWalls(lv, targetAt(lv, clock)) : lv.walls).length,
+             targetType: lv.targetType, moving: !!lv.move,
+             target: targetAt(lv, clock), capturing: !!capture,
              result: ball ? ball.result : null,
              ball: ball ? { x: ball.x, y: ball.y, px: ball.px, py: ball.py,
                             speed: Math.hypot(ball.vx, ball.vy) } : null,
@@ -653,6 +923,7 @@ window.__gtb = {
   setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
   setRamps: function(list){ ramps = list.map(function(r){ return Object.assign({}, r); }); syncUI(); },
   setLevel: setLevel,
+  openSelect: function(){ buildGrid(); selPanel.hidden = false; },
   clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY); } catch (e){} highest = 0; },
   reset: function(){ ramps = []; ball = null; draft = null;
                      phase = 'plan'; overlay.hidden = true; syncUI(); }

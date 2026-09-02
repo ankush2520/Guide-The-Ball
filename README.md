@@ -16,17 +16,33 @@ ready for CrazyGames / Poki / Softgames.
 
 ## Levels
 
-`LEVELS[]` in [index.html](index.html) holds each level: `id`, `name`, `maxBlocks`,
-`spawn`, `obstacles`, `target`, `targetType`. Wall segments are generated from
-`targetType` by `buildWalls()` and are **real collidable geometry** — the same
+`LEVELS[]` in [index.html](index.html) holds all 20: `id`, `name`, `maxBlocks`,
+`spawn`, `obstacles`, `target {x,y,r}`, `targetType`, and an optional `move`.
+
+**Target types.** Wall segments are generated from `targetType` by `buildWalls()`
+around the circular target and are **real collidable geometry** — the same
 segment-bounce code as player ramps, so they mirror the ball's direction and
-never change its speed. Five types, easiest to hardest: `OPEN`, `SIDE_WALL`,
-`POCKET`, `NARROW_GAP`, `ENCLOSED`.
+never change its speed. `OPEN`, `SIDE_WALL`, `POCKET`, `NARROW_GAP`, `ENCLOSED`.
+For `NARROW_GAP`, `gapW` is the **clear window the ball can pass through**, not
+the raw span between bars.
+
+**Moving targets** (levels 17, 19, 20 only) glide in straight lines between
+fixed waypoints at constant speed, looping `A→B→A` or `A→B→C→A`. Pure linear
+interpolation — nothing in this game rotates or orbits.
+
+    move: { points:[{x,y},{x,y}], speed: 60 }   // speed in px/sec
+
+`targetAt(lv, t)` is evaluated every step from `b.t0 + steps/60`, and any
+attached walls are rebuilt from the live centre, so they travel with the target
+as a rigid unit. The clock runs during planning too, so the path is visible
+before you commit. `simulate(ramps, seed, level, t0)` takes the drop phase, so
+the solver can sweep drop timing.
 
 Progress (highest level reached) persists in `localStorage` under
 `gtb.progress.v1`; blocked storage degrades to "no saving", never a crash.
+Tap the level name to open the level picker.
 
-    node tests/levels.mjs 0 4     # per-level winnability + precision report
+    node tests/levels.mjs 0 19    # per-level winnability, precision, timing
 
 ## Layout
 

@@ -63,32 +63,62 @@ await page.locator('.app').screenshot({ path: path.join(SHOTS, 'level-01.png') }
 ok('screenshot: level-01.png');
 
 /* ---------------------------------------------------------------- */
-section('2. Level data structure');
+section('2. Level data structure and position variety');
 const lvinfo = await page.evaluate(() => {
   const { LEVELS, CONSTS } = window.__gtb;
   const TYPES = ['OPEN','SIDE_WALL','POCKET','NARROW_GAP','ENCLOSED'];
-  let badId=0, badType=0, outOfBoard=0, badBlocks=0;
+  let badId=0, badType=0, outOfBoard=0, overlap=0;
   LEVELS.forEach((l, i) => {
     if (l.id !== i+1) badId++;
     if (TYPES.indexOf(l.targetType) < 0) badType++;
-    if (l.maxBlocks < 1 || l.maxBlocks > 3) badBlocks++;
     const t = l.target;
-    if (t.x < 0 || t.x + t.w > CONSTS.W || t.y < 0 || t.y + t.h > CONSTS.H) outOfBoard++;
+    if (t.x-t.r < 0 || t.x+t.r > CONSTS.W || t.y-t.r < 0 || t.y+t.r > CONSTS.H) outOfBoard++;
+    if (!(t.r > 0)) outOfBoard++;
     if (l.spawn.x < 0 || l.spawn.x > CONSTS.W) outOfBoard++;
     l.obstacles.forEach(o => {
-      if (o.x - o.r < 0 || o.x + o.r > CONSTS.W || o.y - o.r < 0) outOfBoard++;
+      if (o.x-o.r < 0 || o.x+o.r > CONSTS.W || o.y-o.r < 0) outOfBoard++;
+      if (Math.hypot(o.x-t.x, o.y-t.y) < o.r + t.r) overlap++;      // obstacle sitting on the target
+      if (Math.abs(o.x - l.spawn.x) < o.r + CONSTS.BALL_R && o.y < 150) overlap++;  // blocking the spawn
     });
   });
-  return { n: LEVELS.length, badId, badType, outOfBoard, badBlocks,
-           blocks: LEVELS.map(l => l.maxBlocks), obst: LEVELS.map(l => l.obstacles.length) };
+  // position variety: how the target sits relative to the spawn, and how the
+  // targets are spread over the board
+  let right=0, left=0; const ys=[], seen=[];
+  let tooClose = 0;
+  LEVELS.forEach(l => {
+    (l.target.x > l.spawn.x) ? right++ : left++;
+    ys.push(l.target.y);
+    // 30px apart on a 480x800 board is a visibly different board position
+    seen.forEach(q => { if (Math.hypot(q.x-l.target.x, q.y-l.target.y) < 30) tooClose++; });
+    seen.push({x:l.target.x, y:l.target.y});
+  });
+  return { n: LEVELS.length, badId, badType, outOfBoard, overlap,
+           blocks: LEVELS.map(l=>l.maxBlocks).join(','),
+           obst:   LEVELS.map(l=>l.obstacles.length).join(','),
+           types:  LEVELS.map(l=>l.targetType).join(','),
+           moving: LEVELS.map((l,i)=>l.move?i+1:0).filter(Boolean).join(','),
+           right, left, tooClose,
+           ySpread: Math.max(...ys) - Math.min(...ys) };
 });
-console.log(`  ${lvinfo.n} levels; maxBlocks [${lvinfo.blocks}]  obstacles [${lvinfo.obst}]`);
+const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,3,2,3,3';
+const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,3';
+const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
+                    'SIDE_WALL,POCKET,NARROW_GAP,NARROW_GAP,ENCLOSED,OPEN,SIDE_WALL,NARROW_GAP,POCKET,ENCLOSED';
+console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
+            `target y spread ${lvinfo.ySpread}px`);
+check(lvinfo.n === 20, 'all 20 levels present', `${lvinfo.n}`);
 check(lvinfo.badId === 0, 'level ids are sequential from 1');
 check(lvinfo.badType === 0, 'every targetType is one of the five');
-check(lvinfo.badBlocks === 0, 'maxBlocks in range');
 check(lvinfo.outOfBoard === 0, 'spawns, targets and obstacles are inside the board');
-check(String(lvinfo.blocks) === '1,1,1,2,2', 'Act 1 ramp budgets match the design (1,1,1,2,2)');
-check(String(lvinfo.obst) === '0,0,1,0,1', 'Act 1 obstacle counts match the design (0,0,1,0,1)');
+check(lvinfo.overlap === 0, 'no obstacle sits on a target or blocks a spawn');
+check(lvinfo.blocks === PLAN_BLOCKS, 'ramp budgets match the plan, drops at 7/14/18 intact');
+check(lvinfo.obst === PLAN_OBST, 'obstacle counts match the plan');
+check(lvinfo.types === PLAN_TYPES, 'target types match the plan');
+check(lvinfo.moving === '17,19,20', 'only levels 17, 19 and 20 move', lvinfo.moving);
+check(lvinfo.right >= 7 && lvinfo.left >= 7,
+  'targets are reached both leftward and rightward', `${lvinfo.right}R / ${lvinfo.left}L`);
+check(lvinfo.tooClose === 0, 'no two levels put the target in the same spot');
+check(lvinfo.ySpread > 100, 'target height varies across levels', `${lvinfo.ySpread}px spread`);
 
 /* ---------------------------------------------------------------- */
 section('3. Walls are real physics, not decoration');
@@ -98,7 +128,7 @@ const wall = await page.evaluate(() => {
   const ramp=(cx,cy,deg,len=120)=>{const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
     return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy};};
   const lv = LEVELS[0];
-  const tc = { x: lv.target.x+lv.target.w/2, y: lv.target.y+lv.target.h/2 };
+  const tc = lv.target;
   const origSpawn = lv.spawn.x, origType = lv.targetType, origWalls = lv.walls;
 
   // APPROACH A - straight down the middle, no ramps at all (spawn moved over
@@ -146,6 +176,126 @@ check(row('ENCLOSED').vertical === 'win', 'ENCLOSED still lets a vertical drop i
 const e = row('ENCLOSED');
 check(Math.abs(e.sMin - C.SPEED) < 1e-9 && Math.abs(e.sMax - C.SPEED) < 1e-9,
   'speed is unchanged across wall bounces', `${e.sMin} .. ${e.sMax}`);
+
+/* ---------------------------------------------------------------- */
+section('3b. Moving targets: straight-line glide, no rotation');
+const mv = await page.evaluate(() => {
+  const { LEVELS, targetAt, buildWalls, simulate } = window.__gtb;
+  const out = [];
+  LEVELS.forEach((lv, li) => {
+    if (!lv.move) return;
+    const pts = lv.move.points, sp = lv.move.speed;
+    const loopT = lv.move.total / sp;
+
+    // (a) every sampled position must lie ON one of the waypoint segments
+    let offPath = 0, speedErr = 0, corners = 0;
+    let prev = targetAt(lv, 0);
+    for (let k = 1; k <= 600; k++){
+      const t = (k / 600) * loopT * 2;          // two full loops
+      const p = targetAt(lv, t);
+      let best = Infinity;
+      for (let i = 0; i < pts.length; i++){
+        const a = pts[i], b = pts[(i+1) % pts.length];
+        const dx = b.x-a.x, dy = b.y-a.y, L2 = dx*dx + dy*dy;
+        let u = L2 ? ((p.x-a.x)*dx + (p.y-a.y)*dy)/L2 : 0;
+        u = u < 0 ? 0 : u > 1 ? 1 : u;
+        best = Math.min(best, Math.hypot(p.x - (a.x+u*dx), p.y - (a.y+u*dy)));
+      }
+      if (best > 0.01) offPath++;
+      // (b) constant speed, except on the sample that straddles a corner
+      const dt = (loopT * 2) / 600;
+      const v = Math.hypot(p.x-prev.x, p.y-prev.y) / dt;
+      if (Math.abs(v - sp) > sp * 0.02) { corners++; if (corners > pts.length*2 + 2) speedErr++; }
+      prev = p;
+    }
+
+    // (c) walls must travel with the target as a rigid unit
+    let rigid = true;
+    if (lv.targetType !== 'OPEN'){
+      const t1 = 0.3 * loopT, t2 = 0.7 * loopT;
+      const c1 = targetAt(lv, t1), c2 = targetAt(lv, t2);
+      const w1 = buildWalls(lv, c1), w2 = buildWalls(lv, c2);
+      const dx = c2.x - c1.x, dy = c2.y - c1.y;
+      if (w1.length !== w2.length) rigid = false;
+      for (let i = 0; i < w1.length && rigid; i++)
+        if (Math.abs((w2[i].x1 - w1[i].x1) - dx) > 1e-6 ||
+            Math.abs((w2[i].y1 - w1[i].y1) - dy) > 1e-6 ||
+            Math.abs((w2[i].x2 - w1[i].x2) - dx) > 1e-6 ||
+            Math.abs((w2[i].y2 - w1[i].y2) - dy) > 1e-6) rigid = false;
+    }
+    out.push({ id: lv.id, pts: pts.length, span: Math.round(lv.move.total), speed: sp,
+               loopT: +loopT.toFixed(2), offPath, speedErr, rigid });
+  });
+  return out;
+});
+for (const m of mv)
+  console.log(`  L${m.id}: ${m.pts} waypoints, path ${m.span}px at ${m.speed}px/s ` +
+              `(loop ${m.loopT}s), walls rigid=${m.rigid}`);
+check(mv.length === 3, 'three moving levels');
+check(mv.every(m => m.offPath === 0), 'target always sits exactly on a straight waypoint leg');
+check(mv.every(m => m.speedErr === 0), 'target glides at constant speed between waypoints');
+check(mv.every(m => m.rigid), 'attached walls translate rigidly with the target');
+check(mv.find(m=>m.id===17).pts === 2 && mv.find(m=>m.id===19).pts === 2 &&
+      mv.find(m=>m.id===20).pts === 3, 'L17/L19 use two waypoints, L20 uses three');
+check(mv.find(m=>m.id===19).span > mv.find(m=>m.id===17).span &&
+      mv.find(m=>m.id===19).speed > mv.find(m=>m.id===17).speed,
+  'L19 moves further AND faster than L17');
+check(mv.find(m=>m.id===20).span > mv.find(m=>m.id===19).span,
+  'L20 has the longest path of the three');
+
+/* ---------------------------------------------------------------- */
+section('3c. Moving targets: solutions must lead the target');
+const lead = await page.evaluate(() => {
+  const { LEVELS, simulate, targetAt, CONSTS } = window.__gtb;
+  const R = Math.PI/180;
+  const ramp = (cx,cy,deg,len=120) => { const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
+    return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
+  const out = [];
+  LEVELS.forEach((lv, li) => {
+    if (!lv.move) return;
+    const loopT = lv.move.total / lv.move.speed;
+    const seeds = lv.obstacles.length ? [1,2,3] : [1];
+    let found = null;
+    for (let k = 0; k < 16 && !found; k++){
+      const t0 = (k/16) * loopT;
+      for (let ry = lv.spawn.y+80; ry <= CONSTS.H-130 && !found; ry += 15)
+        for (let th = 25; th <= 155; th += 1.5){
+          const cfg = [ramp(lv.spawn.x, ry, th)];
+          const r0 = simulate(cfg, seeds[0], li, t0);
+          if (r0.result === 'win' && seeds.every(s => simulate(cfg,s,li,t0).result === 'win')){
+            found = { cfg, t0, secs: r0.secs, land: {x:r0.x, y:r0.y} }; break;
+          }
+        }
+    }
+    if (!found){ out.push({ id: lv.id, found: false }); return; }
+    const pDrop   = targetAt(lv, found.t0);
+    const pArrive = targetAt(lv, found.t0 + found.secs);
+    // hold the ramp, sweep the drop moment: how often does it still score?
+    let w = 0, n = 24;
+    for (let k = 0; k < n; k++)
+      if (seeds.every(s => simulate(found.cfg, s, li, (k/n)*loopT).result === 'win')) w++;
+    out.push({ id: lv.id, found: true,
+      flight: +found.secs.toFixed(2),
+      travel: Math.round(Math.hypot(pArrive.x-pDrop.x, pArrive.y-pDrop.y)),
+      distToArrive: Math.round(Math.hypot(found.land.x-pArrive.x, found.land.y-pArrive.y)),
+      distToDrop:   Math.round(Math.hypot(found.land.x-pDrop.x,   found.land.y-pDrop.y)),
+      r: lv.target.r, timingWin: w/n });
+  });
+  return out;
+});
+for (const l of lead){
+  if (!l.found){ bad(`L${l.id}: no timed solution found`); continue; }
+  console.log(`  L${l.id}: flight ${l.flight}s, target travels ${l.travel}px during it; ` +
+              `ball lands ${l.distToArrive}px from its ARRIVAL position ` +
+              `(${l.distToDrop}px from where it was at drop). Wins at ${(l.timingWin*100).toFixed(0)}% of drop times.`);
+}
+check(lead.every(l => l.found), 'every moving level has a verified timed solution');
+check(lead.every(l => l.distToArrive <= l.r),
+  'the ball lands on the target where it ACTUALLY IS at arrival');
+check(lead.every(l => l.travel > 10),
+  'the target really does move during the flight', lead.map(l=>l.travel+'px').join(', '));
+check(lead.every(l => l.timingWin < 0.95),
+  'drop timing genuinely matters - the same ramp fails at other moments');
 
 /* ---------------------------------------------------------------- */
 section('4. Obstacle bounce quality');
@@ -217,7 +367,7 @@ const best1 = await page.evaluate(() => {
   const D=180/Math.PI, R=Math.PI/180;
   const ramp=(cx,cy,deg,len=120)=>{const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
     return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy};};
-  const lv=LEVELS[0], tc={x:lv.target.x+lv.target.w/2,y:lv.target.y+lv.target.h/2};
+  const lv=LEVELS[0], tc=lv.target;
   for (let ry=200; ry<600; ry+=10){
     const phi=Math.atan2(tc.y-ry,tc.x-lv.spawn.x)*D;
     const cfg=[ramp(lv.spawn.x,ry,(phi+90)/2)];
@@ -248,8 +398,17 @@ const live = await page.evaluate(async (ramps) => {
     if (prev && Math.hypot(s.d.x-prev.x, s.d.y-prev.y) < 1e-9) frozen++;
     prev = s.d;
   }
+  // the win is swallowed by the target before the overlay appears - watch it
+  let sawCapture = 0, shrank = false;
+  const startR = 999;
+  await new Promise(res => (function tick(){
+    const s = g.state();
+    if (s.capturing){ sawCapture++; }
+    if (s.phase === 'over') return res();
+    requestAnimationFrame(tick);
+  })());
   return { n:speeds.length, min:Math.min(...speeds), max:Math.max(...speeds), offSeg, frozen, prestep,
-           result: g.state().result };
+           sawCapture, result: g.state().result };
 }, best1);
 console.log(`  ${live.n} frames, speed ${live.min.toFixed(4)} .. ${live.max.toFixed(4)} (target ${C.SPEED})`);
 check(live.n > 20, 'sampled the drop', `${live.n} frames`);
@@ -259,6 +418,8 @@ check(live.offSeg === 0, 'painted position always lies between the two physics s
 check(live.frozen === 0, 'ball never paints twice in the same spot once moving',
   `${live.frozen} frozen, ${live.prestep} pre-step frames ignored`);
 check(live.result === 'win', 'the solution wins through the real UI');
+check(live.sawCapture > 3, 'the capture animation actually plays before the overlay',
+  `${live.sawCapture} frames of capture`);
 
 /* ---------------------------------------------------------------- */
 section('7. Progression and localStorage');
@@ -327,6 +488,36 @@ const locked = await page.evaluate(() => {
   return { before, after: window.__gtb.state().ramps.length };
 });
 check(locked.after === locked.before, 'layout is locked once the ball drops');
+
+section('11. Level select');
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+await page.locator('#level-title').click();
+check(await page.locator('#select').isVisible(), 'tapping the level name opens the picker');
+let grid = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('#lvgrid button')];
+  return { n: b.length, locked: b.filter(x => x.disabled).length,
+           labels: b.map(x => x.textContent).join(',') };
+});
+check(grid.n === 20, 'picker shows all 20 levels', `${grid.n}`);
+check(grid.locked === 19, 'everything past your best is locked', `${grid.locked} locked`);
+check(await page.locator('#lvgrid button').nth(4).isDisabled(), 'level 5 locked on a fresh save');
+
+// unlock a few and re-open
+await page.evaluate(() => { window.__gtb.setLevel(0);
+  for (let i = 0; i <= 6; i++) window.__gtb.setLevel(i); });
+await page.locator('#btn-close-sel').click();
+await page.locator('#level-title').click();
+grid = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('#lvgrid button')];
+  return { locked: b.filter(x => x.disabled).length };
+});
+check(grid.locked === 13, 'reaching level 7 unlocks the first seven', `${grid.locked} locked`);
+await page.locator('#lvgrid button').nth(3).click();
+const sel = await page.evaluate(() => window.__gtb.state());
+check(sel.levelId === 4 && sel.phase === 'plan', 'picking a level jumps straight to it', `level ${sel.levelId}`);
+check(await page.locator('#select').isHidden(), 'picker closes after choosing');
+await page.locator('.app').screenshot({ path: path.join(SHOTS, 'level-select.png') });
+ok('screenshot: level-select.png');
 
 await browser.close();
 console.log(failures === 0 ? `\nAll checks passed.\nScreenshots in ${SHOTS}`
