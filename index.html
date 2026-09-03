@@ -16,8 +16,10 @@
     margin:0;background:radial-gradient(120% 80% at 50% 0%, #1c2145 0%, var(--bg) 65%);
     color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     display:flex;justify-content:center;align-items:flex-start;padding:10px;overscroll-behavior:none;
+    height:100vh;height:100dvh;overflow:hidden;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom));
   }
-  .app{width:min(430px,100%);display:flex;flex-direction:column;gap:9px}
+  .app{width:min(430px,100%);height:100%;display:flex;flex-direction:column;gap:9px}
 
   .hud{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .title{font-size:15px;font-weight:700;letter-spacing:.02em;min-width:0}
@@ -25,10 +27,24 @@
   .counter{background:var(--panel);border:1px solid #2c3358;border-radius:999px;
            padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap}
   .counter b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .chips{display:flex;align-items:center;gap:6px;flex:none}
+  .chips .counter{padding:5px 10px;font-size:12.5px}
+  .iconbtn{flex:none;background:var(--panel);border:1px solid #2c3358;border-radius:999px;
+           width:32px;height:32px;padding:0;font-size:14px;line-height:1;display:grid;place-items:center}
+  .iconbtn.off{opacity:.45}
+  /* stars: filled ones glow, unearned ones stay as faint outlines */
+  .stars{display:flex;justify-content:center;gap:7px;font-size:27px;line-height:1;margin:2px 0 10px}
+  .stars i{font-style:normal;color:#2b3560}
+  .stars i.on{color:var(--accent);text-shadow:0 0 10px rgba(255,201,60,.55)}
+  .starnote{color:var(--muted);font-size:12px;margin:-6px 0 12px}
+  .grid button{position:relative;padding-bottom:15px}
+  .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--accent)}
 
-  .stage{position:relative;width:100%;border-radius:14px;overflow:hidden;
-         border:1px solid #2c3358;box-shadow:0 10px 34px rgba(0,0,0,.45)}
-  canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
+  .stage{position:relative;max-width:100%;border-radius:14px;overflow:hidden;
+         border:1px solid #2c3358;box-shadow:0 10px 34px rgba(0,0,0,.45);
+         flex:1 1 auto;min-height:0;display:flex;align-self:center}
+  canvas{display:block;width:auto;height:auto;max-width:100%;max-height:100%;
+         touch-action:none;cursor:crosshair}
 
   .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
            background:rgba(8,10,22,.72);backdrop-filter:blur(3px);padding:18px}
@@ -64,6 +80,8 @@
   .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
   .sw.bl{border-radius:50%;background:var(--ball)}
   .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0}
+  /* a phone has no height to spare - drop the reference text, keep the controls */
+  @media (max-height:700px){ .legend,.hint{display:none} }
 
   button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
                cursor:pointer;font-size:15px;font-weight:700;color:var(--ink)}
@@ -81,7 +99,11 @@
 
   <div class="hud">
     <button class="title" id="level-title" title="Choose a level">Guide the Ball</button>
-    <div class="counter">Ramps left: <b id="ramps-left">1</b></div>
+    <div class="chips">
+      <div class="counter">Try <b id="try-count">0</b></div>
+      <div class="counter">Ramps <b id="ramps-left">1</b></div>
+      <button class="iconbtn" id="btn-sound" title="Sound on/off" aria-label="Sound on/off">&#128266;</button>
+    </div>
   </div>
 
   <div class="stage">
@@ -97,6 +119,8 @@
     <div class="overlay" id="overlay" hidden>
       <div class="card" id="card">
         <div class="big" id="ov-title">Target hit!</div>
+        <div class="stars" id="ov-stars" hidden><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i></div>
+        <div class="starnote" id="ov-starnote" hidden></div>
         <div class="sub" id="ov-sub"></div>
         <div class="row">
           <button id="btn-retry">Retry</button>
@@ -127,6 +151,162 @@
 <script>
 (function(){
 'use strict';
+
+/* ============================================================
+   SOUND  (WebAudio, fully synthesised)
+   No audio files: the whole game stays a single portable
+   index.html, and there is nothing to 404 on a slow network.
+   A browser will not let us make noise before the first
+   gesture, so the context is built lazily in unlock().
+   ============================================================ */
+const Sound = (function(){
+  const MUTE_KEY = 'gtb.muted.v1';
+  let ctx = null, master = null, music = null, sfx = null, noiseBuf = null;
+  let muted = false, started = false, timer = null, nextTime = 0, stepIx = 0;
+  let lastBounce = -1;
+  try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e){}
+
+  const BPM  = 92;
+  const STEP = (60 / BPM) / 2;          // one eighth note, in seconds
+  const mtof = function(m){ return 440 * Math.pow(2, (m - 69) / 12); };
+  // Am - F - C - G. Four bars of eight eighth-notes each.
+  const CHORDS = [
+    { root: 45, tones: [57, 60, 64, 69] },   // Am
+    { root: 41, tones: [53, 57, 60, 65] },   // F
+    { root: 48, tones: [60, 64, 67, 72] },   // C
+    { root: 43, tones: [55, 59, 62, 67] }    // G
+  ];
+  // which eighth-notes of a bar the arp speaks on - the rests are what
+  // keep it from turning into a nagging loop while you think
+  const ARP = [0, 2, 3, 5, 6];
+
+  function ensure(){
+    if (ctx) return true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    try { ctx = new AC(); } catch (e){ return false; }
+    master = ctx.createGain(); master.gain.value = muted ? 0 : 1;
+    master.connect(ctx.destination);
+    // one shared delay gives every layer the same room to sit in
+    const delay = ctx.createDelay(1.0); delay.delayTime.value = STEP * 1.5;
+    const fb = ctx.createGain(); fb.gain.value = 0.28;
+    const wet = ctx.createGain(); wet.gain.value = 0.30;
+    delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(master);
+    music = ctx.createGain(); music.gain.value = 0.32;
+    sfx   = ctx.createGain(); sfx.gain.value   = 0.85;
+    music.connect(master); music.connect(delay);
+    sfx.connect(master);   sfx.connect(delay);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.4, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return true;
+  }
+
+  function tone(dest, freq, t, dur, peak, type){
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'triangle'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
+    return o;
+  }
+  function noise(dest, t, dur, peak, cutoff){
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = cutoff;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(peak, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(dest); src.start(t); src.stop(t + dur + 0.02);
+  }
+  function pad(freqs, t, dur){
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(520, t);
+    f.frequency.linearRampToValueAtTime(900, t + dur * 0.5);
+    f.frequency.linearRampToValueAtTime(520, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.045, t + 0.55);
+    g.gain.setValueAtTime(0.045, t + dur - 0.45);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    f.connect(g); g.connect(music);
+    for (let i = 0; i < freqs.length; i++){
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = freqs[i];
+      o.detune.value = (i - 1) * 6;                 // a little chorus width
+      o.connect(f); o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+
+  /* Schedule every eighth note that falls inside the lookahead window.
+     Timer callbacks are far too jittery to sound on directly, so they only
+     ever hand exact start times to the audio clock. */
+  function scheduleStep(i, t){
+    const bar = Math.floor(i / 8) % 4, beat = i % 8;
+    const ch = CHORDS[bar];
+    if (beat === 0) pad(ch.tones.slice(0, 3).map(function(m){ return mtof(m + 12); }), t, STEP * 8);
+    if (beat === 0 || beat === 3 || beat === 6)
+      tone(music, mtof(ch.root - 12), t, beat === 0 ? 0.55 : 0.38, 0.20, 'sine');
+    if (ARP.indexOf(beat) !== -1){
+      const m = ch.tones[(i * 3 + beat) % ch.tones.length] + 12;
+      tone(music, mtof(m), t, 0.42, 0.085, 'triangle');
+    }
+    if (beat % 2 === 1) noise(music, t, 0.045, 0.030, 7000);
+  }
+  function pump(){
+    if (!ctx) return;
+    while (nextTime < ctx.currentTime + 0.15){
+      if (nextTime < ctx.currentTime) nextTime = ctx.currentTime + 0.03;
+      scheduleStep(stepIx, nextTime);
+      nextTime += STEP; stepIx = (stepIx + 1) % 32;
+    }
+  }
+  function startMusic(){
+    if (!ctx || started) return;
+    started = true; nextTime = ctx.currentTime + 0.1; stepIx = 0;
+    pump(); timer = setInterval(pump, 25);
+  }
+
+  return {
+    /* called from the first real gesture, and from every one after that
+       until the context is actually running (iOS can refuse the first) */
+    unlock: function(){
+      if (!ensure()) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      startMusic();
+    },
+    muted: function(){ return muted; },
+    toggle: function(){
+      muted = !muted;
+      try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e){}
+      if (master) master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+      return muted;
+    },
+    /* SFX 1 - the ball struck something solid. */
+    bounce: function(kind){
+      if (!ctx || muted) return;
+      const t = ctx.currentTime;
+      if (t - lastBounce < 0.035) return;      // a scatter of hits is one sound
+      lastBounce = t;
+      if (kind === 'obstacle'){                // heavier, duller, with a thud
+        tone(sfx, 190, t, 0.16, 0.30, 'square');
+        tone(sfx, 96,  t, 0.20, 0.22, 'sine');
+        noise(sfx, t, 0.07, 0.08, 900);
+      } else {                                 // ramp/wall: a clean bright tick
+        tone(sfx, 880, t, 0.085, 0.20, 'triangle');
+        tone(sfx, 1320, t, 0.055, 0.10, 'sine');
+      }
+    },
+    /* SFX 2 - the target swallowed the ball. */
+    win: function(){
+      if (!ctx || muted) return;
+      const t = ctx.currentTime, notes = [69, 73, 76, 81];   // A major arpeggio
+      for (let i = 0; i < notes.length; i++)
+        tone(sfx, mtof(notes[i]), t + i * 0.085, 0.42, 0.22, 'triangle');
+      noise(sfx, t, 0.25, 0.045, 5000);
+    }
+  };
+})();
 
 /* ============================================================
    PHYSICS CONSTANTS
@@ -376,6 +556,7 @@ function makeBall(lv, seed, t0){
     px: lv.spawn.x, py: lv.spawn.y,        // previous step, for render interpolation
     vx: 0, vy: SPEED,
     steps: 0, hits: 0,
+    segHits: 0,                            // ramp/wall strikes, for the bounce SFX
     spdMin: Infinity, spdMax: -Infinity,   // speed-invariant audit
     bounces: [],                           // {inAng,nAng,outAng} per obstacle hit
     rng: mulberry32(seed),
@@ -428,8 +609,8 @@ function segmentBounce(b, s, halfT){
 function resolveCollisions(b, lv, ramps, walls){
   /* The board has no walls - the ball is free to leave by any edge, which
      ends the run. Only ramps, level walls and obstacles change its direction. */
-  for (let i = 0; i < ramps.length; i++)  segmentBounce(b, ramps[i], RAMP_HT);
-  for (let i = 0; i < walls.length; i++)  segmentBounce(b, walls[i], WALL_HT);
+  for (let i = 0; i < ramps.length; i++)  if (segmentBounce(b, ramps[i], RAMP_HT)) b.segHits++;
+  for (let i = 0; i < walls.length; i++)  if (segmentBounce(b, walls[i], WALL_HT)) b.segHits++;
 
   /* red obstacles: mirror off the circle, then scatter */
   for (let i = 0; i < lv.obstacles.length; i++){
@@ -497,15 +678,42 @@ function simulate(ramps, seed, levelIdx, t0){
    PROGRESS (localStorage)
    ============================================================ */
 const SAVE_KEY = 'gtb.progress.v1';
-function loadHighest(){
-  try {
-    const v = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
-    return clamp(v.highest | 0, 0, LEVELS.length - 1);
-  } catch (e){ return 0; }
+function loadSave(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {}; }
+  catch (e){ return {}; }
 }
-function saveHighest(i){
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ highest: i })); }
+function loadHighest(){ return clamp(loadSave().highest | 0, 0, LEVELS.length - 1); }
+function loadStars(){
+  const v = loadSave().stars;
+  return (v && typeof v === 'object') ? v : {};
+}
+function saveProgress(){
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ highest: highest, stars: bestStars })); }
   catch (e){ /* private mode / blocked storage - progress just won't persist */ }
+}
+
+/* ============================================================
+   STARS
+   Two things are worth rewarding, and they pull against each
+   other: solving it in few attempts, and solving it with fewer
+   ramps than the level hands you. Retries cost a star; coming
+   in under the ramp budget buys one back, so a scrappy solve
+   that is genuinely efficient can still reach three.
+   ============================================================ */
+function starsFor(nTries, rampsUsed, budget){
+  let s = 3;
+  if (nTries > 1) s--;
+  if (nTries > 3) s--;
+  if (rampsUsed < budget) s++;
+  return clamp(s, 1, 3);
+}
+function starNote(nTries, rampsUsed, budget, s){
+  const bits = ['try ' + nTries, rampsUsed + '/' + budget + ' ramp' + (budget === 1 ? '' : 's')];
+  if (s === 3) return 'Perfect - ' + bits.join(', ') + '.';
+  const want = [];
+  if (nTries > 1) want.push('clear it first try');
+  if (rampsUsed >= budget) want.push('use fewer ramps');
+  return 'Cleared on ' + bits.join(', ') + '. Next star: ' + want.join(' or ') + '.';
 }
 
 /* ============================================================
@@ -514,6 +722,8 @@ function saveHighest(i){
 let levelIndex = 0;
 let highest    = 0;
 let phase  = 'plan';    // 'plan' | 'drop' | 'over'
+let tries  = 0;         // drops on the current level, reset when the level changes
+let bestStars = {};     // levelIndex -> best stars earned, persisted
 let ramps  = [];
 let draft  = null;
 let ball   = null;
@@ -530,6 +740,8 @@ const btnDrop = document.getElementById('btn-drop');
 const btnUndo = document.getElementById('btn-undo');
 const btnClear= document.getElementById('btn-clear');
 const btnNext = document.getElementById('btn-next');
+const elTries = document.getElementById('try-count');
+const btnSound= document.getElementById('btn-sound');
 
 const dpr = Math.min(window.devicePixelRatio || 1, 3);
 canvas.width  = W * dpr;
@@ -544,6 +756,7 @@ function syncUI(){
   elTitle.innerHTML = 'Level ' + lv.id + ' <span>&mdash; ' + lv.name + '</span>';
   if (typeof selPanel !== 'undefined' && !selPanel.hidden) buildGrid();
   elLeft.textContent = lv.maxBlocks - ramps.length;
+  elTries.textContent = tries;
   btnDrop.disabled  = !planning;
   btnUndo.disabled  = !planning || ramps.length === 0;
   btnClear.disabled = !planning || ramps.length === 0;
@@ -557,8 +770,9 @@ function syncUI(){
 function setLevel(i){
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   ramps = []; draft = null; ball = null; capture = null;
+  tries = 0;
   phase = 'plan'; overlay.hidden = true;
-  if (levelIndex > highest){ highest = levelIndex; saveHighest(highest); }
+  if (levelIndex > highest){ highest = levelIndex; saveProgress(); }
   syncUI();
 }
 
@@ -606,6 +820,7 @@ function drop(){
   draft = null; capture = null;
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
+  tries++;
   phase = 'drop';
   overlay.hidden = true;
   syncUI();
@@ -614,6 +829,7 @@ function drop(){
 function land(result){
   if (result !== 'win'){ finish(result); return; }
   const c = targetAt(level(), ball.t0 + ball.steps / 60);
+  Sound.win();
   phase = 'capture';
   capture = { t: 0, bx: ball.x, by: ball.y, cx: c.x, cy: c.y };
   syncUI();
@@ -622,7 +838,20 @@ function finish(result){
   phase = 'over';
   const win  = result === 'win';
   const last = levelIndex >= LEVELS.length - 1;
-  if (win && !last && levelIndex + 1 > highest){ highest = levelIndex + 1; saveHighest(highest); }
+  if (win && !last && levelIndex + 1 > highest) highest = levelIndex + 1;
+  const elStars = document.getElementById('ov-stars');
+  const elNote  = document.getElementById('ov-starnote');
+  if (win){
+    const got = starsFor(tries, ramps.length, level().maxBlocks);
+    if (got > (bestStars[levelIndex] | 0)) bestStars[levelIndex] = got;
+    const pips = elStars.children;
+    for (let i = 0; i < pips.length; i++) pips[i].className = i < got ? 'on' : '';
+    elNote.textContent = starNote(tries, ramps.length, level().maxBlocks, got);
+    elStars.hidden = false; elNote.hidden = false;
+  } else {
+    elStars.hidden = true; elNote.hidden = true;
+  }
+  if (win) saveProgress();
   card.className = 'card ' + (win ? 'win' : 'lose');
   document.getElementById('ov-title').textContent = win ? 'Target hit!' : 'Missed';
   document.getElementById('ov-sub').textContent =
@@ -656,6 +885,13 @@ function buildGrid(){
     if (i < highest) b.className = 'done';
     if (i === levelIndex) b.className = 'cur';
     b.title = b.disabled ? 'Locked' : LEVELS[i].name;
+    const got = bestStars[i] | 0;
+    if (got){
+      const sp = document.createElement('span');
+      sp.className = 'gstars';
+      sp.textContent = '\u2605'.repeat(got);
+      b.appendChild(sp);
+    }
     b.addEventListener('click', function(){ setLevel(i); selPanel.hidden = true; });
     lvGrid.appendChild(b);
   }
@@ -874,7 +1110,12 @@ function frame(now){
     while (acc >= STEP_MS){
       acc -= STEP_MS;
       ball.px = ball.x; ball.py = ball.y;
+      const seg0 = ball.segHits, ob0 = ball.hits;
       stepBall(ball, level(), ramps);
+      // sound is driven from here, never from the physics - simulate() has to
+      // stay silent and side-effect free for the test suite and the solver
+      if (ball.hits > ob0)         Sound.bounce('obstacle');
+      else if (ball.segHits > seg0) Sound.bounce('ramp');
       if (ball.result){ land(ball.result); break; }
     }
   } else {
@@ -890,7 +1131,17 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 
-highest = loadHighest();
+highest   = loadHighest();
+bestStars = loadStars();
+function paintSoundBtn(){
+  btnSound.textContent = Sound.muted() ? '\uD83D\uDD07' : '\uD83D\uDD0A';
+  btnSound.classList.toggle('off', Sound.muted());
+}
+btnSound.addEventListener('click', function(e){ Sound.toggle(); paintSoundBtn(); e.stopPropagation(); });
+// autoplay policy: keep trying on every gesture until the context is running
+window.addEventListener('pointerdown', function(){ Sound.unlock(); });
+window.addEventListener('keydown',     function(){ Sound.unlock(); });
+paintSoundBtn();
 setLevel(highest);
 requestAnimationFrame(frame);
 
@@ -924,8 +1175,12 @@ window.__gtb = {
   setRamps: function(list){ ramps = list.map(function(r){ return Object.assign({}, r); }); syncUI(); },
   setLevel: setLevel,
   openSelect: function(){ buildGrid(); selPanel.hidden = false; },
-  clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY); } catch (e){} highest = 0; },
-  reset: function(){ ramps = []; ball = null; draft = null;
+  clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY); } catch (e){}
+                            highest = 0; bestStars = {}; },
+  stars: function(){ return Object.assign({}, bestStars); },
+  starsFor: starsFor,
+  tries: function(){ return tries; },
+  reset: function(){ ramps = []; ball = null; draft = null; tries = 0;
                      phase = 'plan'; overlay.hidden = true; syncUI(); }
 };
 })();
