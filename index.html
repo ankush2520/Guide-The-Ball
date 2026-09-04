@@ -49,6 +49,42 @@
   .grid button{position:relative;padding-bottom:15px}
   .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--accent)}
 
+  /* Step 2 of the tutorial: the button asks for the tap itself, so there is
+     no need for a sentence explaining where to find it. */
+  @keyframes tutpulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(120,175,255,.55), 0 0 14px 2px rgba(90,150,255,.35) }
+    50%    { box-shadow:0 0 0 7px rgba(120,175,255,0),  0 0 20px 5px rgba(90,150,255,.55) }
+  }
+  .tut-pulse{ animation:tutpulse 1.5s ease-in-out infinite }
+  @media (prefers-reduced-motion:reduce){ .tut-pulse{ animation:none;
+    box-shadow:0 0 0 3px rgba(120,175,255,.45) } }
+
+  /* Skip: deliberately quiet, in the board's corner, and only present while
+     the tutorial is. It costs no layout space when it is gone. */
+  .tut-skip{position:absolute;top:8px;right:9px;z-index:2;
+            background:rgba(13,16,34,.72);border:1px solid #39416e;border-radius:999px;
+            color:var(--muted);font-size:11.5px;font-weight:600;
+            padding:4px 11px;flex:none;line-height:1;cursor:pointer}
+  .tut-skip:hover:not(:disabled){filter:brightness(1.4)}
+  .tut-skip[hidden]{display:none}
+
+  /* Miss/stuck feedback. Sits in the flow ABOVE the board, never over it, and
+     always occupies its line even when empty - the board must not shift when
+     it appears. visibility (not display) is what keeps that space reserved. */
+  .flash{flex:none;display:block;align-self:center;max-width:100%;
+         /* one line, exactly, always: 22 - 2*1 padding - 2*1 border = 18 = the
+            line box. It can neither wrap nor grow, so the board cannot move.
+            The negative margin eats part of the .app gap back, since the pill
+            is the only thing this row ever holds. */
+         height:22px;line-height:18px;padding:1px 12px;margin-bottom:-5px;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+         font-size:12.5px;font-weight:650;text-align:center;
+         color:#ffd9a0;background:rgba(255,150,60,.10);
+         border:1px solid rgba(255,170,80,.28);border-radius:999px;
+         opacity:0;visibility:hidden;
+         transition:opacity .38s ease, visibility 0s linear .38s}
+  .flash.on{opacity:1;visibility:visible;transition:opacity .16s ease, visibility 0s}
+
   /* The stage owns the board's 3:5 ratio, so its border hugs the canvas
      exactly and no reflow can leave the board sitting off to one side. */
   .stage{position:relative;border-radius:14px;overflow:hidden;
@@ -123,8 +159,11 @@
     </div>
   </div>
 
+  <div class="flash" id="flash" role="status" aria-live="polite"></div>
+
   <div class="stage">
     <canvas id="board" aria-label="Game board"></canvas>
+    <button class="tut-skip" id="btn-skip" hidden>Skip</button>
     <div class="overlay" id="select" hidden>
       <div class="card selcard">
         <div class="big">Levels</div>
@@ -140,7 +179,7 @@
         <div class="starnote" id="ov-starnote" hidden></div>
         <div class="sub" id="ov-sub"></div>
         <div class="row">
-          <button id="btn-retry">Retry</button>
+          <button id="btn-retry">Replay</button>
           <button id="btn-adjust">Adjust</button>
           <button id="btn-next" class="primary" hidden>Next</button>
         </div>
@@ -794,7 +833,12 @@ function loadStars(){
   return (v && typeof v === 'object') ? v : {};
 }
 function saveProgress(){
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ highest: highest, stars: bestStars })); }
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      highest: highest, stars: bestStars,
+      tutorialSeen: tutorialSeen, obstacleTipSeen: obstacleTipSeen
+    }));
+  }
   catch (e){ /* private mode / blocked storage - progress just won't persist */ }
 }
 
@@ -833,7 +877,11 @@ let bestStars = {};     // levelIndex -> best stars earned, persisted
 let ramps  = [];
 let draft  = null;
 let ball   = null;
+let lastResult = null;  // outcome of the most recent drop, kept past ball = null
+let selected = -1;      // index of the ramp being edited, or -1
+let dragging = null;    // {mode:'p1'|'p2'|'move', ix, lx, ly} while a handle is held
 let seedOverride = null;
+let tutorialSeen = false, obstacleTipSeen = false;
 
 const canvas  = document.getElementById('board');
 // the backdrop is repainted every frame anyway, so an opaque surface just
@@ -850,6 +898,8 @@ const btnClear= document.getElementById('btn-clear');
 const btnNext = document.getElementById('btn-next');
 const elTries = document.getElementById('try-count');
 const btnSound= document.getElementById('btn-sound');
+const elFlash = document.getElementById('flash');
+const btnSkip = document.getElementById('btn-skip');
 
 /* ---------------- backing store ----------------
    The board is only ever ~370 CSS px wide on a phone. Rendering it at
@@ -899,6 +949,74 @@ window.addEventListener('resize', sizeCanvas);
 window.addEventListener('orientationchange', sizeCanvas);
 if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe(canvas.parentNode);
 
+/* ============================================================
+   TUTORIAL
+   Not a phase - a read-only view of state the game already
+   keeps. Step 1 is "no ramp placed yet", step 2 is "a ramp is
+   placed and the ball has not been dropped". Nothing here can
+   block input; the player is free to ignore all of it.
+   ============================================================ */
+// where the demo drag is mimed on level 1: a plausible ramp, not the answer
+const TUT_A = { x: 148, y: 292 }, TUT_B = { x: 268, y: 366 };
+const tutHand = { t: 0, gap: 0 };
+let tutLooping = false;
+
+function tutorialStep(){
+  if (tutorialSeen || levelIndex !== 0 || phase !== 'plan') return 0;
+  return ramps.length === 0 ? 1 : 2;
+}
+/* One loop of the mimed drag, then a beat, then again - both halves ride the
+   same tween helper the bounce juice uses. */
+function tutHandLoop(){
+  if (tutorialStep() !== 1){ tutLooping = false; return; }   // the player moved on
+  tutLooping = true;
+  tween(tutHand, 't', 0, 1, 1400, Ease.inOutQuad, function(){
+    tween(tutHand, 'gap', 0, 1, 420, Ease.linear, tutHandLoop);
+  });
+}
+function tutorialDone(){
+  if (tutorialSeen) return;
+  tutorialSeen = true;
+  saveProgress();
+  syncTutorial();
+}
+/* Skip means skip all of it, the just-in-time obstacle tip included. */
+function tutorialSkip(){
+  tutorialSeen = true; obstacleTipSeen = true;
+  saveProgress();
+  syncTutorial();
+}
+/* Push the tutorial's DOM half into line with the current step. The canvas
+   half is drawn from tutorialStep() directly, every frame. */
+function syncTutorial(){
+  const step = tutorialStep();
+  btnSkip.hidden = !(!tutorialSeen && levelIndex === 0);
+  btnDrop.classList.toggle('tut-pulse', step === 2);
+  // undoing the first ramp drops back to step 1, so the mime has to be able
+  // to restart from wherever the last cycle left it
+  if (step === 1 && !tutLooping) tutHandLoop();
+}
+
+/* ---------------- miss / stuck feedback ----------------
+   A losing drop used to stop the game behind a modal. It now just says what
+   happened, above the board, and hands the player straight back to planning
+   with their ramps untouched. */
+const FLASH_MS = 2600;
+let flashTimer = null, flashText = '';
+function showFlash(text){
+  flashText = text;
+  elFlash.textContent = text;
+  elFlash.classList.add('on');
+  if (flashTimer) clearTimeout(flashTimer);      // a new miss replaces the old
+  flashTimer = setTimeout(function(){
+    elFlash.classList.remove('on'); flashTimer = null; flashText = '';
+  }, FLASH_MS);
+}
+function hideFlash(){
+  if (flashTimer){ clearTimeout(flashTimer); flashTimer = null; }
+  elFlash.classList.remove('on'); flashText = '';
+}
+
 function level(){ return LEVELS[levelIndex]; }
 
 function syncUI(){
@@ -911,16 +1029,22 @@ function syncUI(){
   btnDrop.disabled  = !planning;
   btnUndo.disabled  = !planning || ramps.length === 0;
   btnClear.disabled = !planning || ramps.length === 0;
-  if (phase === 'drop' || phase === 'capture') elHint.textContent = 'Watching the drop…';
-  else if (phase === 'over') elHint.textContent = 'Retry replays the same ramps. Adjust lets you redraw.';
+  syncTutorial();
+  const tut = tutorialStep();
+  if (tut === 2) elHint.textContent = 'Tap Drop Ball when ready.';
+  else if (phase === 'drop' || phase === 'capture') elHint.textContent = 'Watching the drop…';
+  else if (phase === 'over') elHint.textContent = 'Replay repeats this layout. Adjust lets you edit it.';
+  else if (selected >= 0)
+    elHint.textContent = 'Drag an end to reshape, the middle to move, × to delete.';
   else if (ramps.length >= lv.maxBlocks)
-    elHint.textContent = 'No ramps left — undo one to redraw, or drop the ball.';
-  else elHint.textContent = 'Drag on the board to draw a ramp, then press Drop Ball.';
+    elHint.textContent = 'No ramps left — tap one to edit or delete it, or drop the ball.';
+  else elHint.textContent = 'Drag on the board to draw a ramp. Tap a ramp to edit it.';
 }
 
 function setLevel(i){
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   ramps = []; draft = null; ball = null; capture = null;
+  selected = -1; dragging = null; lastResult = null; hideFlash();
   seenHit = 0; squash.amt = 0; clearParticles();
   tries = 0;
   phase = 'plan'; overlay.hidden = true;
@@ -943,24 +1067,142 @@ function truncate(p, q){
   return { x: p.x + dx / len * MAX_RAMP, y: p.y + dy / len * MAX_RAMP };
 }
 
+/* ============================================================
+   RAMP EDITING
+   Board coordinates throughout, so a grab radius means the same
+   thing whatever size the canvas is being displayed at. The
+   board is 480 wide and shows at roughly 265 CSS px on a phone,
+   so these are about half their value under a fingertip.
+   ============================================================ */
+const HANDLE_R = 7;      // drawn radius of an endpoint grip
+const GRAB_R   = 20;     // how close a finger has to be to grab one
+const PICK_PAD = 12;     // slop around a ramp's body when tapping to select
+const DEL_OFF  = 32;     // how far the delete button sits off the ramp
+const DEL_R    = 12;     // drawn radius of the delete button
+const DEL_GRAB = 20;
+
+function distToSeg(x, y, s){
+  const c = closestOnSeg(x, y, s.x1, s.y1, s.x2, s.y2);
+  return Math.hypot(x - c.x, y - c.y);
+}
+/* Where the × sits: off the midpoint, along the ramp's normal, flipped to
+   whichever side keeps it on the board. */
+function deleteBtnAt(s){
+  const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2;
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+  const m = Math.hypot(dx, dy) || 1;
+  let nx = -dy / m, ny = dx / m;
+  let bx = mx + nx * DEL_OFF, by = my + ny * DEL_OFF;
+  if (bx < DEL_R || bx > W - DEL_R || by < DEL_R || by > H - DEL_R){
+    bx = mx - nx * DEL_OFF; by = my - ny * DEL_OFF;
+  }
+  return { x: clamp(bx, DEL_R, W - DEL_R), y: clamp(by, DEL_R, H - DEL_R) };
+}
+/* Short ramps cannot afford a full-size grab circle at each end or the two
+   would swallow the middle, leaving no way to translate one. */
+function grabR(s){
+  const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+  return Math.min(GRAB_R, len * 0.38);
+}
+function selectRamp(i){
+  selected = (i >= 0 && i < ramps.length) ? i : -1;
+  syncUI();
+}
+function deleteRamp(i){
+  if (i < 0 || i >= ramps.length) return;
+  ramps.splice(i, 1);                 // frees the slot back to the counter
+  selected = -1;
+  syncUI();
+}
+/* Move one end of a ramp, keeping the segment inside the length limits the
+   drawing tool enforces - an edited ramp must stay a ramp you could have
+   drawn by hand. */
+function moveEnd(s, which, p){
+  const ax = which === 1 ? s.x2 : s.x1, ay = which === 1 ? s.y2 : s.y1;
+  let q = truncate({ x: ax, y: ay }, p);
+  const dx = q.x - ax, dy = q.y - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < MIN_RAMP){
+    // too close to the anchor: push it back out along the same heading
+    const a = len > 1e-6 ? Math.atan2(dy, dx) : -Math.PI / 2;
+    q = { x: clamp(ax + Math.cos(a) * MIN_RAMP, 0, W),
+          y: clamp(ay + Math.sin(a) * MIN_RAMP, 0, H) };
+  }
+  if (which === 1){ s.x1 = q.x; s.y1 = q.y; } else { s.x2 = q.x; s.y2 = q.y; }
+}
+/* Translate the whole ramp, clamping the shift so neither end leaves the
+   board - the angle and length never change. */
+function moveWhole(s, dx, dy){
+  const loX = Math.min(s.x1, s.x2), hiX = Math.max(s.x1, s.x2);
+  const loY = Math.min(s.y1, s.y2), hiY = Math.max(s.y1, s.y2);
+  dx = clamp(dx, -loX, W - hiX);
+  dy = clamp(dy, -loY, H - hiY);
+  s.x1 += dx; s.x2 += dx; s.y1 += dy; s.y2 += dy;
+}
+
 /* iOS owns the swipe-from-edge back gesture and touch-action cannot refuse
    it - only a cancelled touchstart can. */
 canvas.addEventListener('touchstart', function(e){ e.preventDefault(); }, { passive: false });
 
 canvas.addEventListener('pointerdown', function(e){
-  if (phase !== 'plan' || ramps.length >= level().maxBlocks) return;
-  canvas.setPointerCapture(e.pointerId);
+  if (phase !== 'plan') return;
   const p = toBoard(e);
-  draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+  canvas.setPointerCapture(e.pointerId);
   e.preventDefault();
+
+  /* 1. the selected ramp's own controls win over everything else */
+  if (selected >= 0 && selected < ramps.length){
+    const s = ramps[selected], g = grabR(s);
+    const del = deleteBtnAt(s);
+    if (Math.hypot(p.x - del.x, p.y - del.y) <= DEL_GRAB){ deleteRamp(selected); return; }
+    if (Math.hypot(p.x - s.x1, p.y - s.y1) <= g){
+      dragging = { mode: 'p1', ix: selected, lx: p.x, ly: p.y }; return;
+    }
+    if (Math.hypot(p.x - s.x2, p.y - s.y2) <= g){
+      dragging = { mode: 'p2', ix: selected, lx: p.x, ly: p.y }; return;
+    }
+    if (distToSeg(p.x, p.y, s) <= RAMP_HT + PICK_PAD){
+      dragging = { mode: 'move', ix: selected, lx: p.x, ly: p.y }; return;
+    }
+  }
+
+  /* 2. tapping any other placed ramp selects it, and the same gesture can go
+        straight on to dragging it - a tap that never moves just selects */
+  let pick = -1, bestD = Infinity;
+  for (let i = 0; i < ramps.length; i++){
+    const d = distToSeg(p.x, p.y, ramps[i]);
+    if (d <= RAMP_HT + PICK_PAD && d < bestD){ bestD = d; pick = i; }
+  }
+  if (pick >= 0){
+    selected = pick;
+    dragging = { mode: 'move', ix: pick, lx: p.x, ly: p.y };
+    syncUI();
+    return;
+  }
+
+  /* 3. empty board: drop the selection, and start a new ramp if there is room */
+  if (selected >= 0){ selected = -1; syncUI(); }
+  if (ramps.length >= level().maxBlocks) return;
+  draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
 });
 canvas.addEventListener('pointermove', function(e){
+  if (dragging){
+    const p = toBoard(e);
+    const s = ramps[dragging.ix];
+    if (!s){ dragging = null; return; }
+    if (dragging.mode === 'move') moveWhole(s, p.x - dragging.lx, p.y - dragging.ly);
+    else moveEnd(s, dragging.mode === 'p1' ? 1 : 2, p);
+    dragging.lx = p.x; dragging.ly = p.y;
+    e.preventDefault();
+    return;
+  }
   if (!draft) return;
   const p = truncate({ x: draft.x1, y: draft.y1 }, toBoard(e));
   draft.x2 = p.x; draft.y2 = p.y;
   e.preventDefault();
 });
 function endDraft(){
+  if (dragging){ dragging = null; syncUI(); return; }
   if (!draft) return;
   const len = Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1);
   if (len >= MIN_RAMP && ramps.length < level().maxBlocks) ramps.push(draft);
@@ -968,13 +1210,13 @@ function endDraft(){
   syncUI();
 }
 canvas.addEventListener('pointerup',     function(e){ endDraft(); e.preventDefault(); });
-canvas.addEventListener('pointercancel', function(){ draft = null; syncUI(); });
+canvas.addEventListener('pointercancel', function(){ draft = null; dragging = null; syncUI(); });
 
 /* touch-action already tells the browser not to scroll the canvas, but iOS
    still owns the edge-swipe-back and pinch gestures. Refuse both outright
    while a ramp is mid-draw, so the page cannot slide out from under it. */
 document.addEventListener('touchmove', function(e){
-  if (draft) e.preventDefault();
+  if (draft || dragging) e.preventDefault();
 }, { passive: false });
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(function(name){
   document.addEventListener(name, function(e){ e.preventDefault(); }, { passive: false });
@@ -983,7 +1225,10 @@ document.addEventListener('touchmove', function(e){
 /* ---------------- actions ---------------- */
 function drop(){
   if (phase !== 'plan') return;
-  draft = null; capture = null;
+  // steps 1 and 2 have both happened: a ramp went down, and this is the tap
+  if (tutorialStep() === 2) tutorialDone();
+  draft = null; capture = null; dragging = null; selected = -1;
+  hideFlash();
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
   seenHit = 0; squash.amt = 0; clearParticles();
@@ -992,9 +1237,10 @@ function drop(){
   overlay.hidden = true;
   syncUI();
 }
-/* A win is swallowed by the target first; the overlay waits for the animation. */
+/* A win is swallowed by the target first; the overlay waits for the animation.
+   A miss does not stop the game at all - see missed(). */
 function land(result){
-  if (result !== 'win'){ finish(result); return; }
+  if (result !== 'win'){ missed(result); return; }
   const c = targetAt(level(), ball.t0 + ball.steps / 60);
   Sound.win();
   phase = 'capture';
@@ -1003,7 +1249,26 @@ function land(result){
   burst(ball.x, ball.y, 0, -1, '#7dffb4', 14, 3.0, Math.PI, 420);
   syncUI();
 }
+/* A losing drop: say what went wrong above the board, put the ball back on
+   the spawn, and return to planning at once. The player's ramps are left
+   exactly where they put them so the next move is an adjustment, not a
+   rebuild. No overlay, no button to dismiss. */
+function missed(result){
+  lastResult = result;
+  ball = null; capture = null; draft = null;
+  clearParticles(); squash.amt = 0; seenHit = 0;
+  phase = 'plan';
+  overlay.hidden = true;
+  showFlash(result === 'timeout'
+    ? 'Got stuck! Try readjusting your ramps.'
+    : 'Missed! Try readjusting your ramps.');
+  syncUI();
+}
+
+/* Only a win reaches here now - it is the one moment that still earns a
+   full-screen beat, with stars and the route on to the next level. */
 function finish(result){
+  lastResult = result;
   phase = 'over';
   const win  = result === 'win';
   const last = levelIndex >= LEVELS.length - 1;
@@ -1025,15 +1290,19 @@ function finish(result){
   document.getElementById('ov-title').textContent = win ? 'Target hit!' : 'Missed';
   document.getElementById('ov-sub').textContent =
     win ? (last ? 'That was the last level for now.' : 'On to level ' + LEVELS[levelIndex+1].id + '.')
-        : result === 'timeout' ? 'The ball bounced too long without landing.'
-        : 'The ball left the board without reaching the target.';
+        : 'The ball never reached the target.';
   btnNext.hidden = !win || last;
   overlay.hidden = false;
+  hideFlash();
   syncUI();
 }
 btnDrop.addEventListener('click', drop);
-btnUndo.addEventListener('click', function(){ if (phase === 'plan'){ ramps.pop(); syncUI(); } });
-btnClear.addEventListener('click', function(){ if (phase === 'plan'){ ramps = []; syncUI(); } });
+btnUndo.addEventListener('click', function(){
+  if (phase === 'plan'){ ramps.pop(); selected = -1; syncUI(); }
+});
+btnClear.addEventListener('click', function(){
+  if (phase === 'plan'){ ramps = []; selected = -1; syncUI(); }
+});
 document.getElementById('btn-retry').addEventListener('click', function(){
   phase = 'plan'; overlay.hidden = true; drop();
 });
@@ -1326,6 +1595,44 @@ function render(){
     drawSeg(draft, len < MIN_RAMP ? 'rgba(62,200,255,.45)' : '#3ec8ff', RAMP_HT, null);
   }
 
+  /* the ramp being edited: a halo so it reads as picked out from the others,
+     a grip at each end, and the delete button */
+  if (phase === 'plan' && selected >= 0 && selected < ramps.length){
+    const s = ramps[selected];
+    ctx.save();
+    // halo
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,.22)';
+    ctx.lineWidth = RAMP_HT * 2 + 12;
+    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+    // dashed outline, so selection survives on top of a same-coloured ramp
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([7, 5]);
+    ctx.lineDashOffset = -(clock * 22) % 12;      // a slow crawl: it is "live"
+    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+    ctx.setLineDash([]);
+    // endpoint grips
+    const ends = [[s.x1, s.y1], [s.x2, s.y2]];
+    for (let i = 0; i < 2; i++){
+      ctx.beginPath(); ctx.arc(ends[i][0], ends[i][1], HANDLE_R, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#1b6fa8'; ctx.stroke();
+    }
+    // delete button
+    const del = deleteBtnAt(s);
+    ctx.beginPath(); ctx.arc(del.x, del.y, DEL_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff4d5e'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
+    ctx.lineCap = 'round'; ctx.lineWidth = 2.6; ctx.strokeStyle = '#ffffff';
+    const k = DEL_R * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(del.x - k, del.y - k); ctx.lineTo(del.x + k, del.y + k);
+    ctx.moveTo(del.x + k, del.y - k); ctx.lineTo(del.x - k, del.y + k);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /* spawn marker (planning only) */
   if (phase === 'plan'){
     ctx.save();
@@ -1340,6 +1647,59 @@ function render(){
     ctx.beginPath();
     ctx.arc(lv.spawn.x, lv.spawn.y, BALL_R + 4, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  /* tutorial step 1: mime the drag that places a ramp. Everything below is
+     canvas primitives - no images, and it scales with the board. */
+  if (tutorialStep() === 1){
+    const k = tutHand.t;
+    // fade in off the start dot, hold, fade out at the end of the glide
+    const a = k < 0.10 ? k / 0.10 : k > 0.86 ? (1 - k) / 0.14 : 1;
+    const hx = TUT_A.x + (TUT_B.x - TUT_A.x) * k;
+    const hy = TUT_A.y + (TUT_B.y - TUT_A.y) * k;
+    ctx.save();
+
+    // the ramp it would leave behind, so the gesture explains its own result
+    ctx.globalAlpha = a * 0.34;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#3ec8ff';
+    ctx.lineWidth = RAMP_HT * 2;
+    ctx.beginPath(); ctx.moveTo(TUT_A.x, TUT_A.y); ctx.lineTo(hx, hy); ctx.stroke();
+
+    // the path the finger is taking
+    ctx.globalAlpha = a * 0.5;
+    ctx.strokeStyle = 'rgba(255,255,255,.75)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 6]);
+    ctx.beginPath(); ctx.moveTo(TUT_A.x, TUT_A.y); ctx.lineTo(TUT_B.x, TUT_B.y); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // where it started
+    ctx.globalAlpha = a * 0.6;
+    ctx.beginPath(); ctx.arc(TUT_A.x, TUT_A.y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill();
+
+    // the fingertip: a soft press-ring around a solid dot
+    ctx.globalAlpha = a * 0.32;
+    ctx.beginPath(); ctx.arc(hx, hy, 19, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.globalAlpha = a;
+    ctx.beginPath(); ctx.arc(hx, hy, 10.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.96)'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(30,60,110,.9)'; ctx.stroke();
+
+    // the label, above the mime and clear of it
+    ctx.globalAlpha = 0.92;
+    ctx.font = '600 19px ui-sans-serif, system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    const label = 'Drag to place a ramp.';
+    const ly = TUT_A.y - 34, lw = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(13,16,34,.78)';
+    roundRect((TUT_A.x + TUT_B.x) / 2 - lw / 2 - 13, ly - 20, lw + 26, 30, 15);
+    ctx.fill();
+    ctx.fillStyle = '#e9ecff';
+    ctx.fillText(label, (TUT_A.x + TUT_B.x) / 2, ly);
     ctx.restore();
   }
 
@@ -1405,6 +1765,14 @@ function frame(now){
         seenHit = ball.hit.n;
         Sound.bounce(ball.hit.kind === 'obstacle' ? 'obstacle' : 'ramp');
         reactToHit(ball.hit);
+        /* Step 3, and the reason it needs its own flag: level 1 has no
+           obstacles at all, so this can only ever fire on a later level -
+           long after tutorialSeen has been set. */
+        if (ball.hit.kind === 'obstacle' && !obstacleTipSeen){
+          obstacleTipSeen = true;
+          saveProgress();
+          showFlash('Obstacles bounce you randomly — try to avoid them.');
+        }
       }
       if (ball.result){ land(ball.result); break; }
     }
@@ -1425,6 +1793,12 @@ function frame(now){
 
 highest   = loadHighest();
 bestStars = loadStars();
+/* "Genuinely first-time" means no save at all. Anyone who already has
+   progress - including players from before the tutorial existed - has clearly
+   worked out how to place a ramp, so they never get shown it. */
+tutorialSeen    = loadSave().tutorialSeen    === true || highest > 0;
+obstacleTipSeen = loadSave().obstacleTipSeen === true || highest > 0;
+btnSkip.addEventListener('click', function(e){ tutorialSkip(); e.stopPropagation(); });
 function paintSoundBtn(){
   btnSound.textContent = Sound.muted() ? '\uD83D\uDD07' : '\uD83D\uDD0A';
   btnSound.classList.toggle('off', Sound.muted());
@@ -1470,7 +1844,14 @@ window.__gtb = {
              walls: (lv.move ? buildWalls(lv, targetAt(lv, clock)) : lv.walls).length,
              targetType: lv.targetType, moving: !!lv.move,
              target: targetAt(lv, clock), capturing: !!capture,
-             result: ball ? ball.result : null,
+             selected: selected, dragging: dragging ? dragging.mode : null,
+             tutorial: { step: tutorialStep(), seen: tutorialSeen,
+                         obstacleTipSeen: obstacleTipSeen,
+                         skipShown: !btnSkip.hidden,
+                         dropPulsing: btnDrop.classList.contains('tut-pulse'),
+                         handT: tutHand.t },
+             flash: flashText, flashOn: elFlash.classList.contains('on'),
+             result: ball ? ball.result : lastResult,
              ball: ball ? { x: ball.x, y: ball.y, px: ball.px, py: ball.py,
                             vx: ball.vx, vy: ball.vy, hits: ball.hit.n,
                             speed: Math.hypot(ball.vx, ball.vy) } : null,
@@ -1483,11 +1864,15 @@ window.__gtb = {
   setLevel: setLevel,
   openSelect: function(){ buildGrid(); selPanel.hidden = false; },
   clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY); } catch (e){}
-                            highest = 0; bestStars = {}; },
+                            highest = 0; bestStars = {};
+                            tutorialSeen = false; obstacleTipSeen = false; syncTutorial(); },
+  skipTutorial: tutorialSkip,
   stars: function(){ return Object.assign({}, bestStars); },
   starsFor: starsFor,
   tries: function(){ return tries; },
+  select: selectRamp,
   reset: function(){ ramps = []; ball = null; draft = null; tries = 0;
+                     selected = -1; dragging = null; lastResult = null; hideFlash();
                      phase = 'plan'; overlay.hidden = true; syncUI(); }
 };
 })();
