@@ -11,18 +11,27 @@
     --ball:#ffffff; --accent:#ffc93c;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
   body{
     margin:0;background:radial-gradient(120% 80% at 50% 0%, #1c2145 0%, var(--bg) 65%);
     color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-    display:flex;justify-content:center;align-items:flex-start;padding:10px;overscroll-behavior:none;
-    height:100vh;height:100dvh;overflow:hidden;
+    display:flex;justify-content:center;align-items:flex-start;padding:10px;
+    /* svh, NOT dvh: dvh follows Safari's toolbar as it collapses under your
+       finger, which re-lays out the stage and slides the board sideways in
+       the middle of drawing a ramp. svh stays put. */
+    height:100vh;height:100svh;max-height:100svh;
     padding-bottom:calc(10px + env(safe-area-inset-bottom));
+    /* a phone must never pan, rubber-band, double-tap-zoom or start a text
+       selection while a finger is dragging a ramp across the board */
+    touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
   }
   .app{width:min(430px,100%);height:100%;display:flex;flex-direction:column;gap:9px}
 
-  .hud{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .title{font-size:15px;font-weight:700;letter-spacing:.02em;min-width:0}
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;
+       flex:none;min-height:34px}
+  .title{font-size:15px;font-weight:700;letter-spacing:.02em;min-width:0;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .title span{color:var(--muted);font-weight:500}
   .counter{background:var(--panel);border:1px solid #2c3358;border-radius:999px;
            padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap}
@@ -40,10 +49,14 @@
   .grid button{position:relative;padding-bottom:15px}
   .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--accent)}
 
-  .stage{position:relative;max-width:100%;border-radius:14px;overflow:hidden;
+  /* The stage owns the board's 3:5 ratio, so its border hugs the canvas
+     exactly and no reflow can leave the board sitting off to one side. */
+  .stage{position:relative;border-radius:14px;overflow:hidden;
          border:1px solid #2c3358;box-shadow:0 10px 34px rgba(0,0,0,.45);
-         flex:1 1 auto;min-height:0;display:flex;align-self:center}
-  canvas{display:block;width:auto;height:auto;max-width:100%;max-height:100%;
+         flex:1 1 auto;min-height:0;align-self:center;
+         /* content-box so the 1px border does not skew the board's ratio */
+         box-sizing:content-box;aspect-ratio:3 / 5;width:auto;max-width:calc(100% - 2px)}
+  canvas{display:block;width:100%;height:100%;
          touch-action:none;cursor:crosshair}
 
   .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -79,7 +92,11 @@
   .sw.rp{height:6px;width:18px;border-radius:3px;background:var(--ramp);transform:rotate(-20deg)}
   .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
   .sw.bl{border-radius:50%;background:var(--ball)}
-  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0}
+  /* the text swaps between one and two lines as you play; reserving the tall
+     state keeps the stage - and therefore the board - perfectly still */
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0;
+        flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
+  .controls,.legend{flex:none}
   /* a phone has no height to spare - drop the reference text, keep the controls */
   @media (max-height:700px){ .legend,.hint{display:none} }
 
@@ -184,7 +201,18 @@ const Sound = (function(){
     if (ctx) return true;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return false;
+    // iOS defaults a page to the "ambient" session, which the ring/silent
+    // switch mutes outright - a game wants the playback session instead.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e){}
     try { ctx = new AC(); } catch (e){ return false; }
+    /* Safari parks the context in 'interrupted' (not 'suspended') after a
+       call, a lock screen or another app grabbing audio, and never leaves it
+       on its own. Notice that, and rebuild the beat when we come back. */
+    ctx.onstatechange = function(){
+      if (!ctx) return;
+      if (ctx.state === 'running'){ startMusic(); }
+      else { stopMusic(); }
+    };
     master = ctx.createGain(); master.gain.value = muted ? 0 : 1;
     master.connect(ctx.destination);
     // one shared delay gives every layer the same room to sit in
@@ -262,29 +290,46 @@ const Sound = (function(){
     }
   }
   function startMusic(){
-    if (!ctx || started) return;
+    if (!ctx || started || ctx.state !== 'running') return;
     started = true; nextTime = ctx.currentTime + 0.1; stepIx = 0;
     pump(); timer = setInterval(pump, 25);
+  }
+  function stopMusic(){
+    started = false;
+    if (timer){ clearInterval(timer); timer = null; }
+  }
+  /* Anything other than 'running' means silence, so retry on every state we
+     do not want - 'suspended' before the first gesture, 'interrupted' after
+     iOS has taken the audio away from us. */
+  function wake(){
+    if (!ensure()) return;
+    if (ctx.state !== 'running'){
+      let p = null;
+      try { p = ctx.resume(); } catch (e){}
+      if (p && p.then) p.then(startMusic, function(){});
+    }
+    startMusic();
   }
 
   return {
     /* called from the first real gesture, and from every one after that
        until the context is actually running (iOS can refuse the first) */
-    unlock: function(){
-      if (!ensure()) return;
-      if (ctx.state === 'suspended') ctx.resume();
-      startMusic();
-    },
+    unlock: wake,
+    /* backgrounding: drop the scheduler so we do not wake up owing the audio
+       clock a burst of notes that all fire at once */
+    pause: stopMusic,
     muted: function(){ return muted; },
     toggle: function(){
       muted = !muted;
       try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch (e){}
-      if (master) master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+      if (!muted) wake();
+      if (ctx && master) master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
       return muted;
     },
     /* SFX 1 - the ball struck something solid. */
     bounce: function(kind){
-      if (!ctx || muted) return;
+      if (muted) return;
+      if (!ctx || ctx.state !== 'running'){ wake(); return; }
       const t = ctx.currentTime;
       if (t - lastBounce < 0.035) return;      // a scatter of hits is one sound
       lastBounce = t;
@@ -299,7 +344,8 @@ const Sound = (function(){
     },
     /* SFX 2 - the target swallowed the ball. */
     win: function(){
-      if (!ctx || muted) return;
+      if (muted) return;
+      if (!ctx || ctx.state !== 'running'){ wake(); return; }
       const t = ctx.currentTime, notes = [69, 73, 76, 81];   // A major arpeggio
       for (let i = 0; i < notes.length; i++)
         tone(sfx, mtof(notes[i]), t + i * 0.085, 0.42, 0.22, 'triangle');
@@ -730,7 +776,9 @@ let ball   = null;
 let seedOverride = null;
 
 const canvas  = document.getElementById('board');
-const ctx     = canvas.getContext('2d');
+// the backdrop is repainted every frame anyway, so an opaque surface just
+// saves the compositor a per-pixel blend on every single frame
+const ctx     = canvas.getContext('2d', { alpha: false });
 const overlay = document.getElementById('overlay');
 const card    = document.getElementById('card');
 const elLeft  = document.getElementById('ramps-left');
@@ -743,10 +791,53 @@ const btnNext = document.getElementById('btn-next');
 const elTries = document.getElementById('try-count');
 const btnSound= document.getElementById('btn-sound');
 
-const dpr = Math.min(window.devicePixelRatio || 1, 3);
-canvas.width  = W * dpr;
-canvas.height = H * dpr;
-ctx.scale(dpr, dpr);
+/* ---------------- backing store ----------------
+   The board is only ever ~370 CSS px wide on a phone. Rendering it at
+   480x800 logical times a 3x device ratio meant pushing 3.5M pixels -
+   roughly fifteen times what the screen can show - through shadowBlur on
+   every frame, which is exactly what made drawing a ramp stutter. Size the
+   surface to what is actually on screen instead, capped at 2x. */
+const MAX_SCALE = 2;
+const backdrop  = document.createElement('canvas');
+const bctx      = backdrop.getContext('2d', { alpha: false });
+let renderScale = 1;
+
+// give the element the right 3:5 intrinsic ratio before the first measure,
+// otherwise it lays out at the 300x150 canvas default for one frame
+canvas.width = W; canvas.height = H;
+
+function buildBackdrop(){
+  backdrop.width  = canvas.width;
+  backdrop.height = canvas.height;
+  bctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  const g = bctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#141936');
+  g.addColorStop(1, '#0b0e1e');
+  bctx.fillStyle = g;
+  bctx.fillRect(0, 0, W, H);
+  bctx.strokeStyle = 'rgba(255,255,255,.035)';
+  bctx.lineWidth = 1;
+  for (let y = 50; y < H; y += 50){
+    bctx.beginPath(); bctx.moveTo(0, y + .5); bctx.lineTo(W, y + .5); bctx.stroke();
+  }
+}
+
+function sizeCanvas(){
+  const dpr  = Math.max(1, Math.min(window.devicePixelRatio || 1, MAX_SCALE));
+  const cssW = canvas.getBoundingClientRect().width || W;
+  // never below the CSS size (that would blur it) and never above 2x logical
+  let px = Math.round(Math.min(Math.max(cssW * dpr, cssW), W * MAX_SCALE));
+  if (px === canvas.width) return;
+  canvas.width  = px;
+  canvas.height = Math.round(px * H / W);
+  renderScale   = canvas.width / W;
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  buildBackdrop();
+}
+sizeCanvas();
+window.addEventListener('resize', sizeCanvas);
+window.addEventListener('orientationchange', sizeCanvas);
+if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe(canvas.parentNode);
 
 function level(){ return LEVELS[levelIndex]; }
 
@@ -791,6 +882,10 @@ function truncate(p, q){
   return { x: p.x + dx / len * MAX_RAMP, y: p.y + dy / len * MAX_RAMP };
 }
 
+/* iOS owns the swipe-from-edge back gesture and touch-action cannot refuse
+   it - only a cancelled touchstart can. */
+canvas.addEventListener('touchstart', function(e){ e.preventDefault(); }, { passive: false });
+
 canvas.addEventListener('pointerdown', function(e){
   if (phase !== 'plan' || ramps.length >= level().maxBlocks) return;
   canvas.setPointerCapture(e.pointerId);
@@ -812,7 +907,17 @@ function endDraft(){
   syncUI();
 }
 canvas.addEventListener('pointerup',     function(e){ endDraft(); e.preventDefault(); });
-canvas.addEventListener('pointercancel', function(){ draft = null; });
+canvas.addEventListener('pointercancel', function(){ draft = null; syncUI(); });
+
+/* touch-action already tells the browser not to scroll the canvas, but iOS
+   still owns the edge-swipe-back and pinch gestures. Refuse both outright
+   while a ramp is mid-draw, so the page cannot slide out from under it. */
+document.addEventListener('touchmove', function(e){
+  if (draft) e.preventDefault();
+}, { passive: false });
+['gesturestart', 'gesturechange', 'gestureend'].forEach(function(name){
+  document.addEventListener(name, function(e){ e.preventDefault(); }, { passive: false });
+});
 
 /* ---------------- actions ---------------- */
 function drop(){
@@ -938,17 +1043,7 @@ function drawSeg(s, color, halfT, glow){
 function render(){
   const lv = level();
 
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#141936');
-  g.addColorStop(1, '#0b0e1e');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.strokeStyle = 'rgba(255,255,255,.035)';
-  ctx.lineWidth = 1;
-  for (let y = 50; y < H; y += 50){
-    ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke();
-  }
+  ctx.drawImage(backdrop, 0, 0, W, H);
 
   const c = targetAt(lv, clock);
 
@@ -1138,9 +1233,16 @@ function paintSoundBtn(){
   btnSound.classList.toggle('off', Sound.muted());
 }
 btnSound.addEventListener('click', function(e){ Sound.toggle(); paintSoundBtn(); e.stopPropagation(); });
-// autoplay policy: keep trying on every gesture until the context is running
-window.addEventListener('pointerdown', function(){ Sound.unlock(); });
-window.addEventListener('keydown',     function(){ Sound.unlock(); });
+/* Autoplay policy: keep trying on every gesture until the context is really
+   running. Capture phase, and several event names, because iOS hands the
+   permission out on some gestures and not others. */
+['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach(function(name){
+  window.addEventListener(name, function(){ Sound.unlock(); }, true);
+});
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) Sound.pause(); else Sound.unlock();
+});
+window.addEventListener('pageshow', function(){ Sound.unlock(); });
 paintSoundBtn();
 setLevel(highest);
 requestAnimationFrame(frame);
