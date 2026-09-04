@@ -2,7 +2,8 @@
  * Guide the Ball - Playwright suite.   node tests/play.test.mjs
  *
  * Covers boot, level data integrity, WALL physics (walls must really block),
- * obstacle bounce quality, the constant-speed invariant, render interpolation,
+ * obstacle bounce quality, the gravity/terminal-velocity model, the juice
+ * helpers (tween + particles), render interpolation,
  * progression + localStorage, and the drawing UI on mouse and touch.
  * Re-run after ANY change to physics constants or level coordinates.
  */
@@ -145,7 +146,7 @@ const wall = await page.evaluate(() => {
     lv.spawn.x = origSpawn;
     const side = simulate(sideCfg, 1, 0);
     return { vertical: vertical.result, side: side.result,
-             sMin: side.spdMin, sMax: side.spdMax };
+             sMax: side.spdMax, vyMax: side.vyMax };
   };
 
   const open = probe();
@@ -174,8 +175,9 @@ check(row('NARROW_GAP').vertical === 'win', 'NARROW_GAP lets a ball through its 
 check(row('ENCLOSED').side !== 'win', 'ENCLOSED blocks the side approach that OPEN allowed');
 check(row('ENCLOSED').vertical === 'win', 'ENCLOSED still lets a vertical drop into the cup');
 const e = row('ENCLOSED');
-check(Math.abs(e.sMin - C.SPEED) < 1e-9 && Math.abs(e.sMax - C.SPEED) < 1e-9,
-  'speed is unchanged across wall bounces', `${e.sMin} .. ${e.sMax}`);
+check(e.sMax <= C.MAX_SPEED + 1e-9 && e.vyMax <= C.TERMINAL_VY + 1e-9,
+  'wall bounces stay inside the speed and terminal-velocity caps',
+  `peak ${e.sMax.toFixed(2)} / cap ${C.MAX_SPEED.toFixed(2)}, vy ${e.vyMax.toFixed(2)}`);
 
 /* ---------------------------------------------------------------- */
 section('3b. Moving targets: straight-line glide, no rotation');
@@ -337,31 +339,95 @@ check(bq.jit === bq.n, 'every bounce is a mirror reflection plus bounded scatter
 check(bq.mean > 8, 'bounces still carry real randomness', `mean ${bq.mean.toFixed(1)}°`);
 
 /* ---------------------------------------------------------------- */
-section('5. Speed is constant after every collision, on every level');
+section('5. Gravity model: terminal velocity, caps, and lossy bounces');
 const inv = await page.evaluate(() => {
   const { LEVELS, simulate, CONSTS } = window.__gtb;
   const R = Math.PI/180;
   const ramp = (cx,cy,deg,len=110) => { const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
     return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
   let rnd = 4242; const rand = () => (rnd=(rnd*1103515245+12345)&0x7fffffff)/0x7fffffff;
-  let worst = 0, runs = 0, bounces = 0;
+  let overSpeed = 0, overVy = 0, runs = 0, bounces = 0, segs = 0;
+  let peak = 0, peakVy = 0, varied = 0;
   for (let li = 0; li < LEVELS.length; li++)
     for (let i = 0; i < 1200; i++){
       const cfg = [];
       for (let k = 0; k < LEVELS[li].maxBlocks; k++)
         cfg.push(ramp(30+rand()*420, 120+rand()*520, -85+rand()*170, 60+rand()*90));
       const o = simulate(cfg, 1 + (i%64), li);
-      runs++; bounces += o.hits;
-      worst = Math.max(worst, Math.abs(o.spdMin-CONSTS.SPEED), Math.abs(o.spdMax-CONSTS.SPEED));
+      runs++; bounces += o.hits; segs += o.segHits;
+      if (o.spdMax > CONSTS.MAX_SPEED + 1e-9) overSpeed++;
+      if (o.vyMax  > CONSTS.TERMINAL_VY + 1e-9) overVy++;
+      if (o.spdMax - o.spdMin > 1e-6) varied++;
+      peak   = Math.max(peak, o.spdMax);
+      peakVy = Math.max(peakVy, o.vyMax);
     }
-  return { runs, bounces, worst, S: CONSTS.SPEED };
+  return { runs, bounces, segs, overSpeed, overVy, peak, peakVy, varied,
+           cap: CONSTS.MAX_SPEED, term: CONSTS.TERMINAL_VY };
 });
-console.log(`  ${inv.runs} runs across all levels, ${inv.bounces} obstacle bounces`);
-check(inv.worst < 1e-9, 'speed never deviates after ANY collision',
-  `worst drift ${inv.worst.toExponential(2)}`);
+console.log(`  ${inv.runs} runs, ${inv.bounces} obstacle + ${inv.segs} segment bounces; ` +
+            `peak speed ${inv.peak.toFixed(2)}/${inv.cap.toFixed(2)}, peak vy ${inv.peakVy.toFixed(2)}/${inv.term}`);
+check(inv.overSpeed === 0, 'speed never exceeds the cap on any level', `${inv.overSpeed} runs over`);
+check(inv.overVy === 0, 'vy never exceeds TERMINAL_VY', `${inv.overVy} runs over`);
+check(inv.varied === inv.runs, 'speed genuinely varies during every run (gravity is real)',
+  `${inv.varied}/${inv.runs}`);
+check(inv.peakVy > inv.term * 0.98, 'a free fall actually reaches terminal velocity',
+  `${inv.peakVy.toFixed(3)}`);
+
+/* free-fall profile: how long to terminal, straight down, no ramps */
+const fall = await page.evaluate(() => {
+  const { LEVELS, CONSTS } = window.__gtb;
+  // integrate the same way stepBall does, so this measures the shipped numbers
+  const G = CONSTS.GRAVITY, T = CONSTS.TERMINAL_VY, S = CONSTS.SUBSTEPS;
+  let vy = 0, steps = 0;
+  while (vy < T - 1e-9 && steps < 600){
+    for (let i = 0; i < S; i++){ vy += G/S; if (vy > T) vy = T; }
+    steps++;
+  }
+  return { steps, secs: steps/60 };
+});
+console.log(`  free fall reaches terminal velocity in ${fall.steps} steps (${fall.secs.toFixed(2)}s)`);
+check(fall.secs >= 0.30 && fall.secs <= 0.50,
+  'terminal velocity is reached in 0.3-0.5s of free fall', `${fall.secs.toFixed(2)}s`);
+
+/* a head-on bounce must lose energy, not preserve or reset it */
+const rest = await page.evaluate(() => {
+  const { LEVELS, simulate, CONSTS } = window.__gtb;
+  // a flat ramp square under the spawn: the ball falls onto it head-on
+  const lv = LEVELS[0], sx = lv.spawn.x;
+  const flat = [{ x1: sx-70, y1: 420, x2: sx+70, y2: 420 }];
+  const o = simulate(flat, 1, 0);
+  // and no genuine win anywhere should be long enough to look like a stall
+  const R = Math.PI/180;
+  const ramp = (cx,cy,deg,len=110) => { const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
+    return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
+  let rnd = 4242; const rand = () => (rnd=(rnd*1103515245+12345)&0x7fffffff)/0x7fffffff;
+  let slowestWin = 0, winN = 0, longRuns = 0, sampled = 0;
+  for (let li = 0; li < LEVELS.length; li++)
+    for (let i = 0; i < 400; i++){
+      const cfg = [];
+      for (let k = 0; k < LEVELS[li].maxBlocks; k++)
+        cfg.push(ramp(30+rand()*420, 120+rand()*520, -85+rand()*170, 60+rand()*90));
+      const w = simulate(cfg, 1+(i%64), li);
+      sampled++;
+      if (w.secs > 5) longRuns++;
+      if (w.result === 'win'){ winN++; slowestWin = Math.max(slowestWin, w.secs); }
+    }
+  return { r: CONSTS.RESTITUTION, result: o.result, segHits: o.segHits,
+           secs: o.secs, slowestWin, winN, longRuns, sampled, restPx: CONSTS.REST_PX };
+});
+check(rest.segHits > 0, 'the flat-ramp probe actually made contact', `${rest.segHits} hits`);
+check(rest.result !== 'win' && rest.secs < 6,
+  'a ball that settles on a flat ramp is called early, not after the full 14s',
+  `${rest.result} in ${rest.secs.toFixed(2)}s`);
+check(rest.slowestWin < C.MAX_STEPS / 60,
+  'every win lands well inside the 14s cap', `slowest win ${rest.slowestWin.toFixed(2)}s`);
+console.log(`  stall watch: ${rest.restPx}px per ${C.REST_STEPS} steps; ` +
+            `${rest.winN} wins in the sample, ${rest.longRuns} runs still over 5s`);
+check(rest.longRuns / rest.sampled < 0.05,
+  'long dead-end runs stay rare', `${rest.longRuns}/${rest.sampled}`);
 
 /* ---------------------------------------------------------------- */
-section('6. Live drop: constant speed + smooth rendering');
+section('6. Live drop: accelerating fall + smooth rendering');
 const best1 = await page.evaluate(() => {
   const { LEVELS, simulate } = window.__gtb;
   const D=180/Math.PI, R=Math.PI/180;
@@ -380,11 +446,18 @@ const live = await page.evaluate(async (ramps) => {
   const g = window.__gtb;
   g.reset(); g.setSeed(4); g.setRamps(ramps);
   const speeds = [], draws = [];
+  let juiceHits = 0, maxSquash = 0, maxParticles = 0;
   document.getElementById('btn-drop').click();
   await new Promise(res => (function tick(){
     const s = g.state();
     if (s.phase !== 'drop') return res();
-    if (s.ball){ speeds.push(s.ball.speed); draws.push({d:s.draw, a:{x:s.ball.px,y:s.ball.py}, b:{x:s.ball.x,y:s.ball.y}}); }
+    if (s.ball){
+      speeds.push(s.ball.speed);
+      juiceHits = Math.max(juiceHits, s.ball.hits);
+      maxSquash = Math.max(maxSquash, Math.abs(s.juice.squash));
+      maxParticles = Math.max(maxParticles, s.juice.live);
+      draws.push({d:s.draw, a:{x:s.ball.px,y:s.ball.py}, b:{x:s.ball.x,y:s.ball.y}});
+    }
     requestAnimationFrame(tick);
   })());
   let offSeg=0, frozen=0, prestep=0, prev=null;
@@ -408,18 +481,81 @@ const live = await page.evaluate(async (ramps) => {
     requestAnimationFrame(tick);
   })());
   return { n:speeds.length, min:Math.min(...speeds), max:Math.max(...speeds), offSeg, frozen, prestep,
+           juiceHits, maxSquash, maxParticles,
            sawCapture, result: g.state().result };
 }, best1);
-console.log(`  ${live.n} frames, speed ${live.min.toFixed(4)} .. ${live.max.toFixed(4)} (target ${C.SPEED})`);
+console.log(`  ${live.n} frames, speed ${live.min.toFixed(3)} .. ${live.max.toFixed(3)} ` +
+            `(cap ${C.MAX_SPEED.toFixed(2)}), ${live.juiceHits} contacts, ` +
+            `peak squash ${live.maxSquash.toFixed(3)}, peak live particles ${live.maxParticles}`);
 check(live.n > 20, 'sampled the drop', `${live.n} frames`);
-check(Math.abs(live.min-C.SPEED) < 1e-6 && Math.abs(live.max-C.SPEED) < 1e-6,
-  'speed never deviates during a live drop');
+check(live.min < live.max - 1e-3, 'the ball visibly accelerates during a live drop',
+  `${live.min.toFixed(3)} -> ${live.max.toFixed(3)}`);
+check(live.max <= C.MAX_SPEED + 1e-6, 'live speed stays inside the cap');
+check(live.juiceHits > 0 && live.maxSquash > 0.05,
+  'a live impact squashes the ball', `${live.juiceHits} hits, peak ${live.maxSquash.toFixed(3)}`);
+check(live.maxParticles >= 4 && live.maxParticles <= 96,
+  'a live impact spawns particles from the pool', `peak ${live.maxParticles}`);
 check(live.offSeg === 0, 'painted position always lies between the two physics states');
 check(live.frozen === 0, 'ball never paints twice in the same spot once moving',
   `${live.frozen} frozen, ${live.prestep} pre-step frames ignored`);
 check(live.result === 'win', 'the solution wins through the real UI');
 check(live.sawCapture > 3, 'the capture animation actually plays before the overlay',
   `${live.sawCapture} frames of capture`);
+
+/* ---------------------------------------------------------------- */
+section('6b. Juice helpers in isolation');
+const juice = await page.evaluate(async () => {
+  const { tween, Ease, burst, state } = window.__gtb;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  /* --- tween: reaches the end value, on the curve, and is retargetable --- */
+  const o = { v: 0 };
+  tween(o, 'v', 0, 100, 200, Ease.linear);
+  const atStart = o.v;
+  await wait(100);
+  const mid = o.v;                       // linear: should be near 50 at halfway
+  await wait(180);
+  const end = o.v;
+
+  // a second tween on the same property must replace the first, not fight it
+  const o2 = { v: 0 };
+  tween(o2, 'v', 0, 100, 4000, Ease.linear);
+  tween(o2, 'v', 0, 10, 120, Ease.linear);
+  const tweensAfterReplace = state().juice.tweens;
+  await wait(200);
+  const replaced = o2.v;
+
+  // outBack must overshoot its target and come back
+  const o3 = { v: 0 };
+  let peak = 0;
+  tween(o3, 'v', 0, 1, 260, Ease.outBack);
+  for (let i = 0; i < 30; i++){ await wait(10); peak = Math.max(peak, o3.v); }
+  await wait(200);
+
+  /* --- particles: bounded pool, they die, and they carry the colour --- */
+  const before = state().juice.live;
+  for (let i = 0; i < 40; i++) burst(240, 400, 0, -1, '#3ec8ff', 8, 3, 0.8, 120);
+  const after = state().juice.live;      // 320 spawned into a 96-slot pool
+  await wait(500);
+  const settled = state().juice.live;
+
+  return { atStart, mid, end, tweensAfterReplace, replaced,
+           peak, o3end: o3.v, before, after, settled };
+});
+console.log(`  tween 0->100 linear: t=0 ${juice.atStart}, t=100ms ${juice.mid.toFixed(1)}, done ${juice.end}`);
+check(juice.atStart === 0, 'a tween starts at its `from` value');
+check(juice.mid > 35 && juice.mid < 70, 'a linear tween is about halfway at halfway',
+  `${juice.mid.toFixed(1)}`);
+check(juice.end === 100, 'a tween lands exactly on its `to` value', `${juice.end}`);
+check(juice.tweensAfterReplace === 1, 'retweening a property replaces the running tween',
+  `${juice.tweensAfterReplace} live`);
+check(juice.replaced === 10, 'the replacement tween is the one that finishes', `${juice.replaced}`);
+check(juice.peak > 1.02 && Math.abs(juice.o3end - 1) < 1e-9,
+  'outBack overshoots and then settles on the target', `peak ${juice.peak.toFixed(3)}`);
+console.log(`  particles: ${juice.before} live -> ${juice.after} after 320 spawns -> ${juice.settled} after 500ms`);
+check(juice.after > 0 && juice.after <= 96, 'the particle pool is bounded, never grows',
+  `${juice.after}/96`);
+check(juice.settled === 0, 'particles expire on their own', `${juice.settled} left`);
 
 /* ---------------------------------------------------------------- */
 section('7. Progression and localStorage');

@@ -1,9 +1,10 @@
 /**
- * Physics tuning rig.  node tests/tune.mjs [speed ...]
+ * Physics tuning rig.  node tests/tune.mjs [terminal velocity ...]
  *
- * Builds a variant of index.html per SPEED value, runs the headless solver
- * sweep against each, and prints the level-health numbers side by side so a
- * constant can be chosen from data instead of vibes.
+ * Builds a variant of index.html per TERMINAL_VY value, runs the headless
+ * solver sweep against each, and prints the level-health numbers side by side
+ * so a constant can be chosen from data instead of vibes. GRAVITY is derived
+ * from TERMINAL_VY, so the time-to-terminal stays fixed as the cap moves.
  */
 import { chromium } from 'playwright';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -14,7 +15,7 @@ import os from 'node:os';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const SPEEDS = process.argv.slice(2).map(Number).filter(n => n > 0);
-const LIST = SPEEDS.length ? SPEEDS : [4.6, 5.5, 6.4, 7.2, 8.0];
+const LIST = SPEEDS.length ? SPEEDS : [6.0, 7.5, 9.0, 10.5, 12.0];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gtb-tune-'));
 
 const SWEEP = () => {
@@ -59,19 +60,19 @@ const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
 const rows = [];
 for (const sp of LIST) {
-  const html = SRC.replace(/const SPEED     = [\d.]+;/, `const SPEED     = ${sp};`);
-  if (!html.includes(`const SPEED     = ${sp};`)) throw new Error('SPEED substitution failed');
+  const html = SRC.replace(/const TERMINAL_VY = [\d.]+;/, `const TERMINAL_VY = ${sp};`);
+  if (!html.includes(`const TERMINAL_VY = ${sp};`)) throw new Error('TERMINAL_VY substitution failed');
   const f = path.join(tmp, `v${String(sp).replace('.','_')}.html`);
   fs.writeFileSync(f, html);
   await page.goto(pathToFileURL(f).href);
   await page.waitForFunction(() => !!window.__gtb);
-  const grav = await page.evaluate(() => window.__gtb.CONSTS.GRAV_BIAS);
+  const grav = await page.evaluate(() => window.__gtb.CONSTS.GRAVITY);
   rows.push({ sp, grav, ...await page.evaluate(SWEEP) });
 }
 await browser.close();
 fs.rmSync(tmp, { recursive: true, force: true });
 
-console.log('\n speed  px/s   grav   noRamp  bestRamp  good%   careless%  avgBounces  winDrop');
+console.log('\n termVy  px/s   grav   noRamp  bestRamp  good%   careless%  avgBounces  winDrop');
 console.log(' ' + '-'.repeat(78));
 for (const r of rows)
   console.log(` ${r.sp.toFixed(1).padStart(4)}  ${String(Math.round(r.sp*60)).padStart(4)}  ` +

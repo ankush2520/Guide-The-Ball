@@ -66,19 +66,26 @@ const report = await page.evaluate(([lo, hi]) => {
       const tc = targetAt(lv, t0);
       // the envelope has to reach low and wide: a pocket mouth can sit near the
       // floor, and the second ramp must be able to get there
-      for (let ry = lv.spawn.y+90; ry <= CONSTS.H-170; ry += 28)
+      // The second ramp is aimed at the target along a straight line, but the
+      // ball arcs under gravity - so sweep a band of offsets around that aim
+      // instead of trusting it. AIMS is what makes this a search and not a
+      // guess, and it is why the harness stays honest if physics changes.
+      const AIMS = [-24,-18,-12,-6,0,6,12,18,24];
+      for (let ry = lv.spawn.y+90; ry <= CONSTS.H-170; ry += 24)
         for (let t1 = 28; t1 <= 152; t1 += 6){
           const phi1 = (2*t1-90)*R;
-          for (let L = 80; L <= 400; L += 26){
+          for (let L = 80; L <= 440; L += 24){
             const p2 = { x: sx+Math.cos(phi1)*L, y: ry+Math.sin(phi1)*L };
             if (p2.x<25||p2.x>CONSTS.W-25||p2.y<25||p2.y>CONSTS.H-55) continue;
             const phi2 = Math.atan2(tc.y-p2.y, tc.x-p2.x);
-            const t2 = ((phi2+phi1)/2)*D;
-            const cfg = [ramp(sx,ry,t1), ramp(p2.x,p2.y,t2,100)];
-            if (wins(cfg, t0)){
+            const aim = ((phi2+phi1)/2)*D;
+            for (let ai = 0; ai < AIMS.length; ai++){
+              const t2 = aim + AIMS[ai];
+              const cfg = [ramp(sx,ry,t1), ramp(p2.x,p2.y,t2,100)];
+              if (!wins(cfg, t0)) continue;
               sols2++;
               if (!best2cfg) best2cfg = cfg;
-              if (sols2 % 5 === 1){
+              if (sols2 % 25 === 1){
                 let a=0,b=0;
                 for(let d=1;d<=24;d+=1){ if(wins([cfg[0],ramp(p2.x,p2.y,t2+d,100)],t0)) b=d; else break; }
                 for(let d=1;d<=24;d+=1){ if(wins([cfg[0],ramp(p2.x,p2.y,t2-d,100)],t0)) a=d; else break; }

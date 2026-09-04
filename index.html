@@ -356,23 +356,38 @@ const Sound = (function(){
 
 /* ============================================================
    PHYSICS CONSTANTS
-   The ball's SPEED is fixed for the whole drop. Only its
-   direction ever changes - and only when it hits something.
+   Ordinary projectile motion. Gravity accelerates vy and only
+   vy; vx is untouched by it and changes only on a collision.
+   Every velocity is in px per 1/60s step.
    ============================================================ */
 const W = 480, H = 800;              // logical board size (portrait, 3:5)
 const BALL_R    = 9;
-const SPEED     = 8.75;              // px per 1/60s step - never changes
-// CURVE is how hard gravity bends the ball's direction. At 0 the ball travels
-// in perfectly straight lines and only ever changes direction when it hits
-// something - a ramp sets an angle and the ball holds it.
-const CURVE     = 0;
-const GRAV_BIAS = CURVE * SPEED * SPEED;
+// Downward terminal velocity. 9 px/step = 540 px/s, which is what the board
+// was tuned around back when the ball travelled at one fixed speed.
+const TERMINAL_VY = 9;
+// Reaching terminal in ~24 steps (0.4s) gives a fall you can read: a visible
+// acceleration off the spawn, then a steady rate for the rest of the board.
+const GRAVITY   = TERMINAL_VY / 24;  // 0.375 px/step^2
+// Sideways is capped at the same magnitude. Nothing accelerates vx, but a
+// steep reflection can convert a lot of vy into it, and the cap is what keeps
+// the substep count (and therefore tunnelling) bounded.
+const MAX_VX      = TERMINAL_VY;
+// How much of the impact speed survives a bounce. Below ~0.85 the ball dies
+// on contact; above ~0.92 it never settles.
+const RESTITUTION = 0.9;
+// Floor on the speed a bounce leaves behind, so a glancing contact cannot
+// stop the ball dead on a ramp. It does not stop a ball settling into an
+// ever-smaller patter - the stall watch in stepBall handles that.
+const MIN_BOUNCE  = 1.6;
 const RAMP_HT   = 4.5;               // player ramp half-thickness
 const WALL_HT   = 5;                 // static wall half-thickness
 // Enough substeps that the ball never advances more than ~1.5px at a time,
 // however fast it is going - otherwise it tunnels through thin segments.
-const SUBSTEPS  = Math.max(5, Math.ceil(SPEED / 1.5));
+const MAX_SPEED = Math.hypot(MAX_VX, TERMINAL_VY);
+const SUBSTEPS  = Math.max(5, Math.ceil(MAX_SPEED / 1.5));
 const MAX_STEPS = 60 * 14;           // 14s of bouncing, then it's a loss
+// ...or sooner, if it has visibly stopped travelling (see stepBall)
+const REST_STEPS = 30, REST_PX = 4;
 const MIN_RAMP  = 28, MAX_RAMP = 160;
 // Obstacle bounces mirror off the circle like a real bounce, then scatter by
 // up to OB_JITTER. OB_MAX_DEV keeps the result pointing away from the circle
@@ -600,10 +615,18 @@ function makeBall(lv, seed, t0){
     t0: t0 || 0,                           // target-motion phase when the drop began
     x: lv.spawn.x, y: lv.spawn.y,
     px: lv.spawn.x, py: lv.spawn.y,        // previous step, for render interpolation
-    vx: 0, vy: SPEED,
+    vx: 0, vy: 0,                          // released from rest - gravity does the rest
     steps: 0, hits: 0,
+    // stall watch: where the ball was, and when, at the last checkpoint
+    restX: lv.spawn.x, restY: lv.spawn.y, restAt: 0,
+    restMin: Infinity,                     // closest this run came to stalling
     segHits: 0,                            // ramp/wall strikes, for the bounce SFX
-    spdMin: Infinity, spdMax: -Infinity,   // speed-invariant audit
+    spdMin: Infinity, spdMax: -Infinity,   // speed audit
+    vyMax: 0,                              // deepest fall speed reached
+    /* Last contact, mutated in place so the solver never allocates. The
+       renderer watches `n` and fires the juice off it; the physics never
+       reads any of this back. */
+    hit: { n: 0, x: 0, y: 0, nx: 0, ny: 0, kind: '', speed: 0 },
     bounces: [],                           // {inAng,nAng,outAng} per obstacle hit
     rng: mulberry32(seed),
     result: null                           // null | 'win' | 'out' | 'timeout'
@@ -613,12 +636,21 @@ function noteSpeed(b){
   const m = Math.hypot(b.vx, b.vy);
   if (m < b.spdMin) b.spdMin = m;
   if (m > b.spdMax) b.spdMax = m;
+  if (b.vy > b.vyMax) b.vyMax = b.vy;
 }
-/** Re-normalise the velocity back to the fixed SPEED. */
-function renorm(b){
-  const m = Math.hypot(b.vx, b.vy) || 1;
-  b.vx = b.vx / m * SPEED;
-  b.vy = b.vy / m * SPEED;
+/** Clamp the velocity to its terminal values. Gravity only ever pushes vy
+    down, so the vertical clamp is one-sided; a bounce can throw the ball
+    upward as fast as it likes and gravity will take that back. */
+function capVelocity(b){
+  if (b.vy >  TERMINAL_VY) b.vy =  TERMINAL_VY;
+  if (b.vx >  MAX_VX) b.vx =  MAX_VX;
+  if (b.vx < -MAX_VX) b.vx = -MAX_VX;
+}
+/** Record a contact for the renderer. Pure data - physics never reads it. */
+function noteHit(b, x, y, nx, ny, kind){
+  const h = b.hit;
+  h.n++; h.x = x; h.y = y; h.nx = nx; h.ny = ny; h.kind = kind;
+  h.speed = Math.hypot(b.vx, b.vy);
 }
 /* Both the ball and the target are circles now, so the win check is simply
    "is the ball's centre inside the outer ring". */
@@ -626,10 +658,11 @@ function inTarget(b, c){
   return Math.hypot(b.x - c.x, b.y - c.y) <= c.r;
 }
 
-/** Bounce off a static line segment: mirror the direction about the
-    surface normal. The angle changes, the speed never does. Used for
-    BOTH player ramps and level walls - identical physics. */
-function segmentBounce(b, s, halfT){
+/** Bounce off a static line segment: mirror the velocity about the surface
+    normal and scale it by RESTITUTION. Gravity keeps acting on vy afterwards,
+    so the ball arcs away rather than holding a fixed heading. Used for BOTH
+    player ramps and level walls - identical physics. */
+function segmentBounce(b, s, halfT, kind){
   const c = closestOnSeg(b.x, b.y, s.x1, s.y1, s.x2, s.y2);
   let nx = b.x - c.x, ny = b.y - c.y;
   let d = Math.hypot(nx, ny);
@@ -644,19 +677,32 @@ function segmentBounce(b, s, halfT){
   b.x = c.x + nx * min;
   b.y = c.y + ny * min;
   const dot = b.vx*nx + b.vy*ny;
-  if (dot < 0){ b.vx -= 2*dot*nx; b.vy -= 2*dot*ny; }
-  renorm(b);
+  if (dot < 0){
+    b.vx = (b.vx - 2*dot*nx) * RESTITUTION;
+    b.vy = (b.vy - 2*dot*ny) * RESTITUTION;
+    // never let a glancing contact leave the ball with nothing to travel on
+    const m = Math.hypot(b.vx, b.vy);
+    if (m < MIN_BOUNCE){
+      const k = m > 1e-6 ? MIN_BOUNCE / m : 0;
+      if (k){ b.vx *= k; b.vy *= k; } else { b.vx = nx*MIN_BOUNCE; b.vy = ny*MIN_BOUNCE; }
+    }
+    capVelocity(b);
+    // Only a real reflection is an impact. Resolving an overlap the ball is
+    // already leaving is a graze: push it out, stay quiet.
+    noteHit(b, c.x + nx * (BALL_R * 0.35), c.y + ny * (BALL_R * 0.35), nx, ny, kind);
+  }
   // Re-spend the travel the push-out just undid, along the new heading.
-  b.x += b.vx / SPEED * pen;
-  b.y += b.vy / SPEED * pen;
+  const sp = Math.hypot(b.vx, b.vy) || 1;
+  b.x += b.vx / sp * pen;
+  b.y += b.vy / sp * pen;
   return true;
 }
 
 function resolveCollisions(b, lv, ramps, walls){
   /* The board has no walls - the ball is free to leave by any edge, which
      ends the run. Only ramps, level walls and obstacles change its direction. */
-  for (let i = 0; i < ramps.length; i++)  if (segmentBounce(b, ramps[i], RAMP_HT)) b.segHits++;
-  for (let i = 0; i < walls.length; i++)  if (segmentBounce(b, walls[i], WALL_HT)) b.segHits++;
+  for (let i = 0; i < ramps.length; i++)  if (segmentBounce(b, ramps[i], RAMP_HT, 'ramp')) b.segHits++;
+  for (let i = 0; i < walls.length; i++)  if (segmentBounce(b, walls[i], WALL_HT, 'wall')) b.segHits++;
 
   /* red obstacles: mirror off the circle, then scatter */
   for (let i = 0; i < lv.obstacles.length; i++){
@@ -680,10 +726,13 @@ function resolveCollisions(b, lv, ramps, walls){
       else if (rel < -OB_MAX_DEV) rel = -OB_MAX_DEV;
       a = nAng + rel;
       b.bounces.push({ inAng: inAng, nAng: nAng, outAng: a });
-      b.vx = Math.cos(a) * SPEED;
-      b.vy = Math.sin(a) * SPEED;
+      // the scatter re-aims the bounce; RESTITUTION decides what it costs
+      const sp = Math.max(MIN_BOUNCE, Math.hypot(b.vx, b.vy) * RESTITUTION);
+      b.vx = Math.cos(a) * sp;
+      b.vy = Math.sin(a) * sp;
+      capVelocity(b);
+      noteHit(b, o.x + nx * o.r, o.y + ny * o.r, nx, ny, 'obstacle');
       b.hits++;
-      renorm(b);
     }
   }
 }
@@ -696,8 +745,8 @@ function stepBall(b, lv, ramps){
   const c = targetAt(lv, t);
   const walls = lv.move ? buildWalls(lv, c) : lv.walls;
   for (let i = 0; i < SUBSTEPS; i++){
-    b.vy += GRAV_BIAS / SUBSTEPS;   // direction nudge, spread across the step...
-    renorm(b);                      // ...speed immediately restored
+    b.vy += GRAVITY / SUBSTEPS;     // gravity touches vy and nothing else
+    if (b.vy > TERMINAL_VY) b.vy = TERMINAL_VY;
     b.x += b.vx / SUBSTEPS;
     b.y += b.vy / SUBSTEPS;
     resolveCollisions(b, lv, ramps, walls);
@@ -707,6 +756,16 @@ function stepBall(b, lv, ramps){
         b.y < -BALL_R || b.y > H + BALL_R) { b.result = 'out'; return; }
   }
   b.steps++;
+  /* A bouncy ball can settle: land dead-flat on a level ramp and it will
+     patter in place until MAX_STEPS, leaving the player watching nothing for
+     fourteen seconds. Anything genuinely in play covers hundreds of px in half
+     a second, so REST_PX over REST_STEPS means it has stopped going anywhere. */
+  if (b.steps - b.restAt >= REST_STEPS){
+    const moved = Math.hypot(b.x - b.restX, b.y - b.restY);
+    if (moved < b.restMin) b.restMin = moved;
+    if (moved < REST_PX){ b.result = 'timeout'; return; }
+    b.restX = b.x; b.restY = b.y; b.restAt = b.steps;
+  }
   if (b.steps >= MAX_STEPS) b.result = 'timeout';
 }
 
@@ -715,8 +774,9 @@ function simulate(ramps, seed, levelIdx, t0){
   const lv = LEVELS[levelIdx === undefined ? levelIndex : levelIdx];
   const b = makeBall(lv, seed >>> 0, t0 || 0);
   while (!b.result) stepBall(b, lv, ramps);
-  return { result: b.result, steps: b.steps, hits: b.hits,
-           spdMin: b.spdMin, spdMax: b.spdMax, secs: b.steps / 60,
+  return { result: b.result, steps: b.steps, hits: b.hits, segHits: b.segHits,
+           spdMin: b.spdMin, spdMax: b.spdMax, vyMax: b.vyMax, restMin: b.restMin,
+           secs: b.steps / 60,
            bounces: b.bounces, x: b.x, y: b.y };
 }
 
@@ -861,6 +921,7 @@ function syncUI(){
 function setLevel(i){
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   ramps = []; draft = null; ball = null; capture = null;
+  seenHit = 0; squash.amt = 0; clearParticles();
   tries = 0;
   phase = 'plan'; overlay.hidden = true;
   if (levelIndex > highest){ highest = levelIndex; saveProgress(); }
@@ -925,6 +986,7 @@ function drop(){
   draft = null; capture = null;
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
+  seenHit = 0; squash.amt = 0; clearParticles();
   tries++;
   phase = 'drop';
   overlay.hidden = true;
@@ -937,6 +999,8 @@ function land(result){
   Sound.win();
   phase = 'capture';
   capture = { t: 0, bx: ball.x, by: ball.y, cx: c.x, cy: c.y };
+  // the same particle helper, pointed straight up and fanned all the way round
+  burst(ball.x, ball.y, 0, -1, '#7dffb4', 14, 3.0, Math.PI, 420);
   syncUI();
 }
 function finish(result){
@@ -1017,6 +1081,121 @@ let last = performance.now(), acc = 0;
 let clock = 0;                // seconds since load - drives all target motion
 let capture = null;           // {t, bx, by, cx, cy} while the capture plays
 const lastDraw = { x: 0, y: 0 };          // where the ball was actually painted
+
+/* ============================================================
+   JUICE HELPER 1 - TWEENS
+   A numeric property from A to B over a duration, on an easing
+   curve, stepped by the main loop. Generic on purpose: anything
+   with a number on it can be animated, so the next effect (a
+   win flourish, a level wipe) does not need new machinery.
+   ============================================================ */
+const Ease = {
+  linear:   function(t){ return t; },
+  outQuad:  function(t){ return t * (2 - t); },
+  outCubic: function(t){ return 1 - Math.pow(1 - t, 3); },
+  inOutQuad:function(t){ return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2; },
+  // overshoots the end value and settles back - the "spring" in squash/stretch
+  outBack:  function(t){ const c = 1.70158, u = t - 1;
+                         return 1 + (c + 1) * u*u*u + c * u*u; }
+};
+const tweens = [];
+/** tween(target, prop, from, to, durationMs, easing?, onDone?) */
+function tween(target, prop, from, to, durationMs, easing, onDone){
+  // one tween per property: a re-trigger restarts rather than fighting
+  for (let i = tweens.length - 1; i >= 0; i--)
+    if (tweens[i].target === target && tweens[i].prop === prop) tweens.splice(i, 1);
+  const tw = { target: target, prop: prop, from: from, to: to,
+               dur: Math.max(1, durationMs), ease: easing || Ease.outQuad,
+               t: 0, done: onDone || null };
+  target[prop] = from;
+  tweens.push(tw);
+  return tw;
+}
+function updateTweens(dt){
+  for (let i = tweens.length - 1; i >= 0; i--){
+    const tw = tweens[i];
+    tw.t += dt;
+    const k = tw.t >= tw.dur ? 1 : tw.t / tw.dur;
+    tw.target[tw.prop] = tw.from + (tw.to - tw.from) * tw.ease(k);
+    if (k === 1){ tweens.splice(i, 1); if (tw.done) tw.done(); }
+  }
+}
+
+/* ============================================================
+   JUICE HELPER 2 - PARTICLES
+   A fixed pool of dots drawn as short streaks along their own
+   velocity. Stepped in the main loop next to everything else -
+   no separate system, no assets, no allocation after boot.
+   ============================================================ */
+const PARTICLE_MAX = 96;
+const particles = [];
+for (let i = 0; i < PARTICLE_MAX; i++)
+  particles.push({ life: 0, max: 1, x:0, y:0, vx:0, vy:0, r:1, color:'#fff' });
+let pSlot = 0;
+/** Fan `n` particles out of (x,y), biased along the (nx,ny) direction.
+    spread is the half-angle of the fan in radians; speed is px per step. */
+function burst(x, y, nx, ny, color, n, speed, spread, lifeMs){
+  const base = Math.atan2(ny, nx);
+  for (let i = 0; i < n; i++){
+    const p = particles[pSlot]; pSlot = (pSlot + 1) % PARTICLE_MAX;
+    const a = base + (Math.random() * 2 - 1) * spread;
+    const v = speed * (0.45 + Math.random() * 0.75);
+    p.x = x; p.y = y;
+    p.vx = Math.cos(a) * v; p.vy = Math.sin(a) * v;
+    p.max = p.life = lifeMs * (0.7 + Math.random() * 0.6);
+    p.r = 1 + Math.random() * 1.4;
+    p.color = color;
+  }
+}
+function clearParticles(){
+  for (let i = 0; i < PARTICLE_MAX; i++) particles[i].life = 0;
+}
+function updateParticles(dt){
+  const f = dt / STEP_MS;                     // dt expressed in physics steps
+  for (let i = 0; i < PARTICLE_MAX; i++){
+    const p = particles[i];
+    if (p.life <= 0) continue;
+    p.life -= dt;
+    p.x += p.vx * f; p.y += p.vy * f;
+    p.vy += 0.22 * f;                         // the same world pulls on them
+    p.vx *= 0.94; p.vy *= 0.94;               // and the same air slows them
+  }
+}
+function drawParticles(){
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < PARTICLE_MAX; i++){
+    const p = particles[i];
+    if (p.life <= 0) continue;
+    const k = p.life / p.max;                 // 1 at birth, 0 at death
+    ctx.globalAlpha = k * k * 0.85;
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = p.r * k;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x - p.vx * 1.6, p.y - p.vy * 1.6);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* The ball's impact deformation. `amt` is tweened; nx/ny is the axis it is
+   squashed along, which is whatever surface it just met. */
+const squash = { amt: 0, nx: 0, ny: -1 };
+const HIT_COLOR = { ramp:'#3ec8ff', wall:'#c3ccdd', obstacle:'#ff6b78' };
+let seenHit = 0;                              // last b.hit.n the juice reacted to
+
+/** Fire everything a single contact is worth: sound, sparks, squash. */
+function reactToHit(h){
+  const col = HIT_COLOR[h.kind] || '#ffffff';
+  // hard hits throw more, and further - a graze stays quiet
+  const k = clamp(h.speed / TERMINAL_VY, 0.25, 1.6);
+  burst(h.x, h.y, h.nx, h.ny, col, 4 + Math.round(k * 3), 1.5 + k * 1.6, 0.85, 230);
+  squash.nx = h.nx; squash.ny = h.ny;
+  // squash in along the normal, then overshoot slightly past round on the way
+  // back out - that overshoot is what reads as a rebound rather than a nudge
+  tween(squash, 'amt', 0.20 + 0.22 * k, 0, 105, Ease.outBack);
+}
 
 function roundRect(x, y, w, h, r){
   ctx.beginPath();
@@ -1164,6 +1343,9 @@ function render(){
     ctx.restore();
   }
 
+  /* impact sparks - above the board, under the ball */
+  drawParticles();
+
   /* ball - drawn between the last two physics states, so motion stays smooth
      on high-refresh displays where rAF outruns the fixed 60Hz simulation. */
   let b = ball || lv.spawn;
@@ -1188,7 +1370,17 @@ function render(){
     ctx.shadowColor = 'rgba(255,255,255,.65)';
     ctx.shadowBlur = 12;
     ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(b.x, b.y, rad, 0, Math.PI * 2); ctx.fill();
+    const q = squash.amt;
+    if (Math.abs(q) > 0.002){
+      // flatten along the surface it hit, bulge across it; outBack drives q
+      // slightly negative on the way home, which stretches it the other way
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.atan2(squash.ny, squash.nx));
+      ctx.scale(1 - q, 1 + q * 0.55);
+      ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(b.x, b.y, rad, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
 }
@@ -1205,12 +1397,15 @@ function frame(now){
     while (acc >= STEP_MS){
       acc -= STEP_MS;
       ball.px = ball.x; ball.py = ball.y;
-      const seg0 = ball.segHits, ob0 = ball.hits;
       stepBall(ball, level(), ramps);
-      // sound is driven from here, never from the physics - simulate() has to
-      // stay silent and side-effect free for the test suite and the solver
-      if (ball.hits > ob0)         Sound.bounce('obstacle');
-      else if (ball.segHits > seg0) Sound.bounce('ramp');
+      // Sound and juice are driven from here, never from the physics -
+      // stepBall only records what it touched, so simulate() stays silent and
+      // side-effect free for the test suite and the solver.
+      if (ball.hit.n !== seenHit){
+        seenHit = ball.hit.n;
+        Sound.bounce(ball.hit.kind === 'obstacle' ? 'obstacle' : 'ramp');
+        reactToHit(ball.hit);
+      }
       if (ball.result){ land(ball.result); break; }
     }
   } else {
@@ -1222,6 +1417,8 @@ function frame(now){
     if (capture.t >= CAPTURE_MS){ capture = null; finish('win'); }
   }
 
+  updateTweens(dt);
+  updateParticles(dt);
   render();
   requestAnimationFrame(frame);
 }
@@ -1252,11 +1449,16 @@ requestAnimationFrame(frame);
    ============================================================ */
 window.__gtb = {
   LEVELS: LEVELS,
-  CONSTS: { W:W, H:H, BALL_R:BALL_R, SPEED:SPEED, GRAV_BIAS:GRAV_BIAS, CURVE:CURVE,
-            SUBSTEPS:SUBSTEPS, OB_JITTER:OB_JITTER, OB_MAX_DEV:OB_MAX_DEV,
+  CONSTS: { W:W, H:H, BALL_R:BALL_R,
+            GRAVITY:GRAVITY, TERMINAL_VY:TERMINAL_VY, MAX_VX:MAX_VX,
+            MAX_SPEED:MAX_SPEED, RESTITUTION:RESTITUTION, MIN_BOUNCE:MIN_BOUNCE,
+            SUBSTEPS:SUBSTEPS, MAX_STEPS:MAX_STEPS,
+            REST_STEPS:REST_STEPS, REST_PX:REST_PX,
+            OB_JITTER:OB_JITTER, OB_MAX_DEV:OB_MAX_DEV,
             MIN_RAMP:MIN_RAMP, MAX_RAMP:MAX_RAMP, RAMP_HT:RAMP_HT, WALL_HT:WALL_HT,
             CAPTURE_MS:CAPTURE_MS },
   simulate: simulate,
+  tween: tween, Ease: Ease, burst: burst,     // juice helpers, for the suite
   buildWalls: buildWalls,
   targetAt: targetAt,
   clock: function(){ return clock; },   // lets tests build any target type on any level
@@ -1270,7 +1472,10 @@ window.__gtb = {
              target: targetAt(lv, clock), capturing: !!capture,
              result: ball ? ball.result : null,
              ball: ball ? { x: ball.x, y: ball.y, px: ball.px, py: ball.py,
+                            vx: ball.vx, vy: ball.vy, hits: ball.hit.n,
                             speed: Math.hypot(ball.vx, ball.vy) } : null,
+             juice: { squash: squash.amt, tweens: tweens.length,
+                      live: particles.reduce(function(n,p){ return n + (p.life > 0 ? 1 : 0); }, 0) },
              draw: { x: lastDraw.x, y: lastDraw.y } };
   },
   setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
