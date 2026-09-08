@@ -39,6 +39,37 @@ Progress (highest level reached) persists in `localStorage` under
 `gtb.progress.v1`; blocked storage degrades to "no saving", never a crash.
 Tap the level name to open the level picker.
 
+## Balls
+
+A drop costs **one ball, win or lose** — the cost is the attempt, not the
+result. The tank holds `BALL_CAPACITY` (5) and refills one ball per
+`BALL_REGEN_MS` (8 min), stored in `localStorage` under `gtb.balls.v1` as
+`{balls, lastRegen}`.
+
+`lastRegen` is *when the timer last paid out*, not when the app closed, so
+regen settles on load: `floor((now - lastRegen) / interval)` balls are granted
+and the remainder is carried, never discarded. A stored stamp in the future —
+a timezone change, a bad clock, a player winding the device back — is clamped
+to now rather than parking the timer forever.
+
+Rewards (the ad, the wheel) may push the count **above** capacity on purpose;
+only the regen timer respects the cap, because a jackpot that evaporates into
+a nearly-full tank reads as being cheated.
+
+At zero the `#noballs` overlay goes up and Drop Ball is disabled. That overlay
+is a pure function of "planning, with nothing to drop" — nothing opens or
+closes it by hand, so a regen or a reward cannot leave it stuck.
+
+**The "Watch Ad" button is a placeholder** that grants the balls outright.
+It is marked `TODO` in `index.html` and must be wired to the portal's rewarded
+video (`CrazyGames.SDK.ad.requestAd('rewarded')` / `PokiSDK.rewardedBreak()`)
+before submission — and the balls must only be granted if the player actually
+watched.
+
+Tests never wait out a real interval: the regen clock is a stored timestamp, so
+backdating it in `localStorage` *is* the passage of time as far as the game can
+tell. See `seedTank()` in the suite.
+
     node tests/levels.mjs 0 19    # per-level winnability, precision, triviality
 
 ## Layout

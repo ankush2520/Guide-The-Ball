@@ -63,6 +63,17 @@
   .counter b{color:var(--accent);font-weight:800;font-size:13.5px;
              text-shadow:0 0 10px var(--glow-accent)}
   .chips{display:flex;align-items:center;gap:6px;flex:none}
+  /* the ball chip leads with the thing it counts, drawn the same way the
+     board draws the ball, so the HUD and the board agree */
+  .counter.balls{display:inline-flex;align-items:center;gap:6px;padding-left:9px}
+  .counter.balls .pip{width:12px;height:12px;border-radius:50%;flex:none;
+       background:radial-gradient(circle at 34% 30%,#fff,#ffc451);
+       box-shadow:0 0 8px rgba(255,201,60,.75)}
+  .counter.balls.empty{border-color:#6b2a38}
+  .counter.balls.empty .pip{background:#4a3040;box-shadow:none}
+  .counter.balls.empty b{color:#ff8792;text-shadow:none}
+  .big.nb{color:#ffc451;text-shadow:0 0 22px rgba(255,201,60,.45)}
+  #nb-timer{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
   .chips .counter{padding:5px 10px;font-size:12.5px}
   .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
@@ -210,6 +221,9 @@
   <div class="hud">
     <button class="title" id="level-title" title="Choose a level">Guide the Ball</button>
     <div class="chips">
+      <div class="counter balls" id="balls-chip" title="Balls left">
+        <i class="pip"></i><b id="ball-count">5</b>
+      </div>
       <div class="counter">Try <b id="try-count">0</b></div>
       <div class="counter">Ramps <b id="ramps-left">1</b></div>
       <button class="iconbtn" id="btn-sound" title="Sound on/off" aria-label="Sound on/off">&#128266;</button>
@@ -221,6 +235,16 @@
   <div class="stage">
     <canvas id="board" aria-label="Game board"></canvas>
     <button class="tut-skip" id="btn-skip" hidden>Skip</button>
+    <!-- Running out is a real stop, so unlike a miss this one does get the
+         full-screen treatment. It sits BEFORE the level picker in the DOM so
+         a player with no balls left can still browse levels on top of it. -->
+    <div class="overlay" id="noballs" hidden>
+      <div class="card">
+        <div class="big nb">Out of balls</div>
+        <div class="sub">Next free ball in <b id="nb-timer">--:--</b></div>
+        <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
+      </div>
+    </div>
     <div class="overlay" id="select" hidden>
       <div class="card selcard">
         <div class="big">Levels</div>
@@ -863,6 +887,85 @@ function saveProgress(){
 }
 
 /* ============================================================
+   BALLS  (localStorage)
+   A drop costs one ball, win or lose - the fiction is a crate
+   of physical balls, and a ball you threw away is still gone.
+   The tank refills on a timer while the game is closed, which
+   is the standard idle-regen pattern: store WHEN the last ball
+   was paid out, and settle up on load.
+   ============================================================ */
+const BALLS_KEY      = 'gtb.balls.v1';
+const BALL_CAPACITY  = 5;
+// One ball every eight minutes: a full tank takes ~40 minutes to rebuild
+// from empty, which is the usual hyper-casual session gap. Tune here.
+const BALL_REGEN_MS  = 8 * 60 * 1000;
+const AD_REWARD      = 3;
+
+let balls     = BALL_CAPACITY;
+let lastRegen = Date.now();   // when the timer last paid out, in epoch ms
+
+function saveBalls(){
+  try { localStorage.setItem(BALLS_KEY,
+        JSON.stringify({ balls: balls, lastRegen: lastRegen })); }
+  catch (e){ /* private mode - the tank just resets next load */ }
+}
+/** Pay out every ball the timer owes. Returns true if anything changed. */
+function regenBalls(now){
+  if (balls >= BALL_CAPACITY){
+    lastRegen = now;               // a full tank does not accrue
+    return false;
+  }
+  const owed = Math.floor((now - lastRegen) / BALL_REGEN_MS);
+  if (owed <= 0) return false;
+  const before = balls;
+  balls = Math.min(BALL_CAPACITY, balls + owed);
+  // carry the remainder rather than restarting the clock, so a player who
+  // comes back at 7m59s is not quietly robbed of those eight minutes
+  lastRegen = balls >= BALL_CAPACITY ? now : lastRegen + owed * BALL_REGEN_MS;
+  saveBalls();
+  return balls !== before;
+}
+function msToNextBall(now){
+  if (balls >= BALL_CAPACITY) return 0;
+  return clamp(BALL_REGEN_MS - (now - lastRegen), 0, BALL_REGEN_MS);
+}
+function loadBalls(){
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(BALLS_KEY) || 'null'); } catch (e){}
+  const now = Date.now();
+  if (!raw || typeof raw.balls !== 'number' || !isFinite(raw.balls)){
+    balls = BALL_CAPACITY; lastRegen = now; saveBalls(); return;
+  }
+  balls = Math.max(0, Math.min(BALL_CAPACITY, raw.balls | 0));
+  lastRegen = Number(raw.lastRegen);
+  // A clock that reads earlier than the stored stamp - a timezone change, a
+  // dead coin cell, a player winding the device back to farm balls - would
+  // otherwise park the timer in the future and never pay out again.
+  if (!isFinite(lastRegen) || lastRegen > now) lastRegen = now;
+  regenBalls(now);
+}
+/** Rewards may push the count ABOVE capacity. A wheel jackpot that mostly
+    evaporates because the tank was nearly full reads as being cheated; only
+    the regen timer respects the cap. */
+function grantBalls(n){
+  balls += n;
+  if (balls > BALL_CAPACITY) lastRegen = Date.now();
+  saveBalls();
+  syncUI();
+}
+function spendBall(){
+  balls = Math.max(0, balls - 1);
+  // the clock on the next free ball starts when the tank first drops below
+  // full, not when it empties
+  if (balls === BALL_CAPACITY - 1) lastRegen = Date.now();
+  saveBalls();
+}
+function fmtCountdown(ms){
+  const t = Math.ceil(ms / 1000);
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+}
+
+/* ============================================================
    STARS
    Two things are worth rewarding, and they pull against each
    other: solving it in few attempts, and solving it with fewer
@@ -920,6 +1023,11 @@ const elTries = document.getElementById('try-count');
 const btnSound= document.getElementById('btn-sound');
 const elFlash = document.getElementById('flash');
 const btnSkip = document.getElementById('btn-skip');
+const elBalls    = document.getElementById('ball-count');
+const chipBalls  = document.getElementById('balls-chip');
+const panelNoBalls = document.getElementById('noballs');
+const elNbTimer  = document.getElementById('nb-timer');
+const btnAd      = document.getElementById('btn-ad');
 
 /* ---------------- backing store ----------------
    The board is only ever ~370 CSS px wide on a phone. Rendering it at
@@ -1071,7 +1179,17 @@ function syncUI(){
   if (typeof selPanel !== 'undefined' && !selPanel.hidden) buildGrid();
   elLeft.textContent = lv.maxBlocks - ramps.length;
   elTries.textContent = tries;
-  btnDrop.disabled  = !planning;
+  elBalls.textContent = balls;
+  chipBalls.classList.toggle('empty', balls <= 0);
+  /* Declarative on purpose: the out-of-balls screen is a pure function of
+     "planning, with nothing to drop". It cannot be left stuck open by a
+     regen, an ad or a level change, because nothing ever opens or closes it
+     by hand. */
+  panelNoBalls.hidden = !(planning && balls <= 0);
+  // paint the countdown as the screen goes up, not on the next housekeeping
+  // tick - otherwise the player is shown a "--:--" placeholder for a frame
+  if (!panelNoBalls.hidden) elNbTimer.textContent = fmtCountdown(msToNextBall(Date.now()));
+  btnDrop.disabled  = !planning || balls <= 0;
   btnUndo.disabled  = !planning || ramps.length === 0;
   btnClear.disabled = !planning || ramps.length === 0;
   syncTutorial();
@@ -1270,6 +1388,7 @@ document.addEventListener('touchmove', function(e){
 /* ---------------- actions ---------------- */
 function drop(){
   if (phase !== 'plan') return;
+  if (balls <= 0){ syncUI(); return; }        // syncUI raises the stop screen
   // steps 1 and 2 have both happened: a ramp went down, and this is the tap
   if (tutorialStep() === 2) tutorialDone();
   draft = null; capture = null; dragging = null; selected = -1;
@@ -1277,6 +1396,8 @@ function drop(){
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
   seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
+  // one ball per press, win or lose: the cost is the attempt, not the result
+  spendBall();
   tries++;
   phase = 'drop';
   overlay.hidden = true;
@@ -1348,6 +1469,16 @@ btnUndo.addEventListener('click', function(){
 btnClear.addEventListener('click', function(){
   if (phase === 'plan'){ ramps = []; selected = -1; syncUI(); }
 });
+/* The portals hand out rewarded video through their own SDK, and neither
+   SDK is wired up yet, so this grants the balls outright.
+   TODO: replace the body with the real rewarded-ad call before submission -
+   CrazyGames is window.CrazyGames.SDK.ad.requestAd('rewarded') and Poki is
+   PokiSDK.rewardedBreak(); both resolve/callback with whether the player
+   actually watched it, and the balls must only be granted if they did. */
+btnAd.addEventListener('click', function(){
+  grantBalls(AD_REWARD);
+});
+
 document.getElementById('btn-retry').addEventListener('click', function(){
   phase = 'plan'; overlay.hidden = true; drop();
 });
@@ -1392,6 +1523,7 @@ const CAPTURE_MS  = 620;      // length of the "swallowed" animation
 const TARGET_MOTES  = 6;      // motes at fixed angles, breathing in and out
 const TARGET_PULSE_S = 1.9;   // seconds per outward pulse ring
 let last = performance.now(), acc = 0;
+let ballTick = 0;             // throttles the once-a-second economy housekeeping
 let clock = 0;                // seconds since load - drives the idle animations
 let capture = null;           // {t, bx, by, cx, cy} while the capture plays
 const lastDraw = { x: 0, y: 0 };          // where the ball was actually painted
@@ -1961,6 +2093,17 @@ function frame(now){
     if (capture.t >= CAPTURE_MS){ capture = null; finish('win'); }
   }
 
+  /* Economy housekeeping, four times a second, on the loop that is already
+     running - no second timer to leak, and the countdown on the stop screen
+     stays honest. Date.now(), not `now`: rAF's clock is monotonic since load
+     and knows nothing about time spent with the tab closed. */
+  if (now - ballTick > 250){
+    ballTick = now;
+    const wall = Date.now();
+    if (regenBalls(wall)) syncUI();
+    if (!panelNoBalls.hidden) elNbTimer.textContent = fmtCountdown(msToNextBall(wall));
+  }
+
   updateTweens(dt);
   updateParticles(dt);
   render();
@@ -1969,6 +2112,7 @@ function frame(now){
 
 highest   = loadHighest();
 bestStars = loadStars();
+loadBalls();
 /* "Genuinely first-time" means no save at all. Anyone who already has
    progress - including players from before the tutorial existed - has clearly
    worked out how to place a ramp, so they never get shown it. */
@@ -2035,13 +2179,33 @@ window.__gtb = {
                       live: particles.reduce(function(n,p){ return n + (p.life > 0 ? 1 : 0); }, 0) },
              draw: { x: lastDraw.x, y: lastDraw.y } };
   },
+  BALLS: { key: BALLS_KEY, capacity: BALL_CAPACITY,
+           regenMs: BALL_REGEN_MS, adReward: AD_REWARD },
+  balls: function(){ return balls; },
+  /** `ageMs` backdates the regen clock, so a test can stand the tank at any
+      point in its refill cycle without waiting out a real eight minutes. */
+  setBalls: function(n, ageMs){
+    balls = Math.max(0, n | 0);
+    lastRegen = Date.now() - (ageMs || 0);
+    saveBalls(); syncUI();
+  },
+  ballInfo: function(){
+    const now = Date.now();
+    return { balls: balls, capacity: BALL_CAPACITY, regenMs: BALL_REGEN_MS,
+             nextMs: msToNextBall(now), lastRegen: lastRegen,
+             dropBlocked: btnDrop.disabled, stopShown: !panelNoBalls.hidden,
+             timerText: elNbTimer.textContent };
+  },
   setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
   setRamps: function(list){ ramps = list.map(function(r){ return Object.assign({}, r); }); syncUI(); },
   setLevel: setLevel,
   openSelect: function(){ buildGrid(); selPanel.hidden = false; },
-  clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY); } catch (e){}
+  clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY);
+                                  localStorage.removeItem(BALLS_KEY); } catch (e){}
                             highest = 0; bestStars = {};
-                            tutorialSeen = false; obstacleTipSeen = false; syncTutorial(); },
+                            balls = BALL_CAPACITY; lastRegen = Date.now(); saveBalls();
+                            tutorialSeen = false; obstacleTipSeen = false;
+                            syncTutorial(); syncUI(); },
   skipTutorial: tutorialSkip,
   stars: function(){ return Object.assign({}, bestStars); },
   starsFor: starsFor,

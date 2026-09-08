@@ -32,6 +32,12 @@ page.on('pageerror', e => bad('uncaught page error', e.message));
 await page.goto(GAME);
 await page.waitForFunction(() => !!window.__gtb);
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+/* Sections 1-12 predate the balls economy and between them drop far more
+   than a tank holds. They are not testing the economy - section 13 is - so
+   they run topped up. clearProgress() and a reload both restore a real tank,
+   so every one of those is followed by another top-up. */
+const topUp = () => page.evaluate(() => window.__gtb.setBalls(999));
+await topUp();
 
 const C = await page.evaluate(() => window.__gtb.CONSTS);
 
@@ -522,6 +528,7 @@ const stored = await page.evaluate(() => localStorage.getItem('gtb.progress.v1')
 check(stored && JSON.parse(stored).highest >= 1, 'progress persisted to localStorage', stored);
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
+await topUp();
 st = await page.evaluate(() => window.__gtb.state());
 check(st.levelId === 2, 'progress survives a reload', `resumed at level ${st.levelId}`);
 
@@ -748,6 +755,7 @@ await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { 
 /* ---------------------------------------------------------------- */
 section('11. Level select');
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+await topUp();
 await page.locator('#level-title').click();
 check(await page.locator('#select').isVisible(), 'tapping the level name opens the picker');
 let grid = await page.evaluate(() => {
@@ -787,6 +795,7 @@ page.on('console', m => { if (m.type() === 'error') tutErrors.push(m.text()); })
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
+await topUp();
 const tbox = await page.locator('#board').boundingBox();
 const tut = () => page.evaluate(() => window.__gtb.state().tutorial);
 
@@ -839,6 +848,7 @@ check(tutErrors.length === 0, 'no page errors during the tutorial', tutErrors.jo
 await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
+await topUp();
 T = await tut();
 check(T.step === 0, 'a reload does NOT bring the tutorial back', `step=${T.step}`);
 check(await page.locator('#btn-skip').isHidden(), 'Skip stays gone after a reload');
@@ -866,12 +876,170 @@ check(savedTip.obstacleTipSeen === true, 'the obstacle flag persists too');
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
+await topUp();
 check((await tut()).step === 1, 'a cleared save brings the tutorial back');
 await page.locator('#btn-skip').click();
 T = await tut();
 check(T.step === 0 && T.seen === true, 'Skip marks it seen immediately');
 check(T.obstacleTipSeen === true, 'Skip also suppresses the obstacle tip');
 check(await page.locator('#btn-skip').isHidden(), 'Skip removes itself');
+
+/* ---------------------------------------------------------------- */
+/* Runs after the tutorial section because it, too, owns localStorage
+   outright. Real elapsed time is never waited for: the regen clock is a
+   stored timestamp, so backdating it in storage IS the passage of time as
+   far as the game can tell. */
+section('13. Balls economy: spend, block, regen, ad');
+
+const BALLS = await page.evaluate(() => window.__gtb.BALLS);
+console.log(`  capacity ${BALLS.capacity}, one ball per ${BALLS.regenMs/60000} min, ` +
+            `ad grants ${BALLS.adReward}`);
+
+/** Put the tank at `n` with the regen clock backdated by `ageMs`, through
+    localStorage and a reload - the same path a returning player takes. */
+async function seedTank(n, ageMs = 0){
+  await page.evaluate(([key, n, age]) => {
+    localStorage.setItem(key, JSON.stringify({ balls: n, lastRegen: Date.now() - age }));
+  }, [BALLS.key, n, ageMs]);
+  await page.reload();
+  await page.waitForFunction(() => !!window.__gtb);
+  await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setLevel(0); });
+}
+
+/* --- a fresh player starts with a full tank --- */
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+await page.evaluate(() => window.__gtb.skipTutorial());
+check((await page.evaluate(() => window.__gtb.balls())) === BALLS.capacity,
+  'a brand-new player starts with a full tank', `${await page.evaluate(() => window.__gtb.balls())}`);
+check((await page.locator('#ball-count').textContent()) === String(BALLS.capacity),
+  'the HUD chip shows the count');
+
+/* --- one press costs exactly one ball, whatever the drop does --- */
+await seedTank(4);
+let before = await page.evaluate(() => window.__gtb.balls());
+await page.evaluate(() => { window.__gtb.setSeed(9);
+  window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]); });   // a losing ramp
+await page.locator('#btn-drop').click();
+let after = await page.evaluate(() => window.__gtb.balls());
+check(before - after === 1, 'a Drop Ball press costs exactly one ball',
+  `${before} -> ${after}`);
+check((await page.locator('#ball-count').textContent()) === String(after),
+  'the HUD chip follows the count', await page.locator('#ball-count').textContent());
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+check((await page.evaluate(() => window.__gtb.balls())) === after,
+  'a LOST drop does not refund the ball', `${await page.evaluate(() => window.__gtb.balls())}`);
+
+/* --- and a WON drop does not refund it either --- */
+await seedTank(4);
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.setSeed(1); g.setLevel(0);
+  // sweep for a ramp that actually wins level 1, then use it for real
+  const R = Math.PI/180;
+  const ramp = (cx,cy,deg,len=120) => { const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
+    return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
+  const sx = g.LEVELS[0].spawn.x;
+  for (let ry = 150; ry <= 600; ry += 15)
+    for (let th = 25; th <= 155; th += 1.5){
+      const cfg = [ramp(sx, ry, th)];
+      if (g.simulate(cfg, 1, 0).result === 'win'){ g.setRamps(cfg); return; }
+    }
+});
+before = await page.evaluate(() => window.__gtb.balls());
+await page.locator('#btn-drop').click();
+await page.waitForFunction(() => window.__gtb.state().phase === 'over', null, { timeout: 25000 });
+after = await page.evaluate(() => window.__gtb.balls());
+check(await page.locator('#overlay').isVisible(), 'the winning drop really did win');
+check(before - after === 1, 'a WON drop costs one ball too', `${before} -> ${after}`);
+
+/* --- hitting zero blocks play and raises the stop screen --- */
+await seedTank(1);
+await page.evaluate(() => { window.__gtb.setSeed(9);
+  window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]); });
+check((await page.evaluate(() => window.__gtb.ballInfo())).stopShown === false,
+  'the stop screen is not up while there is still a ball');
+await page.locator('#btn-drop').click();
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+let info = await page.evaluate(() => window.__gtb.ballInfo());
+check(info.balls === 0, 'the last ball is spent', `${info.balls}`);
+check(info.stopShown, 'the out-of-balls screen is shown');
+check(await page.locator('#noballs').isVisible(), 'and it is a real full overlay');
+check(info.dropBlocked && await page.locator('#btn-drop').isDisabled(),
+  'Drop Ball is blocked at zero');
+check(/^\d+:[0-5]\d$/.test(info.timerText),
+  'the stop screen counts down to the next free ball', info.timerText);
+check(info.nextMs > 0 && info.nextMs <= BALLS.regenMs,
+  'the countdown is inside one regen interval', `${Math.round(info.nextMs/1000)}s`);
+
+/* pressing an already-blocked Drop Ball must not sneak a drop through */
+await page.evaluate(() => document.getElementById('btn-drop').click());
+info = await page.evaluate(() => window.__gtb.ballInfo());
+check(info.balls === 0 && (await page.evaluate(() => window.__gtb.state())).phase === 'plan',
+  'a forced Drop Ball at zero does nothing');
+
+/* --- the ad placeholder grants balls and hands the game back --- */
+await page.locator('#btn-ad').click();
+info = await page.evaluate(() => window.__gtb.ballInfo());
+check(info.balls === BALLS.adReward, `the ad placeholder grants +${BALLS.adReward} balls`,
+  `${info.balls}`);
+check(!info.stopShown && await page.locator('#noballs').isHidden(),
+  'the stop screen goes away by itself once there are balls');
+check(!info.dropBlocked && !(await page.locator('#btn-drop').isDisabled()),
+  'Drop Ball is playable again');
+check((await page.evaluate(() => JSON.parse(localStorage.getItem(window.__gtb.BALLS.key)).balls))
+      === BALLS.adReward, 'the granted balls are persisted');
+
+/* --- regen: elapsed time is simulated by backdating the stored stamp --- */
+await seedTank(0, BALLS.regenMs - 5000);                 // 5s short of one ball
+check((await page.evaluate(() => window.__gtb.balls())) === 0,
+  'just under one interval regenerates nothing');
+
+await seedTank(0, BALLS.regenMs + 1000);                 // just over one
+check((await page.evaluate(() => window.__gtb.balls())) === 1,
+  'one interval away regenerates exactly one ball');
+
+await seedTank(1, BALLS.regenMs * 3 + 1000);             // three intervals
+check((await page.evaluate(() => window.__gtb.balls())) === 4,
+  'three intervals away regenerate three balls');
+
+await seedTank(0, BALLS.regenMs * 999);                  // a fortnight away
+check((await page.evaluate(() => window.__gtb.balls())) === BALLS.capacity,
+  'regen is capped at capacity however long you were gone',
+  `${await page.evaluate(() => window.__gtb.balls())}`);
+
+/* the remainder must carry, or a player who returns at 7m59s loses it */
+await seedTank(0, BALLS.regenMs * 2 + BALLS.regenMs * 0.5);
+info = await page.evaluate(() => window.__gtb.ballInfo());
+check(info.balls === 2, 'two and a half intervals pay out two balls', `${info.balls}`);
+check(info.nextMs < BALLS.regenMs * 0.55 && info.nextMs > BALLS.regenMs * 0.45,
+  'the half interval already served is carried, not discarded',
+  `${Math.round(info.nextMs/1000)}s to the next`);
+
+/* --- a clock that has gone backwards must not freeze the timer --- */
+await page.evaluate((key) => {
+  localStorage.setItem(key, JSON.stringify({ balls: 0, lastRegen: Date.now() + 864e5 }));
+}, BALLS.key);
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+info = await page.evaluate(() => window.__gtb.ballInfo());
+check(info.lastRegen <= Date.now() + 1000 && info.nextMs <= BALLS.regenMs,
+  'a stamp in the future is clamped, so the timer still pays out',
+  `${Math.round(info.nextMs/1000)}s to the next`);
+
+/* --- a corrupt or absent tank falls back to a full one --- */
+await page.evaluate((key) => localStorage.setItem(key, '{not json'), BALLS.key);
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+check((await page.evaluate(() => window.__gtb.balls())) === BALLS.capacity,
+  'a corrupt tank falls back to full rather than to zero');
+await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setLevel(0); });
+await page.locator('.app').screenshot({ path: path.join(SHOTS, 'balls-hud.png') });
+ok('screenshot: balls-hud.png');
+await seedTank(0);
+await page.locator('.app').screenshot({ path: path.join(SHOTS, 'balls-empty.png') });
+ok('screenshot: balls-empty.png');
 
 await browser.close();
 console.log(failures === 0 ? `\nAll checks passed.\nScreenshots in ${SHOTS}`
