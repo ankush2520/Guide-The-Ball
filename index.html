@@ -54,31 +54,72 @@
   .title{font-family:var(--font-display);font-size:15.5px;font-weight:800;
          letter-spacing:-.005em;min-width:0;
          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .title span{color:var(--muted);font-weight:500;letter-spacing:0}
+  /* the level NAME is flavour and the level NUMBER is the functional half, so
+     when the bar is tight the name gives up its size first */
+  .title span{color:var(--muted);font-weight:500;letter-spacing:0;font-size:13px}
   .counter{background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
            box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
-           padding:5px 12px;font-size:12.5px;font-weight:600;white-space:nowrap;
+           padding:4px 9px;font-size:12px;font-weight:600;white-space:nowrap;
            color:#bcc4e8;letter-spacing:.01em}
-  .counter b{color:var(--accent);font-weight:800;font-size:13.5px;
+  .counter b{color:var(--accent);font-weight:800;font-size:13px;
              text-shadow:0 0 10px var(--glow-accent)}
-  .chips{display:flex;align-items:center;gap:6px;flex:none}
+  .chips{display:flex;align-items:center;gap:5px;flex:none}
   /* the ball chip leads with the thing it counts, drawn the same way the
      board draws the ball, so the HUD and the board agree */
-  .counter.balls{display:inline-flex;align-items:center;gap:6px;padding-left:9px}
-  .counter.balls .pip{width:12px;height:12px;border-radius:50%;flex:none;
+  .counter.balls{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
+  .counter.balls .pip{width:11px;height:11px;border-radius:50%;flex:none;
        background:radial-gradient(circle at 34% 30%,#fff,#ffc451);
        box-shadow:0 0 8px rgba(255,201,60,.75)}
   .counter.balls.empty{border-color:#6b2a38}
   .counter.balls.empty .pip{background:#4a3040;box-shadow:none}
   .counter.balls.empty b{color:#ff8792;text-shadow:none}
   .big.nb{color:#ffc451;text-shadow:0 0 22px rgba(255,201,60,.45)}
+  .big.sp{color:#ffd479;text-shadow:0 0 22px rgba(255,201,60,.45)}
+
+  /* the topbar wheel button. It grows a countdown while it is locked, so it
+     is 32px square when ready and a pill when it is not. */
+  .iconbtn.spin{width:auto;min-width:30px;height:30px;padding:0 7px;gap:4px;
+                display:inline-flex;align-items:center;justify-content:center}
+  .iconbtn.spin .wheelicon{width:14px;height:14px;border-radius:50%;flex:none;
+     background:conic-gradient(#ffc93c 0 25%, #3ec8ff 0 50%, #ffc93c 0 75%, #3ec8ff 0);
+     box-shadow:0 0 0 1.5px rgba(255,255,255,.5) inset}
+  .iconbtn.spin b{font-size:11px;font-weight:700;color:var(--muted);
+                  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .iconbtn.spin b[hidden]{display:none}
+  .iconbtn.spin.locked{opacity:.5}
+  .iconbtn.spin.locked .wheelicon{filter:grayscale(.85)}
+  /* ready: a gold version of the tutorial's pulse, so "there is something for
+     you here" always looks the same in this game */
+  @keyframes spinpulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(255,201,60,.55), 0 0 12px 1px rgba(255,170,40,.35) }
+    50%    { box-shadow:0 0 0 6px rgba(255,201,60,0), 0 0 18px 4px rgba(255,170,40,.55) }
+  }
+  .iconbtn.spin.ready{border-color:#7a6320;animation:spinpulse 1.7s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){ .iconbtn.spin.ready{animation:none;
+    box-shadow:0 0 0 2px rgba(255,201,60,.45)} }
+
+  .spincard{max-width:270px}
+  .wheelwrap{position:relative;width:212px;height:212px;margin:4px auto 14px}
+  #wheel{display:block;width:212px;height:212px;
+         transform:rotate(0deg);will-change:transform;
+         filter:drop-shadow(0 6px 18px rgba(0,0,0,.55))}
+  /* the pointer and the hub do NOT rotate - they sit over the wheel */
+  .wheelptr{position:absolute;top:-3px;left:50%;transform:translateX(-50%);
+            width:0;height:0;border-left:9px solid transparent;
+            border-right:9px solid transparent;border-top:16px solid #ffd479;
+            filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+  .wheelhub{position:absolute;top:50%;left:50%;width:34px;height:34px;
+            margin:-17px 0 0 -17px;border-radius:50%;
+            background:radial-gradient(circle at 36% 32%,#fff,#ffc451);
+            box-shadow:0 0 12px rgba(255,201,60,.7), 0 2px 6px rgba(0,0,0,.5)}
+  #spin-sub b{color:#ffd479;font-weight:800}
   #nb-timer{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
-  .chips .counter{padding:5px 10px;font-size:12.5px}
+  .chips .counter{padding:4px 9px;font-size:12px}
   .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
            box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
-           width:32px;height:32px;padding:0;font-size:14px;line-height:1;display:grid;place-items:center}
+           width:30px;height:30px;padding:0;font-size:13px;line-height:1;display:grid;place-items:center}
   .iconbtn.off{opacity:.45}
   /* stars: filled ones glow, unearned ones stay as faint outlines */
   .stars{display:flex;justify-content:center;gap:7px;font-size:27px;line-height:1;margin:2px 0 10px}
@@ -226,6 +267,9 @@
       </div>
       <div class="counter">Try <b id="try-count">0</b></div>
       <div class="counter">Ramps <b id="ramps-left">1</b></div>
+      <button class="iconbtn spin" id="btn-spin" title="Daily spin" aria-label="Daily spin">
+        <i class="wheelicon"></i><b id="spin-cd" hidden></b>
+      </button>
       <button class="iconbtn" id="btn-sound" title="Sound on/off" aria-label="Sound on/off">&#128266;</button>
     </div>
   </div>
@@ -263,6 +307,21 @@
           <button id="btn-retry">Replay</button>
           <button id="btn-adjust">Adjust</button>
           <button id="btn-next" class="primary" hidden>Next</button>
+        </div>
+      </div>
+    </div>
+    <div class="overlay" id="spinpanel" hidden>
+      <div class="card spincard">
+        <div class="big sp">Daily Spin</div>
+        <div class="sub" id="spin-sub">One free spin every 24 hours.</div>
+        <div class="wheelwrap">
+          <canvas id="wheel" aria-label="Prize wheel"></canvas>
+          <div class="wheelptr"></div>
+          <div class="wheelhub"></div>
+        </div>
+        <div class="row">
+          <button id="btn-spin-go" class="primary">Spin</button>
+          <button id="btn-spin-close">Close</button>
         </div>
       </div>
     </div>
@@ -966,6 +1025,80 @@ function fmtCountdown(ms){
 }
 
 /* ============================================================
+   DAILY SPIN
+   One free spin every 24 hours, paying out into the ball tank
+   above - which is what makes the two features worth having
+   together rather than separately.
+   ============================================================ */
+const SPIN_KEY = 'gtb.spin.v1';
+const SPIN_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+// Wedge order is the wheel's layout; `w` is the weight. Deliberately weighted
+// toward one and two, with the five a genuine rarity (~3%), so the jackpot
+// stays worth wanting. Expected value is a shade under two balls a day.
+const SPIN_PRIZES = [
+  { balls:1, w:26 }, { balls:2, w:20 }, { balls:1, w:26 }, { balls:3, w:12 },
+  { balls:2, w:20 }, { balls:1, w:26 }, { balls:5, w:4  }, { balls:3, w:12 }
+];
+const SPIN_MS = 4200;          // length of the spin animation
+let spinLast = 0;              // epoch ms of the last spin
+let spinning = false;
+// Cumulative, so a second spin carries on forward rather than snapping back.
+// Starts half a wedge round so the pointer rests in the middle of one instead
+// of sitting on a dividing line, which reads as a wheel mid-result.
+let wheelDeg = -(360 / SPIN_PRIZES.length) / 2;
+// a landed prize holds the panel's subtitle until the panel is reopened -
+// otherwise the once-a-second countdown refresh wipes "You won 2 balls!"
+// off the screen a quarter second after it appears
+let spinShown = 0;
+
+function saveSpin(pending){
+  try { localStorage.setItem(SPIN_KEY,
+        JSON.stringify({ last: spinLast, pending: pending || 0 })); }
+  catch (e){}
+}
+function loadSpin(){
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(SPIN_KEY) || 'null'); } catch (e){}
+  const now = Date.now();
+  spinLast = raw && isFinite(Number(raw.last)) ? Number(raw.last) : 0;
+  // a clock that has moved backwards just hands the player a spin; the worst
+  // case is one extra spin, where the alternative is a wheel locked forever
+  if (spinLast > now) spinLast = 0;
+  /* A spin commits its result to storage BEFORE the wheel starts turning, so
+     closing the tab mid-animation cannot be used to re-roll a bad prize. The
+     flip side is that the prize is then owed, and this is where it is paid. */
+  const owed = raw ? (raw.pending | 0) : 0;
+  if (owed > 0) balls += owed;
+  saveSpin(0);
+  if (owed > 0) saveBalls();
+}
+function spinReady(now){ return now - spinLast >= SPIN_COOLDOWN_MS; }
+function msToSpin(now){ return clamp(SPIN_COOLDOWN_MS - (now - spinLast), 0, SPIN_COOLDOWN_MS); }
+/** Weighted pick over SPIN_PRIZES. Returns the WEDGE INDEX, not the prize. */
+function pickPrize(){
+  let total = 0;
+  for (let i = 0; i < SPIN_PRIZES.length; i++) total += SPIN_PRIZES[i].w;
+  let r = Math.random() * total;
+  for (let i = 0; i < SPIN_PRIZES.length; i++){
+    r -= SPIN_PRIZES[i].w;
+    if (r <= 0) return i;
+  }
+  return SPIN_PRIZES.length - 1;
+}
+/** A coarse countdown for the topbar pill: hours, then minutes, then seconds. */
+function fmtShort(ms){
+  const s = Math.ceil(ms / 1000);
+  if (s >= 3600) return Math.ceil(s / 3600) + 'h';
+  if (s >= 60)   return Math.ceil(s / 60) + 'm';
+  return s + 's';
+}
+function fmtLong(ms){
+  const s = Math.ceil(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h + 'h ' + String(m).padStart(2, '0') + 'm';
+}
+
+/* ============================================================
    STARS
    Two things are worth rewarding, and they pull against each
    other: solving it in few attempts, and solving it with fewer
@@ -1028,6 +1161,12 @@ const chipBalls  = document.getElementById('balls-chip');
 const panelNoBalls = document.getElementById('noballs');
 const elNbTimer  = document.getElementById('nb-timer');
 const btnAd      = document.getElementById('btn-ad');
+const btnSpin    = document.getElementById('btn-spin');
+const elSpinCd   = document.getElementById('spin-cd');
+const panelSpin  = document.getElementById('spinpanel');
+const elSpinSub  = document.getElementById('spin-sub');
+const btnSpinGo  = document.getElementById('btn-spin-go');
+const wheelEl    = document.getElementById('wheel');
 
 /* ---------------- backing store ----------------
    The board is only ever ~370 CSS px wide on a phone. Rendering it at
@@ -1514,6 +1653,150 @@ function buildGrid(){
 }
 elTitle.addEventListener('click', function(){ buildGrid(); selPanel.hidden = false; });
 document.getElementById('btn-close-sel').addEventListener('click', function(){ selPanel.hidden = true; });
+
+/* ---------------- the prize wheel ----------------
+   Painted once into its own canvas and then rotated with a CSS transform,
+   which the compositor can do on its own thread - the board's rAF loop is
+   never asked to animate the wheel as well. */
+const WHEEL_R = 106;
+function drawWheel(){
+  const g = wheelEl.getContext('2d');
+  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+  wheelEl.width  = Math.round(WHEEL_R * 2 * dpr);
+  wheelEl.height = Math.round(WHEEL_R * 2 * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, WHEEL_R * 2, WHEEL_R * 2);
+  g.translate(WHEEL_R, WHEEL_R);
+
+  const n = SPIN_PRIZES.length, seg = Math.PI * 2 / n;
+  for (let i = 0; i < n; i++){
+    // wedge 0 starts at twelve o'clock and they run clockwise, which is the
+    // frame the landing maths below is written in
+    const a0 = -Math.PI / 2 + i * seg, a1 = a0 + seg;
+    const jackpot = SPIN_PRIZES[i].balls >= 5;
+    const fill = g.createRadialGradient(0, 0, WHEEL_R * 0.15, 0, 0, WHEEL_R);
+    if (jackpot){ fill.addColorStop(0, '#ffe6a8'); fill.addColorStop(1, '#e0a020'); }
+    else if (i % 2){ fill.addColorStop(0, '#2b3560'); fill.addColorStop(1, '#1a2142'); }
+    else { fill.addColorStop(0, '#33406f'); fill.addColorStop(1, '#222a52'); }
+    g.fillStyle = fill;
+    g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, WHEEL_R - 3, a0, a1); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.16)'; g.lineWidth = 1.5; g.stroke();
+
+    /* The prize reads along the wedge's spoke. Wedges in the bottom half
+       would come out upside down, so those get another half turn and their
+       text mirrored back across the hub - the number still sits further out
+       than its unit either way. */
+    let rot = a0 + seg / 2 + Math.PI / 2;
+    const wrapped = Math.atan2(Math.sin(rot), Math.cos(rot));
+    const flip = Math.abs(wrapped) > Math.PI / 2;
+    if (flip) rot += Math.PI;
+    const dir = flip ? 1 : -1;
+    g.save();
+    g.rotate(rot);
+    g.textAlign = 'center';
+    g.fillStyle = jackpot ? '#3a2600' : '#ffffff';
+    g.font = '800 26px ui-sans-serif, system-ui, -apple-system, sans-serif';
+    g.fillText(String(SPIN_PRIZES[i].balls), 0, dir * WHEEL_R * 0.58);
+    /* A pip rather than the word "balls": eight wedges of text all converge
+       on the hub and become an unreadable ring. The pip is the same gold
+       circle the HUD counter uses, so the unit is obvious without a word. */
+    g.beginPath();
+    g.arc(0, dir * WHEEL_R * 0.36, 4.5, 0, Math.PI * 2);
+    g.fillStyle = jackpot ? 'rgba(58,38,0,.85)' : '#ffc451';
+    g.fill();
+    g.restore();
+  }
+  g.strokeStyle = 'rgba(255,201,60,.75)'; g.lineWidth = 3;
+  g.beginPath(); g.arc(0, 0, WHEEL_R - 2.5, 0, Math.PI * 2); g.stroke();
+  wheelEl.style.transform = 'rotate(' + wheelDeg + 'deg)';
+}
+
+/** Repaint the wheel button and the panel from the cooldown clock. */
+function syncSpinUI(){
+  const now = Date.now();
+  const ready = spinReady(now) && !spinning;
+  btnSpin.classList.toggle('ready', ready);
+  btnSpin.classList.toggle('locked', !ready);
+  elSpinCd.hidden = ready;
+  if (!ready && !spinning) elSpinCd.textContent = fmtShort(msToSpin(now));
+  btnSpin.title = ready ? 'Daily spin - ready!'
+                        : 'Daily spin - next in ' + fmtLong(msToSpin(now));
+  btnSpinGo.disabled = !ready;
+  if (!panelSpin.hidden && !spinning && !spinShown)
+    elSpinSub.innerHTML = ready ? 'Your free spin is ready.'
+                                : 'Next free spin in <b>' + fmtLong(msToSpin(now)) + '</b>.';
+}
+
+function doSpin(){
+  const now = Date.now();
+  if (spinning || !spinReady(now)) return;
+
+  /* The result is decided HERE, before a single frame of animation, and the
+     animation is then aimed at it. Never the other way round: a wheel whose
+     visual landing and actual payout are rolled independently reads as
+     rigged even when it is not. */
+  const ix = pickPrize();
+  const prize = SPIN_PRIZES[ix].balls;
+
+  spinning = true;
+  spinShown = 0;
+  spinLast = now;
+  saveSpin(prize);            // committed before it turns - see loadSpin()
+  elSpinSub.textContent = 'Spinning\u2026';
+  syncSpinUI();
+
+  const target = spinTarget(ix, wheelDeg, Math.random() * 2 - 1);
+
+  const slow = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ms = slow ? 350 : SPIN_MS;
+  wheelEl.style.transition = 'transform ' + ms + 'ms cubic-bezier(.16,.86,.26,1)';
+  void wheelEl.offsetWidth;                    // so a repeat spin re-animates
+  wheelEl.style.transform = 'rotate(' + target + 'deg)';
+  wheelDeg = target;
+
+  // a timer, not transitionend: at a zero duration under reduced motion
+  // transitionend never fires at all, and this must always settle
+  setTimeout(function(){ landSpin(ix); }, ms + 60);
+}
+
+/** Where the wheel must come to rest for wedge `ix` to sit under the pointer,
+    starting from rotation `from`. `jitter` in [-1,1] lands off-centre inside
+    the wedge rather than always dead centre. Pure, and exported, so the suite
+    can check every wedge from every angle without spinning eight times. */
+function spinTarget(ix, from, jitter){
+  const n = SPIN_PRIZES.length, segDeg = 360 / n;
+  const aim = ix * segDeg + segDeg / 2 + (jitter || 0) * (segDeg * 0.32);
+  // rotating the wheel by R puts local angle `aim` under the pointer exactly
+  // when aim + R is a whole turn, so R must be congruent to -aim
+  const want = (((-aim) % 360) + 360) % 360;
+  let target = from + 5 * 360;                 // always at least five turns on
+  target += (((want - (target % 360)) % 360) + 360) % 360;
+  return target;
+}
+
+function landSpin(ix){
+  if (!spinning) return;
+  spinning = false;
+  const prize = SPIN_PRIZES[ix].balls;
+  saveSpin(0);                                 // the debt recorded above is paid
+  spinShown = prize;
+  grantBalls(prize);                           // grantBalls() calls syncUI()
+  elSpinSub.innerHTML = 'You won <b>' + prize + ' ball' + (prize === 1 ? '' : 's') + '</b>!';
+  Sound.win();
+  syncSpinUI();
+}
+
+btnSpin.addEventListener('click', function(e){
+  drawWheel();
+  spinShown = 0;                               // a fresh visit, not a stale win
+  panelSpin.hidden = false;
+  syncSpinUI();
+  e.stopPropagation();
+});
+btnSpinGo.addEventListener('click', doSpin);
+document.getElementById('btn-spin-close').addEventListener('click', function(){
+  panelSpin.hidden = true;
+});
 
 /* ============================================================
    RENDERING
@@ -2102,6 +2385,7 @@ function frame(now){
     const wall = Date.now();
     if (regenBalls(wall)) syncUI();
     if (!panelNoBalls.hidden) elNbTimer.textContent = fmtCountdown(msToNextBall(wall));
+    syncSpinUI();
   }
 
   updateTweens(dt);
@@ -2113,6 +2397,7 @@ function frame(now){
 highest   = loadHighest();
 bestStars = loadStars();
 loadBalls();
+loadSpin();
 /* "Genuinely first-time" means no save at all. Anyone who already has
    progress - including players from before the tutorial existed - has clearly
    worked out how to place a ramp, so they never get shown it. */
@@ -2135,6 +2420,8 @@ document.addEventListener('visibilitychange', function(){
 });
 window.addEventListener('pageshow', function(){ Sound.unlock(); });
 paintSoundBtn();
+drawWheel();
+syncSpinUI();
 setLevel(highest);
 requestAnimationFrame(frame);
 
@@ -2181,6 +2468,20 @@ window.__gtb = {
   },
   BALLS: { key: BALLS_KEY, capacity: BALL_CAPACITY,
            regenMs: BALL_REGEN_MS, adReward: AD_REWARD },
+  SPIN: { key: SPIN_KEY, cooldownMs: SPIN_COOLDOWN_MS, animMs: SPIN_MS,
+          prizes: SPIN_PRIZES.map(function(p){ return { balls:p.balls, w:p.w }; }) },
+  spinInfo: function(){
+    const now = Date.now();
+    return { last: spinLast, ready: spinReady(now), spinning: spinning,
+             nextMs: msToSpin(now), deg: wheelDeg,
+             panelOpen: !panelSpin.hidden, goDisabled: btnSpinGo.disabled,
+             btnReady: btnSpin.classList.contains('ready'),
+             btnLocked: btnSpin.classList.contains('locked'),
+             cdText: elSpinCd.hidden ? '' : elSpinCd.textContent,
+             shown: spinShown, sub: elSpinSub.textContent };
+  },
+  pickPrize: pickPrize,          // so the suite can audit the weighting
+  spinTarget: spinTarget,        // and check the landing maths on every wedge
   balls: function(){ return balls; },
   /** `ageMs` backdates the regen clock, so a test can stand the tank at any
       point in its refill cycle without waiting out a real eight minutes. */
@@ -2201,11 +2502,13 @@ window.__gtb = {
   setLevel: setLevel,
   openSelect: function(){ buildGrid(); selPanel.hidden = false; },
   clearProgress: function(){ try { localStorage.removeItem(SAVE_KEY);
-                                  localStorage.removeItem(BALLS_KEY); } catch (e){}
+                                  localStorage.removeItem(BALLS_KEY);
+                                  localStorage.removeItem(SPIN_KEY); } catch (e){}
                             highest = 0; bestStars = {};
                             balls = BALL_CAPACITY; lastRegen = Date.now(); saveBalls();
+                            spinLast = 0; spinning = false; saveSpin(0);
                             tutorialSeen = false; obstacleTipSeen = false;
-                            syncTutorial(); syncUI(); },
+                            syncTutorial(); syncSpinUI(); syncUI(); },
   skipTutorial: tutorialSkip,
   stars: function(){ return Object.assign({}, bestStars); },
   starsFor: starsFor,

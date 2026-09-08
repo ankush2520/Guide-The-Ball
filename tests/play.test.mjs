@@ -1041,6 +1041,179 @@ await seedTank(0);
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'balls-empty.png') });
 ok('screenshot: balls-empty.png');
 
+/* ---------------------------------------------------------------- */
+section('14. Daily spin wheel');
+
+const SPIN = await page.evaluate(() => window.__gtb.SPIN);
+const SEG = 360 / SPIN.prizes.length;
+console.log(`  ${SPIN.prizes.length} wedges [${SPIN.prizes.map(p=>p.balls).join(' ')}], ` +
+            `cooldown ${SPIN.cooldownMs/3600000}h, spin ${SPIN.animMs}ms`);
+
+/** Which wedge the pointer is actually over, derived only from the rendered
+    rotation - the independent half of the "not rigged" check below. */
+const wedgeUnderPointer = deg => Math.floor(((((-deg) % 360) + 360) % 360) / SEG)
+                                % SPIN.prizes.length;
+
+/** Put the cooldown clock `agoMs` in the past, via storage and a reload. */
+async function seedSpin(agoMs){
+  await page.evaluate(([key, ago]) => {
+    localStorage.setItem(key, JSON.stringify({ last: Date.now() - ago, pending: 0 }));
+  }, [SPIN.key, agoMs]);
+  await page.reload();
+  await page.waitForFunction(() => !!window.__gtb);
+  await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setBalls(0); });
+}
+
+/* --- the prize table is weighted the way the design says --- */
+const weights = SPIN.prizes.reduce((m, p) => (m[p.balls] = (m[p.balls]||0) + p.w, m), {});
+const wTotal = SPIN.prizes.reduce((n, p) => n + p.w, 0);
+const smallShare = ((weights[1]||0) + (weights[2]||0) + (weights[3]||0)) / wTotal;
+const jackpotShare = (weights[5]||0) / wTotal;
+check(smallShare > 0.9, 'the wheel is weighted toward small/medium ball rewards',
+  `${(smallShare*100).toFixed(0)}% is 1-3 balls`);
+check(jackpotShare > 0 && jackpotShare < 0.08, 'the 5-ball jackpot is a genuine rarity',
+  `${(jackpotShare*100).toFixed(1)}%`);
+check(SPIN.prizes.every(p => p.balls > 0), 'every wedge pays something - no blanks');
+
+/* the sampler must actually follow those weights */
+const sample = await page.evaluate(() => {
+  const counts = {};
+  for (let i = 0; i < 40000; i++){
+    const ix = window.__gtb.pickPrize();
+    counts[ix] = (counts[ix] || 0) + 1;
+  }
+  return counts;
+});
+const drawn = Object.keys(sample).length;
+check(drawn === SPIN.prizes.length, 'every wedge is reachable', `${drawn} of ${SPIN.prizes.length}`);
+const worst = SPIN.prizes.reduce((w, p, i) => {
+  const want = p.w / wTotal, got = (sample[i]||0) / 40000;
+  return Math.max(w, Math.abs(got - want) / want);
+}, 0);
+check(worst < 0.12, 'sampled frequencies track the declared weights',
+  `worst wedge off by ${(worst*100).toFixed(1)}%`);
+
+/* --- the landing maths, on every wedge, without spinning eight times --- */
+const aimBad = await page.evaluate(() => {
+  const g = window.__gtb, n = g.SPIN.prizes.length, seg = 360 / n;
+  const bad = [];
+  for (let ix = 0; ix < n; ix++)
+    for (const jitter of [-1, -0.5, 0, 0.5, 1])
+      for (const from of [0, -22.5, 137.4, 5000.9, -913.2]){
+        const t = g.spinTarget(ix, from, jitter);
+        const landed = Math.floor(((((-t) % 360) + 360) % 360) / seg) % n;
+        if (landed !== ix) bad.push(`wedge ${ix} from ${from} jitter ${jitter} -> ${landed}`);
+        if (t < from + 360 * 5) bad.push(`wedge ${ix} from ${from}: only ${(t-from).toFixed(0)} deg`);
+      }
+  return bad;
+});
+check(aimBad.length === 0,
+  'every wedge is aimed at correctly, at any jitter, from any starting angle',
+  aimBad.length ? aimBad[0] : `${SPIN.prizes.length} wedges x 5 jitters x 5 angles`);
+
+/* --- a new player has a spin waiting --- */
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setBalls(0); });
+let sp = await page.evaluate(() => window.__gtb.spinInfo());
+check(sp.ready && sp.btnReady && !sp.btnLocked, 'a new player has a spin ready');
+check(sp.cdText === '', 'no countdown on the button while it is ready');
+check(await page.locator('#spinpanel').isHidden(), 'the wheel panel starts closed');
+await page.locator('#btn-spin').click();
+sp = await page.evaluate(() => window.__gtb.spinInfo());
+check(sp.panelOpen && await page.locator('#spinpanel').isVisible(), 'the topbar button opens the wheel');
+check(!sp.goDisabled, 'Spin is enabled while the wheel is ready');
+
+/* --- the spin: result first, animation aimed at it --- */
+let ballsBefore = await page.evaluate(() => window.__gtb.balls());
+await page.locator('#btn-spin-go').click();
+sp = await page.evaluate(() => window.__gtb.spinInfo());
+check(sp.spinning, 'the wheel is turning');
+check(sp.goDisabled, 'Spin is disabled mid-spin - no double spin');
+const committed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),  SPIN.key);
+check(committed.pending > 0,
+  'the prize is committed to storage BEFORE the wheel stops - no re-roll by reload',
+  `pending ${committed.pending}`);
+
+await page.waitForFunction(() => !window.__gtb.spinInfo().spinning, null, { timeout: 20000 });
+sp = await page.evaluate(() => window.__gtb.spinInfo());
+const ballsAfter = await page.evaluate(() => window.__gtb.balls());
+const granted = ballsAfter - ballsBefore;
+const landed = wedgeUnderPointer(sp.deg);
+console.log(`  landed on wedge ${landed} (${SPIN.prizes[landed].balls} balls), granted ${granted}`);
+check(granted === committed.pending, 'the balls granted are the ones committed up front',
+  `${granted} vs ${committed.pending}`);
+check(SPIN.prizes[landed].balls === granted,
+  'the wheel visually STOPS on the prize it actually paid out', 
+  `wedge ${landed} = ${SPIN.prizes[landed].balls}, paid ${granted}`);
+check(sp.shown === granted && /won/i.test(sp.sub), 'the result is announced', sp.sub);
+check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)), SPIN.key)).pending === 0,
+  'the committed debt is cleared once paid');
+
+/* --- and it is locked for a day --- */
+check(!sp.ready && sp.btnLocked && !sp.btnReady, 'the wheel locks immediately after use');
+check(sp.goDisabled && await page.locator('#btn-spin-go').isDisabled(), 'Spin is disabled while locked');
+check(/^\d+[hms]$/.test(sp.cdText), 'the topbar button carries a countdown', sp.cdText);
+check(sp.nextMs > SPIN.cooldownMs - 60000 && sp.nextMs <= SPIN.cooldownMs,
+  'a full cooldown is on the clock', `${Math.round(sp.nextMs/3600000)}h`);
+await page.locator('.app').screenshot({ path: path.join(SHOTS, 'wheel-result.png') });
+ok('screenshot: wheel-result.png');
+
+/* pressing the disabled Spin must not sneak a second one through */
+ballsBefore = await page.evaluate(() => window.__gtb.balls());
+await page.evaluate(() => document.getElementById('btn-spin-go').click());
+await page.waitForTimeout(200);
+check((await page.evaluate(() => window.__gtb.balls())) === ballsBefore,
+  'a forced Spin while locked pays nothing');
+
+/* --- the cooldown boundary, simulated by backdating the stored stamp --- */
+await seedSpin(SPIN.cooldownMs - 60 * 60 * 1000);        // an hour short of a day
+sp = await page.evaluate(() => window.__gtb.spinInfo());
+check(!sp.ready && sp.btnLocked, 'an hour short of 24h the wheel is still locked', sp.cdText);
+
+await seedSpin(SPIN.cooldownMs + 60 * 1000);             // just over a day
+sp = await page.evaluate(() => window.__gtb.spinInfo());
+check(sp.ready && sp.btnReady, 'past 24h the wheel is available again');
+check(await page.evaluate(() => document.getElementById('btn-spin').classList.contains('ready')),
+  'and the button pulses to say so');
+
+/* --- a spin abandoned mid-animation still pays out on the next load --- */
+await page.evaluate(([key, n]) => {
+  localStorage.setItem(key, JSON.stringify({ last: Date.now(), pending: n }));
+}, [SPIN.key, 4]);
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+await page.evaluate(() => window.__gtb.skipTutorial());
+check((await page.evaluate(() => window.__gtb.balls())) >= 4,
+  'a spin abandoned mid-animation is still paid on the next load',
+  `${await page.evaluate(() => window.__gtb.balls())} balls`);
+check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)), SPIN.key)).pending === 0,
+  'and it is only paid once');
+
+/* --- a clock wound backwards must not lock the wheel forever --- */
+await page.evaluate(key => {
+  localStorage.setItem(key, JSON.stringify({ last: Date.now() + 30 * 864e5, pending: 0 }));
+}, SPIN.key);
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+check((await page.evaluate(() => window.__gtb.spinInfo())).ready,
+  'a stamp far in the future hands back a spin rather than locking forever');
+
+/* --- the two systems are actually joined up --- */
+await seedSpin(SPIN.cooldownMs * 2);
+let info13 = await page.evaluate(() => window.__gtb.ballInfo());
+check(info13.balls === 0 && info13.stopShown,
+  'set up: out of balls, with the stop screen up and a spin available');
+await page.locator('#btn-spin').click();
+await page.locator('#btn-spin-go').click();
+await page.waitForFunction(() => !window.__gtb.spinInfo().spinning, null, { timeout: 20000 });
+await page.locator('#btn-spin-close').click();
+info13 = await page.evaluate(() => window.__gtb.ballInfo());
+check(info13.balls > 0, 'the wheel pays into the ball tank', `${info13.balls} balls`);
+check(!info13.stopShown && !info13.dropBlocked,
+  'and that is enough to lift the out-of-balls stop and resume play');
+
 await browser.close();
 console.log(failures === 0 ? `\nAll checks passed.\nScreenshots in ${SHOTS}`
                            : `\n${failures} check(s) FAILED.`);

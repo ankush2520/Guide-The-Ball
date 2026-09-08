@@ -70,6 +70,32 @@ Tests never wait out a real interval: the regen clock is a stored timestamp, so
 backdating it in `localStorage` *is* the passage of time as far as the game can
 tell. See `seedTank()` in the suite.
 
+## Daily spin
+
+One free spin every 24 hours, paying straight into the ball tank — which is
+what makes the two features worth having together rather than separately.
+`gtb.spin.v1` holds `{last, pending}`.
+
+`SPIN_PRIZES` is the wedge layout *and* the weighting: ~97% of the weight is
+1–3 balls and the 5-ball jackpot is ~3%, for an expected value just under two
+balls a day. Tune the table, not the code.
+
+**The result is decided before the wheel turns**, and the animation is then
+aimed at it by `spinTarget(ix, from, jitter)` — never the other way round. A
+wheel whose visual landing and actual payout are rolled independently reads as
+rigged even when it is not. `spinTarget()` is pure and exported so the suite
+checks every wedge from every starting angle rather than trusting one spin.
+
+`pending` is why the prize is written to storage *before* the animation
+starts: committing up front means closing the tab mid-spin cannot be used to
+re-roll a bad prize, and the prize is then owed, so `loadSpin()` pays it on the
+next load. A `last` stamp in the future hands back a spin rather than locking
+the wheel forever.
+
+The wheel is painted once into its own canvas and rotated with a CSS
+transform, so the compositor animates it and the board's rAF loop is never
+asked to draw the wheel as well.
+
     node tests/levels.mjs 0 19    # per-level winnability, precision, triviality
 
 ## Layout
