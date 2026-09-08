@@ -114,7 +114,6 @@
             background:radial-gradient(circle at 36% 32%,#fff,#ffc451);
             box-shadow:0 0 12px rgba(255,201,60,.7), 0 2px 6px rgba(0,0,0,.5)}
   #spin-sub b{color:#ffd479;font-weight:800}
-  #nb-timer{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
   .chips .counter{padding:4px 9px;font-size:12px}
   .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
@@ -192,6 +191,13 @@
              letter-spacing:-.015em;margin-bottom:4px}
   .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
   .card .row{display:flex;gap:8px}
+  .card .row + .row{margin-top:8px}
+  /* the way back out of the stop screen: present, but never competing with
+     the two things it is actually offering */
+  button.quiet{background:none;border:0;box-shadow:none;color:var(--muted);
+               font-weight:600;font-size:12.5px;padding:6px}
+  button.quiet:hover:not(:disabled){filter:brightness(1.5)}
+  button.quiet:active:not(:disabled){transform:none;box-shadow:none}
   .win .big{color:#7dffb4;text-shadow:0 0 22px rgba(47,217,122,.55)}
   .lose .big{color:#ff8792;text-shadow:0 0 22px rgba(255,77,94,.45)}
 
@@ -282,13 +288,6 @@
     <!-- Running out is a real stop, so unlike a miss this one does get the
          full-screen treatment. It sits BEFORE the level picker in the DOM so
          a player with no balls left can still browse levels on top of it. -->
-    <div class="overlay" id="noballs" hidden>
-      <div class="card">
-        <div class="big nb">Out of balls</div>
-        <div class="sub">Next free ball in <b id="nb-timer">--:--</b></div>
-        <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
-      </div>
-    </div>
     <div class="overlay" id="select" hidden>
       <div class="card selcard">
         <div class="big">Levels</div>
@@ -308,6 +307,19 @@
           <button id="btn-adjust">Adjust</button>
           <button id="btn-next" class="primary" hidden>Next</button>
         </div>
+      </div>
+    </div>
+    <!-- After the win overlay so it can appear over it (pressing Next with an
+         empty tank), but before the wheel so a player can still spin for balls
+         from here. -->
+    <div class="overlay" id="noballs" hidden>
+      <div class="card">
+        <div class="big nb">Out of balls</div>
+        <div class="sub">You need a ball to start a level.
+          Retries inside a level are always free.</div>
+        <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
+        <div class="row"><button id="btn-buy" disabled>Buy Balls &mdash; Coming Soon</button></div>
+        <div class="row"><button id="btn-nb-close" class="quiet">Not now</button></div>
       </div>
     </div>
     <div class="overlay" id="spinpanel" hidden>
@@ -935,10 +947,24 @@ function loadStars(){
   const v = loadSave().stars;
   return (v && typeof v === 'object') ? v : {};
 }
+/* Which levels have ever been cleared, so the first-clear bonus is paid once
+   and an easy level cannot be farmed for balls. This is deliberately its own
+   record rather than being read off `highest`: `highest` stops at the last
+   level index, so it can never register the finale as cleared, and the finale
+   pays the biggest bonus. Players from before this existed are migrated by
+   the only thing their save does prove - reaching level N means clearing
+   every level below it. */
+function loadCleared(){
+  const v = loadSave().cleared;
+  if (v && typeof v === 'object') return v;
+  const seeded = {};
+  for (let i = 0; i < loadHighest(); i++) seeded[i] = true;
+  return seeded;
+}
 function saveProgress(){
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      highest: highest, stars: bestStars,
+      highest: highest, stars: bestStars, cleared: clearedLevels,
       tutorialSeen: tutorialSeen, obstacleTipSeen: obstacleTipSeen
     }));
   }
@@ -947,81 +973,54 @@ function saveProgress(){
 
 /* ============================================================
    BALLS  (localStorage)
-   A drop costs one ball, win or lose - the fiction is a crate
-   of physical balls, and a ball you threw away is still gone.
-   The tank refills on a timer while the game is closed, which
-   is the standard idle-regen pattern: store WHEN the last ball
-   was paid out, and settle up on load.
+   Balls gate ATTEMPTS AT LEVELS, not drops. Entering or
+   restarting a level costs one; once you are inside it, every
+   adjust-and-drop is free, however many it takes. So the
+   resource paces how much of the game you move through in a
+   sitting, and never punishes you for iterating on the puzzle
+   in front of you - which is the whole activity.
+   Faucets: the opening grant, a first-clear bonus per level,
+   the daily wheel, and the rewarded ad.
    ============================================================ */
 const BALLS_KEY      = 'gtb.balls.v1';
-const BALL_CAPACITY  = 5;
-// One ball every eight minutes: a full tank takes ~40 minutes to rebuild
-// from empty, which is the usual hyper-casual session gap. Tune here.
-const BALL_REGEN_MS  = 8 * 60 * 1000;
+// Granted once, on the very first open. Ten is enough to walk most of Act 1
+// before the economy is ever felt, which is when we want it noticed.
+const STARTING_BALLS = 10;
 const AD_REWARD      = 3;
+// First-clear bonus by Act, indexed by floor((levelId - 1) / 5). Act 1 pays
+// one, so walking it is ball-neutral against the one-per-entry cost; every
+// later Act pays more than it costs, so a player who is progressing is
+// always gaining ground and only a player who is stuck ever runs dry.
+const CLEAR_BONUS    = [1, 2, 2, 3];
 
-let balls     = BALL_CAPACITY;
-let lastRegen = Date.now();   // when the timer last paid out, in epoch ms
+let balls = STARTING_BALLS;
 
 function saveBalls(){
-  try { localStorage.setItem(BALLS_KEY,
-        JSON.stringify({ balls: balls, lastRegen: lastRegen })); }
+  try { localStorage.setItem(BALLS_KEY, JSON.stringify({ balls: balls })); }
   catch (e){ /* private mode - the tank just resets next load */ }
-}
-/** Pay out every ball the timer owes. Returns true if anything changed. */
-function regenBalls(now){
-  if (balls >= BALL_CAPACITY){
-    lastRegen = now;               // a full tank does not accrue
-    return false;
-  }
-  const owed = Math.floor((now - lastRegen) / BALL_REGEN_MS);
-  if (owed <= 0) return false;
-  const before = balls;
-  balls = Math.min(BALL_CAPACITY, balls + owed);
-  // carry the remainder rather than restarting the clock, so a player who
-  // comes back at 7m59s is not quietly robbed of those eight minutes
-  lastRegen = balls >= BALL_CAPACITY ? now : lastRegen + owed * BALL_REGEN_MS;
-  saveBalls();
-  return balls !== before;
-}
-function msToNextBall(now){
-  if (balls >= BALL_CAPACITY) return 0;
-  return clamp(BALL_REGEN_MS - (now - lastRegen), 0, BALL_REGEN_MS);
 }
 function loadBalls(){
   let raw = null;
   try { raw = JSON.parse(localStorage.getItem(BALLS_KEY) || 'null'); } catch (e){}
-  const now = Date.now();
+  // No stored count at all means this is the first time the game has ever
+  // been opened. A corrupt one is treated the same way rather than as zero:
+  // a storage glitch must never leave a player locked out of their own game.
   if (!raw || typeof raw.balls !== 'number' || !isFinite(raw.balls)){
-    balls = BALL_CAPACITY; lastRegen = now; saveBalls(); return;
+    balls = STARTING_BALLS;
+    saveBalls();
+    return;
   }
-  balls = Math.max(0, Math.min(BALL_CAPACITY, raw.balls | 0));
-  lastRegen = Number(raw.lastRegen);
-  // A clock that reads earlier than the stored stamp - a timezone change, a
-  // dead coin cell, a player winding the device back to farm balls - would
-  // otherwise park the timer in the future and never pay out again.
-  if (!isFinite(lastRegen) || lastRegen > now) lastRegen = now;
-  regenBalls(now);
+  balls = Math.max(0, raw.balls | 0);
 }
-/** Rewards may push the count ABOVE capacity. A wheel jackpot that mostly
-    evaporates because the tank was nearly full reads as being cheated; only
-    the regen timer respects the cap. */
 function grantBalls(n){
+  if (!(n > 0)) return;
   balls += n;
-  if (balls > BALL_CAPACITY) lastRegen = Date.now();
   saveBalls();
   syncUI();
 }
-function spendBall(){
-  balls = Math.max(0, balls - 1);
-  // the clock on the next free ball starts when the tank first drops below
-  // full, not when it empties
-  if (balls === BALL_CAPACITY - 1) lastRegen = Date.now();
-  saveBalls();
-}
-function fmtCountdown(ms){
-  const t = Math.ceil(ms / 1000);
-  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+/** What clearing level `id` pays the FIRST time, and only the first time. */
+function clearBonus(id){
+  return CLEAR_BONUS[clamp(Math.floor((id - 1) / 5), 0, CLEAR_BONUS.length - 1)];
 }
 
 /* ============================================================
@@ -1130,6 +1129,7 @@ let highest    = 0;
 let phase  = 'plan';    // 'plan' | 'drop' | 'over'
 let tries  = 0;         // drops on the current level, reset when the level changes
 let bestStars = {};     // levelIndex -> best stars earned, persisted
+let clearedLevels = {}; // levelIndex -> true once ever cleared, persisted
 let ramps  = [];
 let draft  = null;
 let ball   = null;
@@ -1159,7 +1159,6 @@ const btnSkip = document.getElementById('btn-skip');
 const elBalls    = document.getElementById('ball-count');
 const chipBalls  = document.getElementById('balls-chip');
 const panelNoBalls = document.getElementById('noballs');
-const elNbTimer  = document.getElementById('nb-timer');
 const btnAd      = document.getElementById('btn-ad');
 const btnSpin    = document.getElementById('btn-spin');
 const elSpinCd   = document.getElementById('spin-cd');
@@ -1320,15 +1319,9 @@ function syncUI(){
   elTries.textContent = tries;
   elBalls.textContent = balls;
   chipBalls.classList.toggle('empty', balls <= 0);
-  /* Declarative on purpose: the out-of-balls screen is a pure function of
-     "planning, with nothing to drop". It cannot be left stuck open by a
-     regen, an ad or a level change, because nothing ever opens or closes it
-     by hand. */
-  panelNoBalls.hidden = !(planning && balls <= 0);
-  // paint the countdown as the screen goes up, not on the next housekeeping
-  // tick - otherwise the player is shown a "--:--" placeholder for a frame
-  if (!panelNoBalls.hidden) elNbTimer.textContent = fmtCountdown(msToNextBall(Date.now()));
-  btnDrop.disabled  = !planning || balls <= 0;
+  // an empty tank never blocks Drop Ball - it blocks LEAVING for another
+  // level. A player on their last ball still gets to finish what they started.
+  btnDrop.disabled  = !planning;
   btnUndo.disabled  = !planning || ramps.length === 0;
   btnClear.disabled = !planning || ramps.length === 0;
   syncTutorial();
@@ -1352,6 +1345,35 @@ function setLevel(i){
   phase = 'plan'; overlay.hidden = true;
   if (levelIndex > highest){ highest = levelIndex; saveProgress(); }
   syncUI();
+}
+
+/** Dismiss the stop screen. `resume` completes the entry that raised it, so
+    topping up hands the player straight back to what they were doing. */
+function closeNoBalls(resume){
+  panelNoBalls.hidden = true;
+  const want = pendingEnter;
+  pendingEnter = null;
+  if (resume && want !== null && balls > 0) enterLevel(want);
+}
+
+/* Start a NEW attempt at a level. This is the ONLY thing that spends a ball,
+   and the only thing the empty tank blocks - boot does not go through here,
+   because resuming the level you are already sitting in is not entering one,
+   and charging for it would mean a reload could wall a player out of a game
+   they are mid-way through. There is nothing to farm by reloading either:
+   retries inside a level are already free and unlimited. */
+let pendingEnter = null;        // the level the stop screen is standing in for
+
+function enterLevel(i){
+  if (balls <= 0){
+    pendingEnter = i;
+    panelNoBalls.hidden = false;
+    return false;
+  }
+  balls--;
+  saveBalls();
+  setLevel(i);
+  return true;
 }
 
 /* ---------------- input: mouse + touch via pointer events ---------------- */
@@ -1527,7 +1549,6 @@ document.addEventListener('touchmove', function(e){
 /* ---------------- actions ---------------- */
 function drop(){
   if (phase !== 'plan') return;
-  if (balls <= 0){ syncUI(); return; }        // syncUI raises the stop screen
   // steps 1 and 2 have both happened: a ramp went down, and this is the tap
   if (tutorialStep() === 2) tutorialDone();
   draft = null; capture = null; dragging = null; selected = -1;
@@ -1535,8 +1556,8 @@ function drop(){
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
   seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
-  // one ball per press, win or lose: the cost is the attempt, not the result
-  spendBall();
+  // no cost here on purpose: the ball was spent entering this level, and
+  // every retry inside it - adjust, drop, adjust, drop - is free
   tries++;
   phase = 'drop';
   overlay.hidden = true;
@@ -1578,6 +1599,13 @@ function finish(result){
   const win  = result === 'win';
   const last = levelIndex >= LEVELS.length - 1;
   if (win && !last && levelIndex + 1 > highest) highest = levelIndex + 1;
+  /* First clear of this level, ever - paid once and never again, so grinding
+     an easy level you have already beaten cannot mint balls. */
+  let bonus = 0;
+  if (win && !clearedLevels[levelIndex]){
+    clearedLevels[levelIndex] = true;
+    bonus = clearBonus(level().id);
+  }
   const elStars = document.getElementById('ov-stars');
   const elNote  = document.getElementById('ov-starnote');
   if (win){
@@ -1591,11 +1619,19 @@ function finish(result){
     elStars.hidden = true; elNote.hidden = true;
   }
   if (win) saveProgress();
+  // granted after saveProgress() so the ledger and the balls commit together
+  if (bonus > 0) grantBalls(bonus);
   card.className = 'card ' + (win ? 'win' : 'lose');
   document.getElementById('ov-title').textContent = win ? 'Target hit!' : 'Missed';
-  document.getElementById('ov-sub').textContent =
-    win ? (last ? 'That was the last level for now.' : 'On to level ' + LEVELS[levelIndex+1].id + '.')
-        : 'The ball never reached the target.';
+  let sub;
+  if (!win) sub = 'The ball never reached the target.';
+  else {
+    sub = last ? 'That was the last level for now.'
+               : 'On to level ' + LEVELS[levelIndex+1].id + '.';
+    if (bonus > 0) sub = 'First clear: +' + bonus + ' ball' + (bonus === 1 ? '' : 's') +
+                         '. ' + sub;
+  }
+  document.getElementById('ov-sub').textContent = sub;
   btnNext.hidden = !win || last;
   overlay.hidden = false;
   hideFlash();
@@ -1616,6 +1652,10 @@ btnClear.addEventListener('click', function(){
    actually watched it, and the balls must only be granted if they did. */
 btnAd.addEventListener('click', function(){
   grantBalls(AD_REWARD);
+  closeNoBalls(true);        // and carry on into the level they were blocked on
+});
+document.getElementById('btn-nb-close').addEventListener('click', function(){
+  closeNoBalls(false);
 });
 
 document.getElementById('btn-retry').addEventListener('click', function(){
@@ -1624,7 +1664,7 @@ document.getElementById('btn-retry').addEventListener('click', function(){
 document.getElementById('btn-adjust').addEventListener('click', function(){
   phase = 'plan'; ball = null; overlay.hidden = true; syncUI();
 });
-btnNext.addEventListener('click', function(){ setLevel(levelIndex + 1); });
+btnNext.addEventListener('click', function(){ enterLevel(levelIndex + 1); });
 
 /* ---------------- level select ---------------- */
 const selPanel = document.getElementById('select');
@@ -1645,7 +1685,8 @@ function buildGrid(){
       sp.textContent = '\u2605'.repeat(got);
       b.appendChild(sp);
     }
-    b.addEventListener('click', function(){ setLevel(i); selPanel.hidden = true; });
+    // picking the level you are already on is a restart, and costs the same
+    b.addEventListener('click', function(){ if (enterLevel(i)) selPanel.hidden = true; });
     lvGrid.appendChild(b);
   }
   document.getElementById('sel-sub').textContent =
@@ -2376,15 +2417,10 @@ function frame(now){
     if (capture.t >= CAPTURE_MS){ capture = null; finish('win'); }
   }
 
-  /* Economy housekeeping, four times a second, on the loop that is already
-     running - no second timer to leak, and the countdown on the stop screen
-     stays honest. Date.now(), not `now`: rAF's clock is monotonic since load
-     and knows nothing about time spent with the tab closed. */
+  /* Keeps the wheel's cooldown countdown honest, four times a second, on the
+     loop that is already running - no second timer to leak. */
   if (now - ballTick > 250){
     ballTick = now;
-    const wall = Date.now();
-    if (regenBalls(wall)) syncUI();
-    if (!panelNoBalls.hidden) elNbTimer.textContent = fmtCountdown(msToNextBall(wall));
     syncSpinUI();
   }
 
@@ -2396,6 +2432,7 @@ function frame(now){
 
 highest   = loadHighest();
 bestStars = loadStars();
+clearedLevels = loadCleared();
 loadBalls();
 loadSpin();
 /* "Genuinely first-time" means no save at all. Anyone who already has
@@ -2466,8 +2503,8 @@ window.__gtb = {
                       live: particles.reduce(function(n,p){ return n + (p.life > 0 ? 1 : 0); }, 0) },
              draw: { x: lastDraw.x, y: lastDraw.y } };
   },
-  BALLS: { key: BALLS_KEY, capacity: BALL_CAPACITY,
-           regenMs: BALL_REGEN_MS, adReward: AD_REWARD },
+  BALLS: { key: BALLS_KEY, start: STARTING_BALLS,
+           adReward: AD_REWARD, clearBonus: CLEAR_BONUS.slice() },
   SPIN: { key: SPIN_KEY, cooldownMs: SPIN_COOLDOWN_MS, animMs: SPIN_MS,
           prizes: SPIN_PRIZES.map(function(p){ return { balls:p.balls, w:p.w }; }) },
   spinInfo: function(){
@@ -2483,19 +2520,16 @@ window.__gtb = {
   pickPrize: pickPrize,          // so the suite can audit the weighting
   spinTarget: spinTarget,        // and check the landing maths on every wedge
   balls: function(){ return balls; },
-  /** `ageMs` backdates the regen clock, so a test can stand the tank at any
-      point in its refill cycle without waiting out a real eight minutes. */
-  setBalls: function(n, ageMs){
-    balls = Math.max(0, n | 0);
-    lastRegen = Date.now() - (ageMs || 0);
-    saveBalls(); syncUI();
-  },
+  setBalls: function(n){ balls = Math.max(0, n | 0); saveBalls(); syncUI(); },
+  clearBonus: clearBonus,
+  cleared: function(){ return Object.assign({}, clearedLevels); },
+  enterLevel: enterLevel,          // the charging path the UI actually uses
   ballInfo: function(){
-    const now = Date.now();
-    return { balls: balls, capacity: BALL_CAPACITY, regenMs: BALL_REGEN_MS,
-             nextMs: msToNextBall(now), lastRegen: lastRegen,
+    const buy = document.getElementById('btn-buy');
+    return { balls: balls,
              dropBlocked: btnDrop.disabled, stopShown: !panelNoBalls.hidden,
-             timerText: elNbTimer.textContent };
+             pendingEnter: pendingEnter,
+             buyDisabled: buy.disabled, buyText: buy.textContent };
   },
   setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
   setRamps: function(list){ ramps = list.map(function(r){ return Object.assign({}, r); }); syncUI(); },
@@ -2505,7 +2539,9 @@ window.__gtb = {
                                   localStorage.removeItem(BALLS_KEY);
                                   localStorage.removeItem(SPIN_KEY); } catch (e){}
                             highest = 0; bestStars = {};
-                            balls = BALL_CAPACITY; lastRegen = Date.now(); saveBalls();
+                            balls = STARTING_BALLS; saveBalls();
+                            clearedLevels = {}; pendingEnter = null;
+                            panelNoBalls.hidden = true;
                             spinLast = 0; spinning = false; saveSpin(0);
                             tutorialSeen = false; obstacleTipSeen = false;
                             syncTutorial(); syncSpinUI(); syncUI(); },

@@ -41,24 +41,47 @@ Tap the level name to open the level picker.
 
 ## Balls
 
-A drop costs **one ball, win or lose** — the cost is the attempt, not the
-result. The tank holds `BALL_CAPACITY` (5) and refills one ball per
-`BALL_REGEN_MS` (8 min), stored in `localStorage` under `gtb.balls.v1` as
-`{balls, lastRegen}`.
+Balls gate **attempts at levels, not drops**. Entering or restarting a level
+costs one; once you are inside it, every adjust-and-drop is free, however many
+it takes. The resource paces how much of the game you move through in a
+sitting and never punishes you for iterating on the puzzle in front of you,
+which is the whole activity. `gtb.balls.v1` holds `{balls}`.
 
-`lastRegen` is *when the timer last paid out*, not when the app closed, so
-regen settles on load: `floor((now - lastRegen) / interval)` balls are granted
-and the remainder is carried, never discarded. A stored stamp in the future —
-a timezone change, a bad clock, a player winding the device back — is clamped
-to now rather than parking the timer forever.
+`enterLevel()` is the only thing that spends, and the only thing an empty tank
+blocks. Boot deliberately does *not* go through it — resuming the level you are
+already sitting in is not entering one, and charging for it would let a reload
+wall a player out of a game they are part-way through. There is nothing to farm
+by reloading either, since retries inside a level are already free.
 
-Rewards (the ad, the wheel) may push the count **above** capacity on purpose;
-only the regen timer respects the cap, because a jackpot that evaporates into
-a nearly-full tank reads as being cheated.
+An empty tank never disables Drop Ball. A player on their last ball still gets
+to finish the level they started, first-clear bonus included — which is often
+exactly what refills the tank.
 
-At zero the `#noballs` overlay goes up and Drop Ball is disabled. That overlay
-is a pure function of "planning, with nothing to drop" — nothing opens or
-closes it by hand, so a regen or a reward cannot leave it stuck.
+**Faucets**
+
+| Source | Amount |
+|---|---|
+| First open, ever | 10 |
+| First clear of a level (once, ever) | +1 / +2 / +2 / +3 by Act |
+| Daily wheel | 1–5 |
+| Rewarded ad | +3 |
+
+Act 1 pays 1, matching the 1-per-entry cost, so walking it is ball-neutral;
+every later Act pays more than it costs. A player who is progressing always
+gains ground, and only a player who is stuck ever runs dry.
+
+The first-clear bonus is keyed off a `cleared` map in `gtb.progress.v1`, not
+off `highest`. Two reasons: `highest` stops at the last level index so it can
+never register the finale as cleared, and the finale pays the most; and a map
+is what makes "once, ever" literally true, so an easy cleared level cannot be
+farmed for balls. Saves from before it existed are migrated on load — reaching
+level N proves every level below it was cleared.
+
+At zero, `#noballs` goes up on the blocked action (not as a persistent state)
+and remembers what it interrupted, so topping up carries the player straight
+into the level they were going for. It sits after the win overlay in the DOM so
+it can appear over "Next", and before the wheel so the wheel is still reachable
+from it.
 
 **The "Watch Ad" button is a placeholder** that grants the balls outright.
 It is marked `TODO` in `index.html` and must be wired to the portal's rewarded
@@ -66,9 +89,11 @@ video (`CrazyGames.SDK.ad.requestAd('rewarded')` / `PokiSDK.rewardedBreak()`)
 before submission — and the balls must only be granted if the player actually
 watched.
 
-Tests never wait out a real interval: the regen clock is a stored timestamp, so
-backdating it in `localStorage` *is* the passage of time as far as the game can
-tell. See `seedTank()` in the suite.
+**"Buy Balls" is deliberately inert** — visible, disabled, "Coming Soon", with
+no payment logic behind it. Web portals have no built-in purchase system the
+way app stores do; real money would need a separate payment processor *and* a
+player account system, neither of which exist here. Check what CrazyGames and
+Poki actually permit before building either.
 
 ## Daily spin
 
