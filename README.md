@@ -41,21 +41,16 @@ Tap the level name to open the level picker.
 
 ## Balls
 
-Balls gate **attempts at levels, not drops**. Entering or restarting a level
-costs one; once you are inside it, every adjust-and-drop is free, however many
-it takes. The resource paces how much of the game you move through in a
-sitting and never punishes you for iterating on the puzzle in front of you,
-which is the whole activity. `gtb.balls.v1` holds `{balls}`.
+**One ball per drop, win or lose** — the cost is throwing it, not the result.
+Moving between levels is free: the picker, Next and boot all cost nothing, and
+the ball is spent at the moment it is actually used. `gtb.balls.v1` holds
+`{balls}`.
 
-`enterLevel()` is the only thing that spends, and the only thing an empty tank
-blocks. Boot deliberately does *not* go through it — resuming the level you are
-already sitting in is not entering one, and charging for it would let a reload
-wall a player out of a game they are part-way through. There is nothing to farm
-by reloading either, since retries inside a level are already free.
-
-An empty tank never disables Drop Ball. A player on their last ball still gets
-to finish the level they started, first-clear bonus included — which is often
-exactly what refills the tank.
+At zero, Drop Ball stays **enabled** and the press raises `#noballs` instead of
+dropping. A dead grey button tells a player they are stuck without telling them
+what to do about it; this way the button still answers the tap. Being broke
+never traps you on one level either — you can still move around the game, you
+just cannot throw a ball.
 
 **Faucets**
 
@@ -66,22 +61,30 @@ exactly what refills the tank.
 | Daily wheel | 1–5 |
 | Rewarded ad | +3 |
 
-Act 1 pays 1, matching the 1-per-entry cost, so walking it is ball-neutral;
-every later Act pays more than it costs. A player who is progressing always
-gains ground, and only a player who is stuck ever runs dry.
-
 The first-clear bonus is keyed off a `cleared` map in `gtb.progress.v1`, not
 off `highest`. Two reasons: `highest` stops at the last level index so it can
 never register the finale as cleared, and the finale pays the most; and a map
-is what makes "once, ever" literally true, so an easy cleared level cannot be
-farmed for balls. Saves from before it existed are migrated on load — reaching
-level N proves every level below it was cleared.
+is what makes "once, ever" literally true, so a cleared level cannot be farmed
+for balls — grinding one now strictly *drains* the tank, since the drop costs
+and the bonus does not come again. Saves from before it existed are migrated on
+load: reaching level N proves every level below it was cleared.
 
-At zero, `#noballs` goes up on the blocked action (not as a persistent state)
-and remembers what it interrupted, so topping up carries the player straight
-into the level they were going for. It sits after the win overlay in the DOM so
-it can appear over "Next", and before the wheel so the wheel is still reachable
-from it.
+### Balance note — this economy is structurally draining
+
+Worth knowing before launch. With one ball per drop, a level only pays for
+itself if it is cleared in **as many drops as its bonus**: first try in Act 1,
+within two in Acts 2–3, within three in Act 4. Anything slower is a net loss.
+
+That is a demanding bar on the back half. Level 18 has a ±1.5° winning ramp
+window and level 19 has no single-ramp solution at all (`node tests/levels.mjs
+0 19`), so first- or second-try clears there are not realistic. A player who
+takes three or four attempts per level runs the opening ten down inside Act 1
+and lives on the wheel and the ad from then on.
+
+That may be exactly the intent — it is what drives ad views. If it is not, the
+levers, cheapest first: raise `STARTING_BALLS`, raise `CLEAR_BONUS`, or bring
+back a timed refill (removed when spending moved to per-drop; it is a
+self-contained addition).
 
 **The "Watch Ad" button is a placeholder** that grants the balls outright.
 It is marked `TODO` in `index.html` and must be wired to the portal's rewarded

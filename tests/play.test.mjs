@@ -886,10 +886,9 @@ check(await page.locator('#btn-skip').isHidden(), 'Skip removes itself');
 
 /* ---------------------------------------------------------------- */
 /* Runs after the tutorial section because it, too, owns localStorage
-   outright. Balls gate ATTEMPTS AT LEVELS, not drops: entering or
-   restarting a level costs one, and everything you do inside that level
-   is free. */
-section('13. Balls economy: entry cost, first-clear bonus, running dry');
+   outright. One ball is spent per DROP, win or lose. Moving between
+   levels is free - the ball is spent at the moment it is used. */
+section('13. Balls economy: one ball per drop, first-clear bonus, running dry');
 
 const BALLS = await page.evaluate(() => window.__gtb.BALLS);
 console.log(`  start ${BALLS.start}, ad grants ${BALLS.adReward}, ` +
@@ -952,11 +951,12 @@ for (const [li, want] of [[0,1],[5,2],[10,2],[15,3]]){
   await freshPlayer();
   await page.evaluate(() => window.__gtb.setBalls(20));
   const before = await ballsNow();
-  const played = await winLevel(li);
+  const played = await winLevel(li);          // exactly one drop, so -1
   const after = await ballsNow();
   check(played, `level ${li+1} is winnable with one ramp (test setup)`);
-  check(after - before === want,
-    `first clear of level ${li+1} pays +${want}`, `${before} -> ${after}`);
+  check(after - before === want - 1,
+    `first clear of level ${li+1} pays +${want} against the 1 the drop spent`,
+    `${before} -> ${after}`);
   check((await page.locator('#ov-sub').textContent()).includes(`+${want} ball`),
     'and the win card says so', await page.locator('#ov-sub').textContent());
   check((await page.evaluate(() => window.__gtb.cleared()))[li] === true,
@@ -969,17 +969,23 @@ await page.evaluate(() => window.__gtb.setBalls(20));
 await winLevel(0);
 let mid = await ballsNow();
 await winLevel(0);                                    // same level, second clear
-check((await ballsNow()) === mid, 'replaying a cleared level pays no second bonus',
+check((await ballsNow()) === mid - 1,
+  'replaying a cleared level pays no second bonus - it just costs the drop',
   `${mid} -> ${await ballsNow()}`);
+mid = await ballsNow();
 await winLevel(0);
-check((await ballsNow()) === mid, 'and not on the third time either', `${await ballsNow()}`);
+check((await ballsNow()) === mid - 1, 'and not on the third time either',
+  `${await ballsNow()}`);
 /* the farm the ledger exists to stop: the bonus must not come back on reload */
+mid = await ballsNow();
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
 await page.evaluate(() => window.__gtb.skipTutorial());
 await winLevel(0);
-check((await ballsNow()) === mid, 'nor after a reload - the ledger is persisted',
+check((await ballsNow()) === mid - 1, 'nor after a reload - the ledger is persisted',
   `${await ballsNow()}`);
+check((await ballsNow()) < mid, 'so grinding a cleared level DRAINS the tank, never fills it',
+  `${mid} -> ${await ballsNow()}`);
 
 /* the finale is the case a highest-level marker cannot express, because
    `highest` stops at the last index and can never advance past it */
@@ -988,84 +994,105 @@ await page.evaluate(() => window.__gtb.setBalls(20));
 const beforeFinale = await ballsNow();
 const finalePlayed = await winLevel(19);
 check(finalePlayed, 'level 20 is winnable with one ramp (test setup)');
-check((await ballsNow()) - beforeFinale === 3,
+check((await ballsNow()) - beforeFinale === 3 - 1,
   'clearing the FINALE still pays its +3', `${beforeFinale} -> ${await ballsNow()}`);
+const afterFinale = await ballsNow();
 await winLevel(19);
-check((await ballsNow()) === beforeFinale + 3, 'and only once, on the finale too',
+check((await ballsNow()) === afterFinale - 1, 'and only once, on the finale too',
   `${await ballsNow()}`);
 
-/* --- entering a level costs exactly one --- */
+/* --- a drop costs exactly one ball, win or lose --- */
 await freshPlayer();
-await page.evaluate(() => window.__gtb.setBalls(6));
-let before = await ballsNow();
-await page.evaluate(() => window.__gtb.enterLevel(2));
-check(before - (await ballsNow()) === 1, 'entering a level spends exactly one ball',
-  `${before} -> ${await ballsNow()}`);
-check((await page.evaluate(() => window.__gtb.state())).levelIndex === 2, 'and it enters');
-
-/* through the real level picker, not just the hook */
-before = await ballsNow();
-await page.locator('#level-title').click();
-await page.locator('#lvgrid button').first().click();
-check(before - (await ballsNow()) === 1, 'the level picker charges the same one',
-  `${before} -> ${await ballsNow()}`);
-check(await page.locator('#select').isHidden(), 'and closes on a successful entry');
-
-/* re-picking the level you are already on is a restart, and costs */
-before = await ballsNow();
-await page.evaluate(() => window.__gtb.enterLevel(0));
-check(before - (await ballsNow()) === 1, 'restarting the current level costs one too',
-  `${before} -> ${await ballsNow()}`);
-
-/* --- but retries INSIDE a level are free, however many --- */
-before = await ballsNow();
 await page.evaluate(() => {
-  window.__gtb.setLevel(0); window.__gtb.setSeed(9);
-  window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]);   // a losing ramp
+  const g = window.__gtb;
+  g.setBalls(9); g.setLevel(0); g.setSeed(9);
+  g.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]);        // a ramp that loses
 });
-const freeStart = await ballsNow();
+let before = await ballsNow();
+await page.locator('#btn-drop').click();
+check(before - (await ballsNow()) === 1, 'a Drop Ball press costs exactly one ball',
+  `${before} -> ${await ballsNow()}`);
+check((await page.locator('#ball-count').textContent()) === String(await ballsNow()),
+  'the HUD chip follows immediately, on the press');
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+check((await ballsNow()) === before - 1, 'a LOST drop is not refunded', `${await ballsNow()}`);
+
+/* a won drop costs the same - checked on an ALREADY cleared level, so no
+   first-clear bonus is in the way of the arithmetic */
+await freshPlayer();
+await page.evaluate(() => window.__gtb.setBalls(9));
+await winLevel(0);                                        // first clear: -1, +1
+const settled = await ballsNow();
+await winLevel(0);                                        // cleared already: -1
+check(settled - (await ballsNow()) === 1, 'a WON drop costs one ball too',
+  `${settled} -> ${await ballsNow()}`);
+
+/* --- every retry costs, so four attempts cost four balls --- */
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.setBalls(9); g.setLevel(0); g.setSeed(9);
+  g.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]);
+});
+const retryStart = await ballsNow();
 for (let i = 0; i < 4; i++){
   await page.locator('#btn-drop').click();
   await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
-  // adjust the ramp between attempts, the way a player would
+  // adjust between attempts, the way a player actually would
   await page.evaluate(i => window.__gtb.setRamps([{ x1:150+i*6, y1:300, x2:250, y2:360+i*4 }]), i);
 }
-check((await ballsNow()) === freeStart,
-  'four adjust-and-drop retries inside one level cost nothing',
-  `${freeStart} -> ${await ballsNow()}`);
-check(!(await page.locator('#btn-drop').isDisabled()), 'Drop Ball is never gated by the tank');
+check(retryStart - (await ballsNow()) === 4, 'four adjust-and-drop retries cost four balls',
+  `${retryStart} -> ${await ballsNow()}`);
 
-/* even down to the last ball: you always get to finish what you started */
-await page.evaluate(() => window.__gtb.setBalls(0));
-await page.evaluate(() => window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]));
-check(!(await page.locator('#btn-drop').isDisabled()),
-  'an empty tank does not strand you mid-level - Drop Ball still works');
-await page.locator('#btn-drop').click();
-await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
-check((await page.evaluate(() => window.__gtb.state())).result !== null,
-  'and the drop really ran', `${(await page.evaluate(() => window.__gtb.state())).result}`);
+/* --- moving between levels is free; only throwing a ball costs --- */
+before = await ballsNow();
+await page.locator('#level-title').click();
+await page.locator('#lvgrid button').first().click();
+check((await ballsNow()) === before, 'opening another level from the picker is free',
+  `${before} -> ${await ballsNow()}`);
+check(await page.locator('#select').isHidden(), 'and the picker closes');
+check((await page.evaluate(() => window.__gtb.state())).levelIndex === 0, 'and it really moved');
 
-/* --- at zero, entering or restarting is blocked --- */
+await page.evaluate(() => window.__gtb.setBalls(9));
+await winLevel(0);                                        // leaves the win card up
+before = await ballsNow();
+await page.locator('#btn-next').click();
+check((await ballsNow()) === before, 'and so is Next after a win',
+  `${before} -> ${await ballsNow()}`);
+check((await page.evaluate(() => window.__gtb.state())).levelIndex === 1, 'which advanced a level');
+
+/* --- at zero, Drop Ball turns into the way to get more --- */
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.setBalls(0); g.setLevel(0); g.setSeed(9);
+  g.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]);
+});
 let info = await page.evaluate(() => window.__gtb.ballInfo());
 check(info.balls === 0 && !info.stopShown,
-  'the stop screen is not up until you actually try to leave');
-const enteredAtZero = await page.evaluate(() => window.__gtb.enterLevel(3));
+  'the stop screen is not up until the player actually presses Drop Ball');
+check(!info.dropDisabled && !(await page.locator('#btn-drop').isDisabled()),
+  'Drop Ball stays enabled at zero - a dead grey button would not say why');
+await page.locator('#btn-drop').click();
+await page.waitForTimeout(200);
 info = await page.evaluate(() => window.__gtb.ballInfo());
-check(enteredAtZero === false, 'entering a level at zero balls is refused');
-check((await page.evaluate(() => window.__gtb.state())).levelIndex === 0,
-  'and the level does not change');
 check(info.stopShown && await page.locator('#noballs').isVisible(),
-  'the out-of-balls screen is shown instead');
-check(info.pendingEnter === 3, 'it remembers what was blocked', `${info.pendingEnter}`);
+  'pressing it at zero raises the out-of-balls screen');
+check((await page.evaluate(() => window.__gtb.state())).phase === 'plan',
+  'and drops nothing');
+check(info.balls === 0, 'and spends nothing', `${info.balls}`);
 
-/* the picker is blocked the same way */
+/* being broke must not trap you on the level you happen to be standing on */
 await page.evaluate(() => document.getElementById('btn-nb-close').click());
 await page.locator('#level-title').click();
 await page.locator('#lvgrid button').nth(1).click();
-check(await page.locator('#noballs').isVisible(), 'the picker is blocked at zero too');
-check((await page.evaluate(() => window.__gtb.state())).levelIndex === 0, 'and enters nothing');
+check((await page.evaluate(() => window.__gtb.state())).levelIndex === 1 &&
+      (await ballsNow()) === 0,
+  'an empty tank still lets you move around the game, just not throw a ball');
 
 /* --- the two offers on that screen --- */
+await page.evaluate(() => { window.__gtb.setLevel(0);
+  window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]); });
+await page.locator('#btn-drop').click();
+await page.waitForTimeout(200);
 info = await page.evaluate(() => window.__gtb.ballInfo());
 check(info.buyDisabled && await page.locator('#btn-buy').isDisabled(),
   'the Buy Balls button is visible but disabled');
@@ -1074,26 +1101,27 @@ check(/coming soon/i.test(info.buyText), 'and is labelled Coming Soon', info.buy
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'balls-empty.png') });
 ok('screenshot: balls-empty.png');
 
-const wasBlocked = (await page.evaluate(() => window.__gtb.ballInfo())).pendingEnter;
 await page.locator('#btn-ad').click();
 info = await page.evaluate(() => window.__gtb.ballInfo());
-check(info.balls === BALLS.adReward - 1,
-  `the ad grants +${BALLS.adReward}, then the resumed entry spends one`, `${info.balls}`);
+check(info.balls === BALLS.adReward, `the ad placeholder grants +${BALLS.adReward}`, `${info.balls}`);
 check(!info.stopShown && await page.locator('#noballs').isHidden(),
-  'the stop screen closes');
-check((await page.evaluate(() => window.__gtb.state())).levelIndex === wasBlocked,
-  'and it carries you into the level you were blocked on', `level index ${wasBlocked}`);
+  'and hands the board straight back');
+before = await ballsNow();
+await page.locator('#btn-drop').click();
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+check(before - (await ballsNow()) === 1, 'play resumes and the next drop spends normally',
+  `${before} -> ${await ballsNow()}`);
 
-/* "Not now" leaves you where you are, with the tank untouched */
+/* "Not now" leaves everything exactly as it was */
 await page.evaluate(() => window.__gtb.setBalls(0));
-await page.evaluate(() => window.__gtb.enterLevel(5));
+await page.locator('#btn-drop').click();
+await page.waitForTimeout(200);
 check(await page.locator('#noballs').isVisible(), 'blocked again at zero');
 await page.locator('#btn-nb-close').click();
 info = await page.evaluate(() => window.__gtb.ballInfo());
-check(!info.stopShown && info.balls === 0 && info.pendingEnter === null,
+check(!info.stopShown && info.balls === 0,
   'Not now dismisses it without spending or granting anything');
-check(!(await page.locator('#btn-drop').isDisabled()),
-  'and hands you back the level you were already in');
+check(!(await page.locator('#btn-drop').isDisabled()), 'and hands the board back');
 
 /* ---------------------------------------------------------------- */
 section('14. Daily spin wheel');
@@ -1256,12 +1284,14 @@ check((await page.evaluate(() => window.__gtb.spinInfo())).ready,
 
 /* --- the two systems are actually joined up --- */
 await seedSpin(SPIN.cooldownMs * 2);                 // 0 balls, a spin waiting
-await page.evaluate(() => window.__gtb.setLevel(0));
+await page.evaluate(() => { window.__gtb.setLevel(0);
+  window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]); });
 let joint = await page.evaluate(() => window.__gtb.ballInfo());
 check(joint.balls === 0, 'set up: out of balls with a spin available');
-check((await page.evaluate(() => window.__gtb.enterLevel(4))) === false,
-  'at zero, moving to another level is blocked');
-check(await page.locator('#noballs').isVisible(), 'the stop screen is up');
+await page.locator('#btn-drop').click();
+await page.waitForTimeout(200);
+check(await page.locator('#noballs').isVisible(),
+  'pressing Drop Ball at zero raises the stop screen');
 
 /* the wheel is reachable FROM the stop screen - it must not be buried under it */
 await page.locator('#btn-spin').click();
@@ -1273,8 +1303,12 @@ await page.locator('#btn-spin-close').click();
 joint = await page.evaluate(() => window.__gtb.ballInfo());
 check(joint.balls > 0, 'the wheel pays into the ball tank', `${joint.balls} balls`);
 await page.evaluate(() => document.getElementById('btn-nb-close').click());
-check((await page.evaluate(() => window.__gtb.enterLevel(4))) === true,
-  'and that is enough to unblock moving on');
+const beforeJoint = await page.evaluate(() => window.__gtb.balls());
+await page.locator('#btn-drop').click();
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+check((await page.evaluate(() => window.__gtb.balls())) === beforeJoint - 1,
+  'and that is enough to get back to dropping balls',
+  `${beforeJoint} -> ${await page.evaluate(() => window.__gtb.balls())}`);
 
 await browser.close();
 console.log(failures === 0 ? `\nAll checks passed.\nScreenshots in ${SHOTS}`

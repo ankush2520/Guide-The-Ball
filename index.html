@@ -315,8 +315,8 @@
     <div class="overlay" id="noballs" hidden>
       <div class="card">
         <div class="big nb">Out of balls</div>
-        <div class="sub">You need a ball to start a level.
-          Retries inside a level are always free.</div>
+        <div class="sub">Every drop costs one ball. Clear a level for the
+          first time to earn more, or spin the daily wheel.</div>
         <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
         <div class="row"><button id="btn-buy" disabled>Buy Balls &mdash; Coming Soon</button></div>
         <div class="row"><button id="btn-nb-close" class="quiet">Not now</button></div>
@@ -973,12 +973,10 @@ function saveProgress(){
 
 /* ============================================================
    BALLS  (localStorage)
-   Balls gate ATTEMPTS AT LEVELS, not drops. Entering or
-   restarting a level costs one; once you are inside it, every
-   adjust-and-drop is free, however many it takes. So the
-   resource paces how much of the game you move through in a
-   sitting, and never punishes you for iterating on the puzzle
-   in front of you - which is the whole activity.
+   One ball per DROP, win or lose - the fiction is a crate of
+   physical balls, and one you threw away is gone either way.
+   Moving between levels is free; the ball is spent at the
+   moment it is actually used.
    Faucets: the opening grant, a first-clear bonus per level,
    the daily wheel, and the rewarded ad.
    ============================================================ */
@@ -987,10 +985,9 @@ const BALLS_KEY      = 'gtb.balls.v1';
 // before the economy is ever felt, which is when we want it noticed.
 const STARTING_BALLS = 10;
 const AD_REWARD      = 3;
-// First-clear bonus by Act, indexed by floor((levelId - 1) / 5). Act 1 pays
-// one, so walking it is ball-neutral against the one-per-entry cost; every
-// later Act pays more than it costs, so a player who is progressing is
-// always gaining ground and only a player who is stuck ever runs dry.
+// First-clear bonus by Act, indexed by floor((levelId - 1) / 5). A level
+// solved first time pays for the drop that solved it; the deeper Acts pay
+// for a couple of failed attempts as well, which is roughly what they cost.
 const CLEAR_BONUS    = [1, 2, 2, 3];
 
 let balls = STARTING_BALLS;
@@ -1319,8 +1316,8 @@ function syncUI(){
   elTries.textContent = tries;
   elBalls.textContent = balls;
   chipBalls.classList.toggle('empty', balls <= 0);
-  // an empty tank never blocks Drop Ball - it blocks LEAVING for another
-  // level. A player on their last ball still gets to finish what they started.
+  // stays enabled at zero on purpose - see drop(), which turns the press into
+  // the out-of-balls screen rather than a dropped ball
   btnDrop.disabled  = !planning;
   btnUndo.disabled  = !planning || ramps.length === 0;
   btnClear.disabled = !planning || ramps.length === 0;
@@ -1347,34 +1344,8 @@ function setLevel(i){
   syncUI();
 }
 
-/** Dismiss the stop screen. `resume` completes the entry that raised it, so
-    topping up hands the player straight back to what they were doing. */
-function closeNoBalls(resume){
-  panelNoBalls.hidden = true;
-  const want = pendingEnter;
-  pendingEnter = null;
-  if (resume && want !== null && balls > 0) enterLevel(want);
-}
-
-/* Start a NEW attempt at a level. This is the ONLY thing that spends a ball,
-   and the only thing the empty tank blocks - boot does not go through here,
-   because resuming the level you are already sitting in is not entering one,
-   and charging for it would mean a reload could wall a player out of a game
-   they are mid-way through. There is nothing to farm by reloading either:
-   retries inside a level are already free and unlimited. */
-let pendingEnter = null;        // the level the stop screen is standing in for
-
-function enterLevel(i){
-  if (balls <= 0){
-    pendingEnter = i;
-    panelNoBalls.hidden = false;
-    return false;
-  }
-  balls--;
-  saveBalls();
-  setLevel(i);
-  return true;
-}
+/** Dismiss the stop screen and hand the board back. */
+function closeNoBalls(){ panelNoBalls.hidden = true; }
 
 /* ---------------- input: mouse + touch via pointer events ---------------- */
 function toBoard(e){
@@ -1549,6 +1520,10 @@ document.addEventListener('touchmove', function(e){
 /* ---------------- actions ---------------- */
 function drop(){
   if (phase !== 'plan') return;
+  /* Out of balls. Drop Ball is deliberately left ENABLED for this: a dead
+     grey button tells a player they are stuck without telling them what to
+     do about it, so the press opens the way to get more instead. */
+  if (balls <= 0){ panelNoBalls.hidden = false; return; }
   // steps 1 and 2 have both happened: a ramp went down, and this is the tap
   if (tutorialStep() === 2) tutorialDone();
   draft = null; capture = null; dragging = null; selected = -1;
@@ -1556,8 +1531,10 @@ function drop(){
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
   seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
-  // no cost here on purpose: the ball was spent entering this level, and
-  // every retry inside it - adjust, drop, adjust, drop - is free
+  // one ball per press, win or lose: what costs is throwing it, not the
+  // result. Committed before the drop runs, so an interrupted run still paid.
+  balls--;
+  saveBalls();
   tries++;
   phase = 'drop';
   overlay.hidden = true;
@@ -1652,11 +1629,9 @@ btnClear.addEventListener('click', function(){
    actually watched it, and the balls must only be granted if they did. */
 btnAd.addEventListener('click', function(){
   grantBalls(AD_REWARD);
-  closeNoBalls(true);        // and carry on into the level they were blocked on
+  closeNoBalls();            // straight back to the board, ready to drop
 });
-document.getElementById('btn-nb-close').addEventListener('click', function(){
-  closeNoBalls(false);
-});
+document.getElementById('btn-nb-close').addEventListener('click', closeNoBalls);
 
 document.getElementById('btn-retry').addEventListener('click', function(){
   phase = 'plan'; overlay.hidden = true; drop();
@@ -1664,7 +1639,7 @@ document.getElementById('btn-retry').addEventListener('click', function(){
 document.getElementById('btn-adjust').addEventListener('click', function(){
   phase = 'plan'; ball = null; overlay.hidden = true; syncUI();
 });
-btnNext.addEventListener('click', function(){ enterLevel(levelIndex + 1); });
+btnNext.addEventListener('click', function(){ setLevel(levelIndex + 1); });
 
 /* ---------------- level select ---------------- */
 const selPanel = document.getElementById('select');
@@ -1685,8 +1660,7 @@ function buildGrid(){
       sp.textContent = '\u2605'.repeat(got);
       b.appendChild(sp);
     }
-    // picking the level you are already on is a restart, and costs the same
-    b.addEventListener('click', function(){ if (enterLevel(i)) selPanel.hidden = true; });
+    b.addEventListener('click', function(){ setLevel(i); selPanel.hidden = true; });
     lvGrid.appendChild(b);
   }
   document.getElementById('sel-sub').textContent =
@@ -2523,12 +2497,10 @@ window.__gtb = {
   setBalls: function(n){ balls = Math.max(0, n | 0); saveBalls(); syncUI(); },
   clearBonus: clearBonus,
   cleared: function(){ return Object.assign({}, clearedLevels); },
-  enterLevel: enterLevel,          // the charging path the UI actually uses
   ballInfo: function(){
     const buy = document.getElementById('btn-buy');
     return { balls: balls,
-             dropBlocked: btnDrop.disabled, stopShown: !panelNoBalls.hidden,
-             pendingEnter: pendingEnter,
+             dropDisabled: btnDrop.disabled, stopShown: !panelNoBalls.hidden,
              buyDisabled: buy.disabled, buyText: buy.textContent };
   },
   setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
@@ -2540,8 +2512,7 @@ window.__gtb = {
                                   localStorage.removeItem(SPIN_KEY); } catch (e){}
                             highest = 0; bestStars = {};
                             balls = STARTING_BALLS; saveBalls();
-                            clearedLevels = {}; pendingEnter = null;
-                            panelNoBalls.hidden = true;
+                            clearedLevels = {}; panelNoBalls.hidden = true;
                             spinLast = 0; spinning = false; saveSpin(0);
                             tutorialSeen = false; obstacleTipSeen = false;
                             syncTutorial(); syncSpinUI(); syncUI(); },
