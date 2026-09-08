@@ -36,18 +36,44 @@
     color:var(--ink);font:500 14px/1.45 var(--font);
     font-variant-numeric:tabular-nums;
     -webkit-font-smoothing:antialiased;
-    display:flex;justify-content:center;align-items:flex-start;padding:10px;
+    display:flex;justify-content:center;align-items:flex-start;
+    /* Safe area on ALL FOUR sides, not just the bottom. The CrazyGames App
+       runs the game genuinely fullscreen, so the notch and the rounded
+       corners are ours to avoid - and in landscape the cutout is on a SIDE,
+       which a bottom-only inset does nothing about. Paired with
+       viewport-fit=cover in the meta tag, which is already set. */
+    padding:calc(10px + env(safe-area-inset-top))
+            calc(10px + env(safe-area-inset-right))
+            calc(10px + env(safe-area-inset-bottom))
+            calc(10px + env(safe-area-inset-left));
     /* svh, NOT dvh: dvh follows Safari's toolbar as it collapses under your
        finger, which re-lays out the stage and slides the board sideways in
        the middle of drawing a ramp. svh stays put. */
     height:100vh;height:100svh;max-height:100svh;
-    padding-bottom:calc(10px + env(safe-area-inset-bottom));
     /* a phone must never pan, rubber-band, double-tap-zoom or start a text
        selection while a finger is dragging a ramp across the board */
     touch-action:manipulation;
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
   }
-  .app{width:min(430px,100%);height:100%;display:flex;flex-direction:column;gap:9px}
+  /* The board is 3:5 and the column is height-driven, so the width the app
+     can usefully occupy follows the viewport HEIGHT, not its width. A flat
+     430px cap left a 1920x1080 desktop showing a 428px board with 1490px of
+     empty screen either side of it; below about 900px tall the cap never
+     binds anyway, because the board runs out of height first. */
+  .app{width:min(100%, max(430px, 52vh));height:100%;
+       display:flex;flex-direction:column;gap:9px}
+
+  /* Landscape phones and small windows - CrazyGames requires legibility down
+     to 800x450, where the board is squeezed by the chrome above and below it.
+     Give the chrome less room so the board keeps more. */
+  @media (max-height:520px){
+    .app{gap:6px}
+    .hud{min-height:28px}
+    .controls button{padding:8px 10px;font-size:13px}
+    .flash{height:19px;line-height:15px;font-size:12px;margin-bottom:-4px}
+    .iconbtn,.iconbtn.spin{height:27px}
+    .iconbtn{width:27px}
+  }
 
   .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;
        flex:none;min-height:34px}
@@ -492,8 +518,7 @@ const Sound = (function(){
   /* Anything other than 'running' means silence, so retry on every state we
      do not want - 'suspended' before the first gesture, 'interrupted' after
      iOS has taken the audio away from us. */
-  function wake(){
-    if (!ensure()) return;
+  function resumeCtx(){
     if (ctx.state !== 'running'){
       let p = null;
       try { p = ctx.resume(); } catch (e){}
@@ -501,11 +526,30 @@ const Sound = (function(){
     }
     startMusic();
   }
+  /* ONLY a real user gesture may reach this, because only a gesture may
+     CONSTRUCT the context. iOS counts construction outside one as an
+     autoplay attempt, and a context created that way can be left unable to
+     start for the life of the page - which is the failure where sound is
+     silently dead forever and nothing in the console says why. */
+  function wake(){
+    if (!ensure()) return;
+    resumeCtx();
+  }
+  /* For everything that is NOT a gesture - coming back from the background,
+     a bfcache restore, a sound effect finding the context asleep. It nudges
+     a context that already exists and never builds one, so the worst case is
+     that it does nothing and the player's next tap does the job. */
+  function nudge(){
+    if (!ctx) return;
+    resumeCtx();
+  }
 
   return {
     /* called from the first real gesture, and from every one after that
        until the context is actually running (iOS can refuse the first) */
     unlock: wake,
+    /* not a gesture: may only nudge a context the player already unlocked */
+    nudge: nudge,
     /* backgrounding: drop the scheduler so we do not wake up owing the audio
        clock a burst of notes that all fire at once */
     pause: stopMusic,
@@ -520,7 +564,8 @@ const Sound = (function(){
     /* SFX 1 - the ball struck something solid. */
     bounce: function(kind){
       if (muted) return;
-      if (!ctx || ctx.state !== 'running'){ wake(); return; }
+      // driven by the physics loop, not by a tap - so nudge, never construct
+      if (!ctx || ctx.state !== 'running'){ nudge(); return; }
       const t = ctx.currentTime;
       if (t - lastBounce < 0.035) return;      // a scatter of hits is one sound
       lastBounce = t;
@@ -536,7 +581,7 @@ const Sound = (function(){
     /* SFX 2 - the target swallowed the ball. */
     win: function(){
       if (muted) return;
-      if (!ctx || ctx.state !== 'running'){ wake(); return; }
+      if (!ctx || ctx.state !== 'running'){ nudge(); return; }
       const t = ctx.currentTime, notes = [69, 73, 76, 81];   // A major arpeggio
       for (let i = 0; i < notes.length; i++)
         tone(sfx, mtof(notes[i]), t + i * 0.085, 0.42, 0.22, 'triangle');
@@ -708,7 +753,9 @@ const LEVELS = [
   //     winning line took nine obstacle hits and failed on one seed in seven.
   //     NOTHING guards the mouth now, and nothing should: the approach is
   //     where difficulty belongs, because a plan can account for it.
-  //     The winning line touches no obstacle at all and wins on every seed.
+  //     The widest winning line touches no obstacle at all and wins on every
+  //     seed; other, narrower routes may clip one, which is a choice the
+  //     player makes rather than a toll the level charges.
   { id:20, name:"Master's Drop", maxBlocks:3, targetType:'ENCLOSED',
     spawn:{x:92,y:40},
     obstacles:[{x:196,y:330,r:34},{x:300,y:430,r:34},{x:140,y:470,r:28}],
@@ -2435,10 +2482,13 @@ btnSound.addEventListener('click', function(e){ Sound.toggle(); paintSoundBtn();
 ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach(function(name){
   window.addEventListener(name, function(){ Sound.unlock(); }, true);
 });
+/* Neither of these is a user gesture - pageshow in particular fires on the
+   ordinary first load - so they nudge rather than unlock. Building the
+   context here is what would break iOS. */
 document.addEventListener('visibilitychange', function(){
-  if (document.hidden) Sound.pause(); else Sound.unlock();
+  if (document.hidden) Sound.pause(); else Sound.nudge();
 });
-window.addEventListener('pageshow', function(){ Sound.unlock(); });
+window.addEventListener('pageshow', function(){ Sound.nudge(); });
 paintSoundBtn();
 drawWheel();
 syncSpinUI();

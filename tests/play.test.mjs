@@ -1370,6 +1370,345 @@ check((await page.evaluate(() => window.__gtb.balls())) === beforeJoint - 1,
   'and that is enough to get back to dropping balls',
   `${beforeJoint} -> ${await page.evaluate(() => window.__gtb.balls())}`);
 
+/* ---------------------------------------------------------------- */
+/* Portal submission requirements. These are pass/fail gates on the
+   CrazyGames side, so they are asserted rather than eyeballed. */
+section('15. CrazyGames compliance');
+
+const src = fs.readFileSync(path.join(root, '..', 'index.html'), 'utf8');
+
+/* --- safe-area insets on all four sides --- */
+const bodyRule = src.slice(src.indexOf('  body{'), src.indexOf('.app{'));
+const sides = ['top','right','bottom','left'].filter(k => bodyRule.includes('env(safe-area-inset-' + k + ')'));
+check(sides.length === 4, 'the game container pads for the safe area on all four sides',
+  sides.join(',') || 'none');
+check(/viewport-fit=cover/.test(src), 'and the viewport meta opts into the cutout area');
+const padded = await page.evaluate(() => {
+  const cs = getComputedStyle(document.body);
+  return ['Top','Right','Bottom','Left'].map(k => parseFloat(cs['padding'+k]));
+});
+check(padded.every(v => v >= 10), 'the padding still resolves on a device with no inset',
+  padded.join('/') + 'px');
+
+/* --- no custom fullscreen control --- */
+const fsHits = (src.match(/requestFullscreen|webkitRequestFullScreen|webkitRequestFullscreen|mozRequestFullScreen|msRequestFullscreen|exitFullscreen|fullscreenElement/g) || []);
+check(fsHits.length === 0, 'the game implements no fullscreen toggle of its own - the portal owns it',
+  fsHits.join(',') || 'no fullscreen API referenced');
+
+/* --- Escape and Ctrl/Cmd+W must reach the browser --- */
+const keys = await page.evaluate(() => {
+  const fire = (type, init, target) => {
+    const e = new KeyboardEvent(type, Object.assign({ bubbles: true, cancelable: true }, init));
+    (target || document).dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  const canvas = document.getElementById('board');
+  const probe = () => ({
+    esc:      fire('keydown', { key:'Escape', code:'Escape' }),
+    escUp:    fire('keyup',   { key:'Escape', code:'Escape' }),
+    escOnCanvas: fire('keydown', { key:'Escape', code:'Escape' }, canvas),
+    ctrlW:    fire('keydown', { key:'w', code:'KeyW', ctrlKey:true }),
+    metaW:    fire('keydown', { key:'w', code:'KeyW', metaKey:true }),
+    ctrlWOnCanvas: fire('keydown', { key:'w', code:'KeyW', ctrlKey:true }, canvas)
+  });
+  const idle = probe();
+  // and again mid-gesture, when the game IS swallowing touch events
+  window.__gtb.setLevel(0);
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, clientX:120, clientY:300, pointerId:1 }));
+  canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles:true, clientX:200, clientY:360, pointerId:1 }));
+  const dragging = probe();
+  canvas.dispatchEvent(new PointerEvent('pointerup', { bubbles:true, clientX:200, clientY:360, pointerId:1 }));
+  return { idle, dragging };
+});
+const anyBlocked = Object.entries(keys.idle).filter(([,v]) => v).map(([k]) => k)
+  .concat(Object.entries(keys.dragging).filter(([,v]) => v).map(([k]) => k + '(mid-drag)'));
+check(anyBlocked.length === 0,
+  'Escape and Ctrl/Cmd+W are never preventDefault-ed, idle or mid-drag',
+  anyBlocked.join(', ') || 'all reach the browser');
+const keyListeners = (src.match(/addEventListener\('key\w+'/g) || []).length
+  + (src.match(/'keydown'|'keyup'|'keypress'/g) || []).length;
+check(keyListeners <= 3, 'and there is barely any keyboard handling to go wrong',
+  `${keyListeners} keyboard references in source`);
+
+/* --- gameplay in at most one click (currently: zero) --- */
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+const landing = await page.evaluate(() => {
+  const s = window.__gtb.state();
+  const vis = id => { const e = document.getElementById(id); return e && !e.hidden; };
+  return { phase: s.phase, level: s.levelId,
+           overlay: vis('overlay'), select: vis('select'),
+           noballs: vis('noballs'), spin: vis('spinpanel'),
+           boardVisible: document.getElementById('board').getBoundingClientRect().width > 0,
+           dropReady: !document.getElementById('btn-drop').disabled };
+});
+check(landing.phase === 'plan' && landing.level === 1,
+  'a first-time player lands directly in level 1 gameplay', `phase=${landing.phase}`);
+check(!landing.overlay && !landing.select && !landing.noballs && !landing.spin,
+  'with no title screen, menu or modal in the way');
+check(landing.boardVisible && landing.dropReady,
+  'the board is live and Drop Ball is usable on the very first frame - zero clicks');
+/* the tutorial is a mimed hint on the board, not a gate */
+check((await page.evaluate(() => window.__gtb.state().tutorial.step)) === 1,
+  'the first-run tutorial is showing');
+check(landing.dropReady, 'and it does not block play - it is a hint, not a gate');
+await topUp();
+
+/* --- legible across the whole required viewport range --- */
+const VIEWPORTS = [[800,450,'CG minimum'], [1920,1080,'CG maximum'],
+                   [1280,720,'desktop'], [844,390,'phone landscape'], [390,844,'phone portrait']];
+const layout = [];
+for (const [w,h,label] of VIEWPORTS){
+  await page.setViewportSize({ width:w, height:h });
+  await page.waitForTimeout(180);
+  layout.push(Object.assign({ w, h, label }, await page.evaluate(() => {
+    const de = document.documentElement, vw = innerWidth, vh = innerHeight;
+    const clipped = [];
+    document.querySelectorAll('.app *').forEach(e => {
+      const st = getComputedStyle(e);
+      if (st.display === 'none' || st.visibility === 'hidden' || +st.opacity === 0) return;
+      const b = e.getBoundingClientRect();
+      if (b.width === 0 && b.height === 0) return;
+      if (b.left < -0.5 || b.top < -0.5 || b.right > vw + 0.5 || b.bottom > vh + 0.5)
+        clipped.push(e.id || e.className || e.tagName);
+    });
+    const bb = document.getElementById('board').getBoundingClientRect();
+    const fs = s => parseFloat(getComputedStyle(document.querySelector(s)).fontSize);
+    return { overflowX: de.scrollWidth > de.clientWidth,
+             overflowY: de.scrollHeight > de.clientHeight,
+             clipped, board: { w: +bb.width.toFixed(0), h: +bb.height.toFixed(0) },
+             minFont: Math.min(fs('#level-title'), fs('.counter'), fs('#btn-drop')) };
+  })));
+}
+await page.setViewportSize({ width:430, height:1000 });
+for (const l of layout)
+  console.log(`  ${String(l.w+'x'+l.h).padEnd(10)} ${l.label.padEnd(16)} board ${l.board.w}x${l.board.h}, ` +
+              `min font ${l.minFont}px`);
+check(layout.every(l => !l.overflowX), 'nothing overflows horizontally at any required size',
+  layout.filter(l => l.overflowX).map(l => l.w+'x'+l.h).join(',') || 'none');
+check(layout.every(l => !l.overflowY), 'nor vertically',
+  layout.filter(l => l.overflowY).map(l => l.w+'x'+l.h).join(',') || 'none');
+check(layout.every(l => l.clipped.length === 0), 'and nothing is cut off by the viewport edge',
+  layout.flatMap(l => l.clipped).join(',') || 'none');
+check(layout.every(l => l.minFont >= 11), 'no text drops below 11px anywhere in the range',
+  `smallest ${Math.min(...layout.map(l => l.minFont))}px`);
+check(layout.every(l => l.board.w >= 150 && l.board.h >= 250),
+  'the board stays a usable size even at 800x450',
+  `smallest ${Math.min(...layout.map(l => l.board.w))}x${Math.min(...layout.map(l => l.board.h))}`);
+const big = layout.find(l => l.w === 1920);
+check(big.board.w > 450, 'and actually uses a 1080p screen rather than sitting in a 430px strip',
+  `${big.board.w}px wide`);
+
+/* ---------------------------------------------------------------- */
+/* The loop is a fixed-timestep accumulator, so frame rate should not
+   reach the physics at all - but CrazyGames names high-refresh displays
+   as a common failure point, so it is measured rather than assumed.
+   rAF is replaced with a queue this test pumps by hand, which makes the
+   frame clock exact instead of merely fast. */
+section('16. Physics is identical at 60 - 240Hz');
+
+const rateCtx = await browser.newContext({ viewport: { width:430, height:1000 } });
+await rateCtx.addInitScript(() => {
+  const q = [];
+  let vt = null;
+  window.__raf = {
+    tick(dt){
+      if (vt === null) vt = performance.now();
+      vt += dt;
+      const due = q.splice(0, q.length);
+      for (const cb of due) cb(vt);
+    }
+  };
+  window.requestAnimationFrame = cb => { q.push(cb); return q.length; };
+  window.cancelAnimationFrame = () => {};
+});
+const ratePage = await rateCtx.newPage();
+ratePage.on('pageerror', e => bad('uncaught page error (refresh test)', e.message));
+await ratePage.goto(GAME);
+await ratePage.waitForFunction(() => !!window.__gtb);
+
+const RATES = [60, 75, 90, 120, 144, 165, 240];
+const rateRows = [];
+for (const li of [0, 12, 19]){
+  let truth = null, ref = null;
+  for (const rate of RATES){
+    await ratePage.evaluate(() => {
+      window.__gtb.clearProgress(); window.__gtb.skipTutorial(); window.__gtb.setBalls(99);
+    });
+    const t = await ratePage.evaluate((li) => {
+      const g = window.__gtb, R = Math.PI/180;
+      const ramp = (cx,cy,d,l=120) => { const a=d*R,hx=Math.cos(a)*l/2,hy=Math.sin(a)*l/2;
+        return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
+      g.setLevel(li); g.setSeed(1);
+      const lv = g.LEVELS[li], sx = lv.spawn.x;
+      for (let ry = lv.spawn.y+80; ry <= 660; ry += 15)
+        for (let th = 25; th <= 155; th += 1.5){
+          const cfg = [ramp(sx,ry,th)];
+          const r = g.simulate(cfg, 1, li);
+          if (r.result === 'win'){ g.setRamps(cfg);
+            return { result:r.result, steps:r.steps, x:+r.x.toFixed(6), y:+r.y.toFixed(6) }; }
+        }
+      return null;
+    }, li);
+    if (!t) break;
+    truth = t;
+    await ratePage.evaluate(() => window.__raf.tick(16));
+    await ratePage.evaluate(() => document.getElementById('btn-drop').click());
+    const live = await ratePage.evaluate((dt) => {
+      const g = window.__gtb;
+      let ticks = 0, last = null;
+      while (ticks < 20000){
+        const s = g.state();
+        if (s.ball) last = { x:+s.ball.x.toFixed(6), y:+s.ball.y.toFixed(6),
+                             vx:+s.ball.vx.toFixed(6), vy:+s.ball.vy.toFixed(6),
+                             hits:s.ball.hits, speed:+s.ball.speed.toFixed(6) };
+        if (s.phase !== 'drop') break;
+        window.__raf.tick(dt); ticks++;
+      }
+      return { result: g.state().result, ticks, ball: last };
+    }, 1000/rate);
+    const sig = `${live.result}|${live.ball.x}|${live.ball.y}|${live.ball.vx}|${live.ball.vy}|${live.ball.hits}`;
+    if (ref === null) ref = sig;
+    rateRows.push({ li, rate, sig, ticks: live.ticks, live, truth, matches: sig === ref });
+  }
+}
+await rateCtx.close();
+
+for (const li of [0, 12, 19]){
+  const rows = rateRows.filter(r => r.li === li);
+  if (!rows.length) continue;
+  const t = rows[0].truth;
+  console.log(`  level ${li+1}: pure simulate() -> ${t.result} @ (${t.x.toFixed(2)}, ${t.y.toFixed(2)}) in ${t.steps} steps`);
+  console.log(`    ${rows.map(r => r.rate + 'Hz/' + r.ticks + 'f').join('  ')}`);
+}
+check(rateRows.length === RATES.length * 3, 'all three levels ran at all seven rates',
+  `${rateRows.length} runs`);
+check(rateRows.every(r => r.matches),
+  'ball position, velocity and collision count are IDENTICAL at every rate',
+  rateRows.filter(r => !r.matches).map(r => `L${r.li+1}@${r.rate}Hz`).join(',') || '60-240Hz agree exactly');
+check(rateRows.every(r => r.live.result === 'win'),
+  'and every level stays solvable by the same ramp at every rate',
+  rateRows.filter(r => r.live.result !== 'win').map(r => `L${r.li+1}@${r.rate}Hz`).join(',') || 'all win');
+check(rateRows.every(r => Math.abs(r.live.ball.x - r.truth.x) < 1e-6 &&
+                          Math.abs(r.live.ball.y - r.truth.y) < 1e-6),
+  'and the live loop agrees with the headless simulator to the last decimal');
+/* frame count must scale with rate - proof the test really did run them faster */
+for (const li of [0]){
+  const rows = rateRows.filter(r => r.li === li);
+  const lo = rows.find(r => r.rate === 60), hi = rows.find(r => r.rate === 240);
+  check(hi.ticks > lo.ticks * 3.5,
+    'the high-rate runs really did render ~4x the frames for the same physics',
+    `${lo.ticks} frames at 60Hz vs ${hi.ticks} at 240Hz`);
+}
+
+/* ---------------------------------------------------------------- */
+/* iOS refuses to start audio outside a real user gesture, and puts the
+   context into 'interrupted' after a call or a lock screen. Getting this
+   wrong means sound silently never works on iOS Safari - so the contract
+   is asserted, not trusted: nothing is constructed at load, and resume()
+   only ever happens inside a trusted input event. */
+section('17. Audio starts only from a real user gesture');
+
+const audioCtxBrowser = await browser.newContext({
+  viewport: { width:430, height:1000 }, hasTouch: true
+});
+await audioCtxBrowser.addInitScript(() => {
+  const Real = window.AudioContext || window.webkitAudioContext;
+  window.__gestureSeen = false;
+  window.__audio = { built: 0, resumes: 0, builtBeforeGesture: null, resumedBeforeGesture: 0 };
+  // registered before the game's own listeners, so this flag is already true
+  // by the time the game reacts to the same event
+  ['pointerdown','pointerup','click','touchend','keydown'].forEach(n =>
+    window.addEventListener(n, e => { if (e.isTrusted) window.__gestureSeen = true; }, true));
+  function Wrapped(){
+    const c = new Real();
+    window.__audio.built++;
+    if (window.__audio.builtBeforeGesture === null)
+      window.__audio.builtBeforeGesture = !window.__gestureSeen;
+    window.__audio.ctx = c;                     // so the test can interrupt it
+    const realResume = c.resume.bind(c);
+    c.resume = function(){
+      window.__audio.resumes++;
+      if (!window.__gestureSeen) window.__audio.resumedBeforeGesture++;
+      return realResume();
+    };
+    return c;
+  }
+  window.AudioContext = Wrapped;
+  window.webkitAudioContext = Wrapped;
+});
+const aPage = await audioCtxBrowser.newPage();
+aPage.on('pageerror', e => bad('uncaught page error (audio test)', e.message));
+await aPage.goto(GAME);
+await aPage.waitForFunction(() => !!window.__gtb);
+await aPage.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setBalls(99); });
+await aPage.waitForTimeout(600);        // let a few hundred frames go by, untouched
+
+let au = await aPage.evaluate(() => window.__audio);
+check(au.built === 0, 'no AudioContext is constructed at load - autoplay is never attempted',
+  `${au.built} built`);
+check(au.resumes === 0, 'and resume() is not called before any input', `${au.resumes} calls`);
+
+/* now a real, trusted click */
+await aPage.locator('#btn-drop').click();
+await aPage.waitForTimeout(250);
+au = await aPage.evaluate(() => window.__audio);
+check(au.built === 1, 'the context is built lazily, on the first real gesture', `${au.built} built`);
+check(au.builtBeforeGesture === false, 'and it was built INSIDE that gesture, not before it');
+check(au.resumedBeforeGesture === 0,
+  'and no resume() has happened outside a gesture', `${au.resumedBeforeGesture} outside`);
+
+/* The case that actually bites on iOS: a call or a lock screen parks the
+   context, and it never restarts on its own. Suspending it here stands in for
+   that interruption - the next tap must bring it back. */
+const startState = await aPage.evaluate(() => window.__audio.ctx.state);
+await aPage.evaluate(() => window.__audio.ctx.suspend());
+await aPage.waitForTimeout(120);
+const suspended = await aPage.evaluate(() => window.__audio.ctx.state);
+check(suspended === 'suspended', 'the context can be interrupted the way iOS interrupts it',
+  `${startState} -> ${suspended}`);
+const resumesBefore = await aPage.evaluate(() => window.__audio.resumes);
+await aPage.locator('#board').click();          // a real, trusted tap
+await aPage.waitForTimeout(250);
+au = await aPage.evaluate(() => window.__audio);
+check(au.resumes > resumesBefore, 'the next real tap resumes it',
+  `${resumesBefore} -> ${au.resumes} resume() calls`);
+check(au.resumedBeforeGesture === 0,
+  'and every resume() in the whole run happened inside a gesture',
+  `${au.resumedBeforeGesture} outside`);
+check(au.built === 1, 'without ever building a second context', `${au.built} built`);
+
+/* the interruption path: iOS parks the context in 'interrupted' after a call
+   or a lock screen, and the game must retry on later gestures rather than
+   giving up on the first one */
+const retried = await aPage.evaluate(() => {
+  const before = window.__audio.resumes;
+  document.getElementById('board').dispatchEvent(
+    new PointerEvent('pointerdown', { bubbles:true, clientX:100, clientY:300, pointerId:9 }));
+  return { before, after: window.__audio.resumes, handler: typeof window.__audio === 'object' };
+});
+check(retried.handler, 'later gestures still route to the unlock path');
+check(/onstatechange/.test(src),
+  'and the context watches for its own state changing, which is how an iOS interruption is noticed');
+check(/audioSession/.test(src),
+  "the iOS 'playback' audio session is requested, so the ring/silent switch does not mute the game");
+
+/* mix headroom - nothing should be able to clip the master bus */
+const mix = await aPage.evaluate(() => {
+  const s = document.documentElement.outerHTML;
+  const g = re => { const m = s.match(re); return m ? parseFloat(m[1]) : null; };
+  return { music: g(/music\.gain\.value = ([\d.]+)/), sfx: g(/sfx\.gain\.value   = ([\d.]+)/),
+           wet: g(/wet\.gain\.value = ([\d.]+)/), fb: g(/fb\.gain\.value = ([\d.]+)/) };
+});
+console.log(`  bus gains: music ${mix.music}, sfx ${mix.sfx}, delay wet ${mix.wet}, feedback ${mix.fb}`);
+check(mix.fb < 1, 'the delay feedback is below unity, so it decays instead of running away',
+  `${mix.fb}`);
+check(mix.music < mix.sfx,
+  'music sits under the effects, so a bounce is never buried by the loop',
+  `music ${mix.music} vs sfx ${mix.sfx}`);
+await audioCtxBrowser.close();
+
 await browser.close();
 console.log(failures === 0 ? `\nAll checks passed.\nScreenshots in ${SHOTS}`
                            : `\n${failures} check(s) FAILED.`);

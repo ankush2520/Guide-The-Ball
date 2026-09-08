@@ -142,6 +142,54 @@ asked to draw the wheel as well.
     tests/tune.mjs     physics tuning rig — compares SPEED values on level health
     tests/levels.mjs   per-level design harness — winnability, precision, triviality
 
+## Portal compliance (CrazyGames)
+
+Asserted in section 15-17 of the suite, because these are pass/fail gates on
+the portal's side rather than matters of taste.
+
+- **Safe area** — the container pads for `env(safe-area-inset-*)` on **all
+  four** sides, not just the bottom. The App runs the game genuinely
+  fullscreen, and in landscape the cutout is on a *side*. Needs
+  `viewport-fit=cover`, which the meta tag sets.
+- **800x450 to 1920x1080** — checked at both ends plus three sizes between:
+  no overflow, nothing clipped, nothing under 11px. `.app` is capped at
+  `max(430px, 52vh)` rather than a flat 430px, because a 3:5 board is always
+  height-driven — the flat cap left a 1080p desktop showing a 428px board with
+  1490px of empty screen. Under ~900px tall the cap never binds anyway.
+- **High refresh rates** — the loop is a fixed-timestep accumulator, so frame
+  rate cannot reach the physics. Verified rather than assumed: `rAF` is
+  replaced with a queue the test pumps by hand, and ball position, velocity
+  and collision count come out bit-identical from 60Hz to 240Hz, matching the
+  headless simulator to the last decimal.
+- **One click to gameplay** — it is zero. Boot goes straight to the player's
+  current level with no title screen; the first-run tutorial is a mimed hint
+  drawn on the board, not a gate. Keep it that way if a menu is ever added.
+- **No custom fullscreen** — the game references no fullscreen API at all.
+  The portal owns that control; adding one is prohibited.
+- **Escape / Ctrl+W** — never `preventDefault`-ed, idle or mid-drag. There is
+  exactly one keyboard listener in the game (audio unlock) and it takes no
+  event argument, so it cannot block anything. Every `preventDefault` in the
+  file is pointer, touch or iOS pinch-gesture.
+
+### Audio and iOS
+
+Audio is built (synthesised WebAudio, no files). The rule that matters:
+**only a real user gesture may CONSTRUCT the AudioContext.** iOS treats
+construction outside one as an autoplay attempt and can leave that context
+unable to start for the life of the page — sound silently dead forever, with
+nothing in the console to say why.
+
+So `Sound.unlock()` is wired to trusted input events only. Everything that is
+*not* a gesture — `pageshow`, `visibilitychange`, and the SFX calls that come
+off the physics loop — goes through `Sound.nudge()`, which resumes a context
+that already exists and never builds one. `pageshow` in particular fires on
+the ordinary first load; wiring it to `unlock()` is what made the game build
+and resume a context before any input, which is the bug section 17 caught.
+
+`ctx.onstatechange` is how an iOS interruption (a call, the lock screen) is
+noticed, and `navigator.audioSession = 'playback'` stops the ring/silent
+switch muting the game.
+
 ## Physics
 
 The ball's **speed is constant for the entire drop** — only direction changes.
