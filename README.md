@@ -17,7 +17,7 @@ ready for CrazyGames / Poki / Softgames.
 ## Levels
 
 `LEVELS[]` in [index.html](index.html) holds all 20: `id`, `name`, `maxBlocks`,
-`spawn`, `obstacles`, `target {x,y,r}`, `targetType`, and an optional `move`.
+`spawn`, `obstacles`, `target {x,y,r}` and `targetType`.
 
 **Target types.** Wall segments are generated from `targetType` by `buildWalls()`
 around the circular target and are **real collidable geometry** — the same
@@ -26,23 +26,20 @@ never change its speed. `OPEN`, `SIDE_WALL`, `POCKET`, `NARROW_GAP`, `ENCLOSED`.
 For `NARROW_GAP`, `gapW` is the **clear window the ball can pass through**, not
 the raw span between bars.
 
-**Moving targets** (levels 17, 19, 20 only) glide in straight lines between
-fixed waypoints at constant speed, looping `A→B→A` or `A→B→C→A`. Pure linear
-interpolation — nothing in this game rotates or orbits.
-
-    move: { points:[{x,y},{x,y}], speed: 60 }   // speed in px/sec
-
-`targetAt(lv, t)` is evaluated every step from `b.t0 + steps/60`, and any
-attached walls are rebuilt from the live centre, so they travel with the target
-as a rigid unit. The clock runs during planning too, so the path is visible
-before you commit. `simulate(ramps, seed, level, t0)` takes the drop phase, so
-the solver can sweep drop timing.
+**Every target is static.** Levels 17, 19 and 20 used to glide between
+waypoints; that was removed because a target sliding through the space a ramp
+occupies made an ordinary collision read as a bug. Each level's walls are
+therefore built once at boot into `lv.walls` and never rebuilt. The difficulty
+those three levels lost is paid back with tighter ramp budgets and denser
+boards — see the header comments on each. If movement is ever wanted back, the
+constraint it needs is that no waypoint path may cross the region the player
+draws ramps in.
 
 Progress (highest level reached) persists in `localStorage` under
 `gtb.progress.v1`; blocked storage degrades to "no saving", never a crash.
 Tap the level name to open the level picker.
 
-    node tests/levels.mjs 0 19    # per-level winnability, precision, timing
+    node tests/levels.mjs 0 19    # per-level winnability, precision, triviality
 
 ## Layout
 

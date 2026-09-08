@@ -522,69 +522,37 @@ const LEVELS = [
     spawn:{x:216,y:40}, obstacles:[{x:302,y:340,r:34},{x:248,y:482,r:36},{x:370,y:566,r:32}],
     target:{x:286,y:596,r:46} },
 
-  // 17. FIRST MOVING TARGET - slow, short glide, plus its SIDE_WALL.
-  { id:17, name:'Full House', maxBlocks:3, targetType:'SIDE_WALL', wallSide:'left',
+  // 17. SIDE_WALL on a busy board. The wall is on the spawn side, so the route
+  //     has to cross and come back in from the right. Budget is 2, not 3: this
+  //     level used to lean on a moving target, and the tighter budget is what
+  //     replaces it - three ramps left far too much slack once it stood still.
+  { id:17, name:'Full House', maxBlocks:2, targetType:'SIDE_WALL', wallSide:'left',
     spawn:{x:128,y:40}, obstacles:[{x:240,y:380,r:36},{x:330,y:502,r:34}],
-    target:{x:300,y:660,r:46},
-    move:{ points:[{x:300,y:660},{x:392,y:660}], speed:32 } },
+    target:{x:300,y:660,r:46} },
 
   // 18. stationary on purpose - precision without timing, for pacing.
   { id:18, name:'No Room', maxBlocks:2, targetType:'NARROW_GAP', gapW:38,
     spawn:{x:400,y:40}, obstacles:[{x:300,y:360,r:36},{x:232,y:482,r:34},{x:118,y:462,r:32}],
     target:{x:128,y:566,r:38} },
 
-  // 19. moving faster and further, busiest board in the set.
+  // 19. busiest board in the set - a deep pocket behind four obstacles.
   { id:19, name:'The Gauntlet', maxBlocks:3, targetType:'POCKET', wallSide:'right',
     spawn:{x:248,y:40},
     obstacles:[{x:158,y:320,r:32},{x:302,y:360,r:34},{x:198,y:470,r:34},{x:344,y:520,r:32}],
-    target:{x:150,y:726,r:44},
-    move:{ points:[{x:150,y:726},{x:356,y:726}], speed:60 } },
+    target:{x:150,y:726,r:44} },
 
-  // 20. finale - three waypoints, so the path is longer and less predictable.
+  // 20. finale - the smallest cup in the game, reached across a busy board.
+  //     The cup's mouth spans x 120..220 above y 508, and the fourth obstacle
+  //     sits directly on it. That obstacle is doing the work the old moving
+  //     target used to: with the mouth open, a ramp placed level with it tipped
+  //     the ball straight in over a 33 degree window - easier than level 1.
+  //     Capped, the finale is back to a 6 degree window.
   { id:20, name:"Master's Drop", maxBlocks:3, targetType:'ENCLOSED',
     spawn:{x:92,y:40},
-    obstacles:[{x:200,y:330,r:34},{x:332,y:430,r:34},{x:152,y:452,r:32}],
-    target:{x:170,y:620,r:34},
-    move:{ points:[{x:170,y:620},{x:270,y:560},{x:366,y:620}], speed:110 } }
+    obstacles:[{x:200,y:330,r:34},{x:332,y:430,r:34},
+               {x:140,y:436,r:28},{x:170,y:502,r:26}],
+    target:{x:170,y:620,r:34} }
 ];
-
-/* ---------- target motion ----------
-   A moving target glides in STRAIGHT LINES between fixed waypoints at a
-   constant speed, looping A->B->A for two points or A->B->C->A for three.
-   Pure linear interpolation - nothing in this game rotates or orbits.
-   Position is a function of time, evaluated every frame during planning as
-   well as during the drop, so the player can watch the path before committing.
-   Motion parameters live in each level's `move` block, never inline. */
-function initMove(lv){
-  if (!lv.move) return;
-  const pts = lv.move.points;
-  const segs = [];
-  let total = 0;
-  for (let i = 0; i < pts.length; i++){
-    const a = pts[i], b = pts[(i + 1) % pts.length];
-    const L = Math.hypot(b.x - a.x, b.y - a.y);
-    segs.push({ ax:a.x, ay:a.y, dx:b.x - a.x, dy:b.y - a.y, L:L });
-    total += L;
-  }
-  lv.move.segs = segs;
-  lv.move.total = total;
-  lv.target.x = pts[0].x; lv.target.y = pts[0].y;   // base position = first waypoint
-}
-function targetAt(lv, t){
-  const m = lv.move;
-  if (!m) return lv.target;
-  let d = (m.speed * t) % m.total;
-  if (d < 0) d += m.total;
-  for (let i = 0; i < m.segs.length; i++){
-    const sg = m.segs[i];
-    if (d <= sg.L || i === m.segs.length - 1){
-      const k = sg.L ? clamp(d / sg.L, 0, 1) : 0;
-      return { x: sg.ax + sg.dx * k, y: sg.ay + sg.dy * k, r: lv.target.r };
-    }
-    d -= sg.L;
-  }
-  return lv.target;
-}
 
 /* Build the static wall segments around a CIRCULAR target centred at c.
    OPEN        - nothing.
@@ -592,8 +560,8 @@ function targetAt(lv, t){
    POCKET      - an L (one side + a lid), so entry must be from the open side.
    NARROW_GAP  - bars on both sides plus a lid with a single small opening.
    ENCLOSED    - both sides + a floor, open only at the top: a cup.
-   Walls are rebuilt from the target's CURRENT centre, so they travel with a
-   moving target instead of being left behind. */
+   Walls are rebuilt from the target's centre, which is fixed: every target in
+   the game is stationary. */
 function buildWalls(lv, c){
   c = c || lv.target;
   const d  = c.r + 16;                        // standoff from the outer ring
@@ -624,8 +592,8 @@ function buildWalls(lv, c){
       return [];
   }
 }
-// static levels can cache their walls; moving ones rebuild each step
-LEVELS.forEach(function(lv){ initMove(lv); lv.walls = buildWalls(lv, lv.target); });
+// targets never move, so every level's walls are built once at boot
+LEVELS.forEach(function(lv){ lv.walls = buildWalls(lv, lv.target); });
 
 /* ---------------- math helpers ---------------- */
 function mulberry32(a){
@@ -649,9 +617,8 @@ function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
    SIMULATION - pure, no rendering. Shared by the live game and
    the headless solver sweep in the test harness.
    ============================================================ */
-function makeBall(lv, seed, t0){
+function makeBall(lv, seed){
   return {
-    t0: t0 || 0,                           // target-motion phase when the drop began
     x: lv.spawn.x, y: lv.spawn.y,
     px: lv.spawn.x, py: lv.spawn.y,        // previous step, for render interpolation
     vx: 0, vy: 0,                          // released from rest - gravity does the rest
@@ -778,11 +745,7 @@ function resolveCollisions(b, lv, ramps, walls){
 
 /** Advance one 1/60s step. Sets b.result when the run ends. */
 function stepBall(b, lv, ramps){
-  // the target (and any walls bolted to it) are re-evaluated every step from
-  // the elapsed motion clock, so a moving target is tracked, never snapshotted
-  const t = b.t0 + b.steps / 60;
-  const c = targetAt(lv, t);
-  const walls = lv.move ? buildWalls(lv, c) : lv.walls;
+  const c = lv.target, walls = lv.walls;
   for (let i = 0; i < SUBSTEPS; i++){
     b.vy += GRAVITY / SUBSTEPS;     // gravity touches vy and nothing else
     if (b.vy > TERMINAL_VY) b.vy = TERMINAL_VY;
@@ -809,9 +772,9 @@ function stepBall(b, lv, ramps){
 }
 
 /** Run a whole drop headlessly and report the outcome. */
-function simulate(ramps, seed, levelIdx, t0){
+function simulate(ramps, seed, levelIdx){
   const lv = LEVELS[levelIdx === undefined ? levelIndex : levelIdx];
-  const b = makeBall(lv, seed >>> 0, t0 || 0);
+  const b = makeBall(lv, seed >>> 0);
   while (!b.result) stepBall(b, lv, ramps);
   return { result: b.result, steps: b.steps, hits: b.hits, segHits: b.segHits,
            spdMin: b.spdMin, spdMax: b.spdMax, vyMax: b.vyMax, restMin: b.restMin,
@@ -1241,7 +1204,7 @@ function drop(){
    A miss does not stop the game at all - see missed(). */
 function land(result){
   if (result !== 'win'){ missed(result); return; }
-  const c = targetAt(level(), ball.t0 + ball.steps / 60);
+  const c = level().target;
   Sound.win();
   phase = 'capture';
   capture = { t: 0, bx: ball.x, by: ball.y, cx: c.x, cy: c.y };
@@ -1347,7 +1310,7 @@ const CAPTURE_MS  = 620;      // length of the "swallowed" animation
 const TARGET_MOTES  = 6;      // motes at fixed angles, breathing in and out
 const TARGET_PULSE_S = 1.9;   // seconds per outward pulse ring
 let last = performance.now(), acc = 0;
-let clock = 0;                // seconds since load - drives all target motion
+let clock = 0;                // seconds since load - drives the idle animations
 let capture = null;           // {t, bx, by, cx, cy} while the capture plays
 const lastDraw = { x: 0, y: 0 };          // where the ball was actually painted
 
@@ -1493,7 +1456,7 @@ function render(){
 
   ctx.drawImage(backdrop, 0, 0, W, H);
 
-  const c = targetAt(lv, clock);
+  const c = lv.target;
 
   /* ---- target: a bullseye portal. Concentric rings, a pulsing core, a
      slowly counter-rotating outer ring and a few drifting motes, so it reads
@@ -1568,11 +1531,9 @@ function render(){
     }
   }
 
-  /* static walls - structural, not player-placed. Rebuilt from the target's
-     live centre so they travel with a moving target. */
-  const liveWalls = lv.move ? buildWalls(lv, c) : lv.walls;
-  for (let i = 0; i < liveWalls.length; i++)
-    drawSeg(liveWalls[i], '#93a0b8', WALL_HT, 'rgba(0,0,0,.5)');
+  /* static walls - structural, not player-placed */
+  for (let i = 0; i < lv.walls.length; i++)
+    drawSeg(lv.walls[i], '#93a0b8', WALL_HT, 'rgba(0,0,0,.5)');
 
   /* obstacles */
   for (let i = 0; i < lv.obstacles.length; i++){
@@ -1751,7 +1712,7 @@ function frame(now){
   last = now;
   if (dt > 250) dt = 250;               // tab was backgrounded
   clock += dt / 1000;                   // keeps running in every phase, so the
-                                        // target animates while you are planning
+                                        // target breathes while you are planning
   if (phase === 'drop' && ball){
     acc += dt;
     while (acc >= STEP_MS){
@@ -1834,16 +1795,15 @@ window.__gtb = {
   simulate: simulate,
   tween: tween, Ease: Ease, burst: burst,     // juice helpers, for the suite
   buildWalls: buildWalls,
-  targetAt: targetAt,
   clock: function(){ return clock; },   // lets tests build any target type on any level
   state: function(){
     const lv = level();
     return { phase: phase, levelIndex: levelIndex, levelId: lv.id, highest: highest,
              ramps: ramps.map(function(r){ return Object.assign({}, r); }),
              maxBlocks: lv.maxBlocks, rampsLeft: lv.maxBlocks - ramps.length,
-             walls: (lv.move ? buildWalls(lv, targetAt(lv, clock)) : lv.walls).length,
-             targetType: lv.targetType, moving: !!lv.move,
-             target: targetAt(lv, clock), capturing: !!capture,
+             walls: lv.walls.length,
+             targetType: lv.targetType,
+             target: lv.target, capturing: !!capture,
              selected: selected, dragging: dragging ? dragging.mode : null,
              tutorial: { step: tutorialStep(), seen: tutorialSeen,
                          obstacleTipSeen: obstacleTipSeen,

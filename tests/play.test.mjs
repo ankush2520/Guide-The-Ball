@@ -116,11 +116,12 @@ const lvinfo = await page.evaluate(() => {
            obst:   LEVELS.map(l=>l.obstacles.length).join(','),
            types:  LEVELS.map(l=>l.targetType).join(','),
            moving: LEVELS.map((l,i)=>l.move?i+1:0).filter(Boolean).join(','),
+           hasMoveKey: LEVELS.some(l => 'move' in l),
            right, left, tooClose,
            ySpread: Math.max(...ys) - Math.min(...ys) };
 });
-const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,3,2,3,3';
-const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,3';
+const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,2,2,3,3';
+const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,4';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
                     'SIDE_WALL,POCKET,NARROW_GAP,NARROW_GAP,ENCLOSED,OPEN,SIDE_WALL,NARROW_GAP,POCKET,ENCLOSED';
 console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
@@ -130,10 +131,10 @@ check(lvinfo.badId === 0, 'level ids are sequential from 1');
 check(lvinfo.badType === 0, 'every targetType is one of the five');
 check(lvinfo.outOfBoard === 0, 'spawns, targets and obstacles are inside the board');
 check(lvinfo.overlap === 0, 'no obstacle sits on a target or blocks a spawn');
-check(lvinfo.blocks === PLAN_BLOCKS, 'ramp budgets match the plan, drops at 7/14/18 intact');
+check(lvinfo.blocks === PLAN_BLOCKS, 'ramp budgets match the plan, drops at 7/14/17/18 intact');
 check(lvinfo.obst === PLAN_OBST, 'obstacle counts match the plan');
 check(lvinfo.types === PLAN_TYPES, 'target types match the plan');
-check(lvinfo.moving === '17,19,20', 'only levels 17, 19 and 20 move', lvinfo.moving);
+check(lvinfo.moving === '' && !lvinfo.hasMoveKey, 'no level defines target movement', lvinfo.moving || 'none');
 check(lvinfo.right >= 7 && lvinfo.left >= 7,
   'targets are reached both leftward and rightward', `${lvinfo.right}R / ${lvinfo.left}L`);
 check(lvinfo.tooClose === 0, 'no two levels put the target in the same spot');
@@ -198,124 +199,55 @@ check(e.sMax <= C.MAX_SPEED + 1e-9 && e.vyMax <= C.TERMINAL_VY + 1e-9,
   `peak ${e.sMax.toFixed(2)} / cap ${C.MAX_SPEED.toFixed(2)}, vy ${e.vyMax.toFixed(2)}`);
 
 /* ---------------------------------------------------------------- */
-section('3b. Moving targets: straight-line glide, no rotation');
-const mv = await page.evaluate(() => {
-  const { LEVELS, targetAt, buildWalls, simulate } = window.__gtb;
-  const out = [];
-  LEVELS.forEach((lv, li) => {
-    if (!lv.move) return;
-    const pts = lv.move.points, sp = lv.move.speed;
-    const loopT = lv.move.total / sp;
-
-    // (a) every sampled position must lie ON one of the waypoint segments
-    let offPath = 0, speedErr = 0, corners = 0;
-    let prev = targetAt(lv, 0);
-    for (let k = 1; k <= 600; k++){
-      const t = (k / 600) * loopT * 2;          // two full loops
-      const p = targetAt(lv, t);
-      let best = Infinity;
-      for (let i = 0; i < pts.length; i++){
-        const a = pts[i], b = pts[(i+1) % pts.length];
-        const dx = b.x-a.x, dy = b.y-a.y, L2 = dx*dx + dy*dy;
-        let u = L2 ? ((p.x-a.x)*dx + (p.y-a.y)*dy)/L2 : 0;
-        u = u < 0 ? 0 : u > 1 ? 1 : u;
-        best = Math.min(best, Math.hypot(p.x - (a.x+u*dx), p.y - (a.y+u*dy)));
-      }
-      if (best > 0.01) offPath++;
-      // (b) constant speed, except on the sample that straddles a corner
-      const dt = (loopT * 2) / 600;
-      const v = Math.hypot(p.x-prev.x, p.y-prev.y) / dt;
-      if (Math.abs(v - sp) > sp * 0.02) { corners++; if (corners > pts.length*2 + 2) speedErr++; }
-      prev = p;
+/* Targets used to glide between waypoints on levels 17/19/20. That was
+   removed: a target sliding through the space a ramp occupies made the
+   collision read as a bug. This section is the guard against it coming
+   back by accident - a target that moves is now a defect. */
+section('3b. Every target is static');
+const stat = await page.evaluate(async () => {
+  const { LEVELS, buildWalls, state, clock } = window.__gtb;
+  const noMoveBlock = LEVELS.every(l => l.move === undefined);
+  const noTargetAt  = typeof window.__gtb.targetAt === 'undefined';
+  // walls are built once at boot and must stay identical to a fresh build
+  let wallsStale = 0;
+  LEVELS.forEach(lv => {
+    const fresh = buildWalls(lv, lv.target);
+    if (fresh.length !== lv.walls.length) { wallsStale++; return; }
+    for (let i = 0; i < fresh.length; i++){
+      const f = fresh[i], w = lv.walls[i];
+      if (f.x1!==w.x1 || f.y1!==w.y1 || f.x2!==w.x2 || f.y2!==w.y2) wallsStale++;
     }
-
-    // (c) walls must travel with the target as a rigid unit
-    let rigid = true;
-    if (lv.targetType !== 'OPEN'){
-      const t1 = 0.3 * loopT, t2 = 0.7 * loopT;
-      const c1 = targetAt(lv, t1), c2 = targetAt(lv, t2);
-      const w1 = buildWalls(lv, c1), w2 = buildWalls(lv, c2);
-      const dx = c2.x - c1.x, dy = c2.y - c1.y;
-      if (w1.length !== w2.length) rigid = false;
-      for (let i = 0; i < w1.length && rigid; i++)
-        if (Math.abs((w2[i].x1 - w1[i].x1) - dx) > 1e-6 ||
-            Math.abs((w2[i].y1 - w1[i].y1) - dy) > 1e-6 ||
-            Math.abs((w2[i].x2 - w1[i].x2) - dx) > 1e-6 ||
-            Math.abs((w2[i].y2 - w1[i].y2) - dy) > 1e-6) rigid = false;
-    }
-    out.push({ id: lv.id, pts: pts.length, span: Math.round(lv.move.total), speed: sp,
-               loopT: +loopT.toFixed(2), offPath, speedErr, rigid });
   });
-  return out;
+  // and the live target must not drift as the animation clock advances.
+  // Stays on whatever level is loaded on purpose: setLevel() would push
+  // `highest` forward and quietly hand section 7 a bogus save to read.
+  const t0 = state().target, c0 = clock();
+  await new Promise(r => setTimeout(r, 600));
+  const t1 = state().target, c1 = clock();
+  return { noMoveBlock, noTargetAt, wallsStale,
+           drift: Math.hypot(t1.x - t0.x, t1.y - t0.y),
+           clockRan: c1 - c0 };
 });
-for (const m of mv)
-  console.log(`  L${m.id}: ${m.pts} waypoints, path ${m.span}px at ${m.speed}px/s ` +
-              `(loop ${m.loopT}s), walls rigid=${m.rigid}`);
-check(mv.length === 3, 'three moving levels');
-check(mv.every(m => m.offPath === 0), 'target always sits exactly on a straight waypoint leg');
-check(mv.every(m => m.speedErr === 0), 'target glides at constant speed between waypoints');
-check(mv.every(m => m.rigid), 'attached walls translate rigidly with the target');
-check(mv.find(m=>m.id===17).pts === 2 && mv.find(m=>m.id===19).pts === 2 &&
-      mv.find(m=>m.id===20).pts === 3, 'L17/L19 use two waypoints, L20 uses three');
-check(mv.find(m=>m.id===19).span > mv.find(m=>m.id===17).span &&
-      mv.find(m=>m.id===19).speed > mv.find(m=>m.id===17).speed,
-  'L19 moves further AND faster than L17');
-check(mv.find(m=>m.id===20).span > mv.find(m=>m.id===19).span,
-  'L20 has the longest path of the three');
+check(stat.noMoveBlock, 'no level carries a `move` block any more');
+check(stat.noTargetAt, 'the targetAt() motion helper is gone');
+check(stat.wallsStale === 0, 'cached walls match a fresh build for every level');
+check(stat.clockRan > 0.2, 'the animation clock is still running', `${stat.clockRan.toFixed(2)}s`);
+check(stat.drift === 0, 'the target does not move while the clock advances',
+  `${stat.drift.toFixed(3)}px`);
 
-/* ---------------------------------------------------------------- */
-section('3c. Moving targets: solutions must lead the target');
-const lead = await page.evaluate(() => {
-  const { LEVELS, simulate, targetAt, CONSTS } = window.__gtb;
-  const R = Math.PI/180;
-  const ramp = (cx,cy,deg,len=120) => { const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
-    return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
-  const out = [];
+/* the same thing, but through a real drop: the target the ball is chasing
+   must be in the same place at the end of the flight as at the start */
+const statDrop = await page.evaluate(() => {
+  const { LEVELS, simulate } = window.__gtb;
+  let moved = 0;
   LEVELS.forEach((lv, li) => {
-    if (!lv.move) return;
-    const loopT = lv.move.total / lv.move.speed;
-    const seeds = lv.obstacles.length ? [1,2,3] : [1];
-    let found = null;
-    for (let k = 0; k < 16 && !found; k++){
-      const t0 = (k/16) * loopT;
-      for (let ry = lv.spawn.y+80; ry <= CONSTS.H-130 && !found; ry += 15)
-        for (let th = 25; th <= 155; th += 1.5){
-          const cfg = [ramp(lv.spawn.x, ry, th)];
-          const r0 = simulate(cfg, seeds[0], li, t0);
-          if (r0.result === 'win' && seeds.every(s => simulate(cfg,s,li,t0).result === 'win')){
-            found = { cfg, t0, secs: r0.secs, land: {x:r0.x, y:r0.y} }; break;
-          }
-        }
-    }
-    if (!found){ out.push({ id: lv.id, found: false }); return; }
-    const pDrop   = targetAt(lv, found.t0);
-    const pArrive = targetAt(lv, found.t0 + found.secs);
-    // hold the ramp, sweep the drop moment: how often does it still score?
-    let w = 0, n = 24;
-    for (let k = 0; k < n; k++)
-      if (seeds.every(s => simulate(found.cfg, s, li, (k/n)*loopT).result === 'win')) w++;
-    out.push({ id: lv.id, found: true,
-      flight: +found.secs.toFixed(2),
-      travel: Math.round(Math.hypot(pArrive.x-pDrop.x, pArrive.y-pDrop.y)),
-      distToArrive: Math.round(Math.hypot(found.land.x-pArrive.x, found.land.y-pArrive.y)),
-      distToDrop:   Math.round(Math.hypot(found.land.x-pDrop.x,   found.land.y-pDrop.y)),
-      r: lv.target.r, timingWin: w/n });
+    const before = { x: lv.target.x, y: lv.target.y };
+    simulate([{x1:60,y1:300,x2:200,y2:340}], 3, li);
+    if (lv.target.x !== before.x || lv.target.y !== before.y) moved++;
   });
-  return out;
+  return moved;
 });
-for (const l of lead){
-  if (!l.found){ bad(`L${l.id}: no timed solution found`); continue; }
-  console.log(`  L${l.id}: flight ${l.flight}s, target travels ${l.travel}px during it; ` +
-              `ball lands ${l.distToArrive}px from its ARRIVAL position ` +
-              `(${l.distToDrop}px from where it was at drop). Wins at ${(l.timingWin*100).toFixed(0)}% of drop times.`);
-}
-check(lead.every(l => l.found), 'every moving level has a verified timed solution');
-check(lead.every(l => l.distToArrive <= l.r),
-  'the ball lands on the target where it ACTUALLY IS at arrival');
-check(lead.every(l => l.travel > 10),
-  'the target really does move during the flight', lead.map(l=>l.travel+'px').join(', '));
-check(lead.every(l => l.timingWin < 0.95),
-  'drop timing genuinely matters - the same ramp fails at other moments');
+check(statDrop === 0, 'simulating a drop never displaces a target');
 
 /* ---------------------------------------------------------------- */
 section('4. Obstacle bounce quality');
