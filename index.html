@@ -693,17 +693,26 @@ const LEVELS = [
     obstacles:[{x:158,y:320,r:32},{x:302,y:360,r:34},{x:198,y:470,r:34},{x:344,y:520,r:32}],
     target:{x:150,y:726,r:44} },
 
-  // 20. finale - the smallest cup in the game, reached across a busy board.
-  //     The cup's mouth spans x 120..220 above y 508, and the fourth obstacle
-  //     sits directly on it. That obstacle is doing the work the old moving
-  //     target used to: with the mouth open, a ramp placed level with it tipped
-  //     the ball straight in over a 33 degree window - easier than level 1.
-  //     Capped, the finale is back to a 6 degree window.
+  // 20. finale - the longest traverse in the game, into a deep cup in the far
+  //     corner from the spawn.
+  //
+  //     Two things this level got wrong before, both worth not repeating.
+  //     The cup used to sit almost directly under the spawn, and a single ramp
+  //     below the spawn tipped the ball in over a 33 degree window - easier
+  //     than level 1. Distance, not clutter, is what fixes that: the ball now
+  //     has to be thrown the width of the board AND arrive falling steeply
+  //     enough to drop in.
+  //     Then an obstacle was parked on the cup's mouth to compensate, which
+  //     left a 1.5px gap either side of it for an 18px ball. Obstacles scatter
+  //     the ball at random, so the only way in became a lucky bounce - the
+  //     winning line took nine obstacle hits and failed on one seed in seven.
+  //     NOTHING guards the mouth now, and nothing should: the approach is
+  //     where difficulty belongs, because a plan can account for it.
+  //     The winning line touches no obstacle at all and wins on every seed.
   { id:20, name:"Master's Drop", maxBlocks:3, targetType:'ENCLOSED',
     spawn:{x:92,y:40},
-    obstacles:[{x:200,y:330,r:34},{x:332,y:430,r:34},
-               {x:140,y:436,r:28},{x:170,y:502,r:26}],
-    target:{x:170,y:620,r:34} }
+    obstacles:[{x:196,y:330,r:34},{x:300,y:430,r:34},{x:140,y:470,r:28}],
+    target:{x:356,y:646,r:32} }
 ];
 
 /* Build the static wall segments around a CIRCULAR target centred at c.

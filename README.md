@@ -26,6 +26,14 @@ never change its speed. `OPEN`, `SIDE_WALL`, `POCKET`, `NARROW_GAP`, `ENCLOSED`.
 For `NARROW_GAP`, `gapW` is the **clear window the ball can pass through**, not
 the raw span between bars.
 
+**Difficulty goes in the approach, never in the doorway.** Walls bounce the
+ball predictably, so a tight *wall* gap is a skill test — `NARROW_GAP` gets down
+to 38px and is fair. Obstacles scatter it at random, so a tight *obstacle* gap
+is a lottery. Level 20 briefly had an obstacle on its cup's mouth that left
+1.5px either side for an 18px ball: the winning line took nine obstacle bounces
+and lost on one seed in seven. Section 2b of the suite now measures every
+obligatory passage and fails if an obstacle takes most of one.
+
 **Every target is static.** Levels 17, 19 and 20 used to glide between
 waypoints; that was removed because a target sliding through the space a ramp
 occupies made an ordinary collision read as a bug. Each level's walls are

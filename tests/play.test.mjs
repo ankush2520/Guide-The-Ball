@@ -127,7 +127,7 @@ const lvinfo = await page.evaluate(() => {
            ySpread: Math.max(...ys) - Math.min(...ys) };
 });
 const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,2,2,3,3';
-const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,4';
+const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,3';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
                     'SIDE_WALL,POCKET,NARROW_GAP,NARROW_GAP,ENCLOSED,OPEN,SIDE_WALL,NARROW_GAP,POCKET,ENCLOSED';
 console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
@@ -145,6 +145,66 @@ check(lvinfo.right >= 7 && lvinfo.left >= 7,
   'targets are reached both leftward and rightward', `${lvinfo.right}R / ${lvinfo.left}L`);
 check(lvinfo.tooClose === 0, 'no two levels put the target in the same spot');
 check(lvinfo.ySpread > 100, 'target height varies across levels', `${lvinfo.ySpread}px spread`);
+
+/* ---------------------------------------------------------------- */
+/* Level 20 once had an obstacle parked on its cup's mouth, which left a
+   1.5px channel either side of it for an 18px ball. Walls bounce the ball
+   predictably, so a narrow WALL gap is a skill test; obstacles scatter it
+   at random, so a narrow OBSTACLE gap is a lottery. Difficulty belongs in
+   the approach, where a plan can account for it - never in the one passage
+   the ball is obliged to take. */
+section('2b. Nothing random may choke a walled target\'s entry');
+const mouths = await page.evaluate(() => {
+  const { LEVELS, CONSTS } = window.__gtb;
+  const { BALL_R, WALL_HT } = CONSTS;
+  const out = [];
+  LEVELS.forEach(lv => {
+    const c = lv.target, d = c.r + 16, up = lv.wallH || 112;
+    let y, lo, hi;
+    if (lv.targetType === 'ENCLOSED'){
+      // the mouth is the gap between the tops of the two side bars
+      y = c.y - up; lo = c.x - d + WALL_HT + BALL_R; hi = c.x + d - WALL_HT - BALL_R;
+    } else if (lv.targetType === 'NARROW_GAP'){
+      // gapW is already the clear window for the ball's CENTRE
+      y = c.y - d;
+      const gx = c.x + (lv.gapX || 0), half = (lv.gapW || 46) / 2;
+      lo = gx - half; hi = gx + half;
+    } else return;                              // no obligatory passage
+    // carve each obstacle's shadow (grown by the ball's radius) out of it
+    let free = [[lo, hi]];
+    lv.obstacles.forEach(o => {
+      const dy = Math.abs(y - o.y), rr = o.r + BALL_R;
+      if (dy >= rr) return;
+      const half = Math.sqrt(rr * rr - dy * dy);
+      const a = o.x - half, b = o.x + half, next = [];
+      free.forEach(seg => {
+        const st = seg[0], en = seg[1];
+        if (b <= st || a >= en){ next.push(seg); return; }
+        if (a > st) next.push([st, a]);
+        if (b < en) next.push([b, en]);
+      });
+      free = next;
+    });
+    const widest = free.reduce((m, seg) => Math.max(m, seg[1] - seg[0]), 0);
+    out.push({ id: lv.id, type: lv.targetType,
+               open: +(hi - lo).toFixed(1), clear: +widest.toFixed(1) });
+  });
+  return out;
+});
+for (const m of mouths)
+  console.log(`  L${String(m.id).padStart(2)} ${m.type.padEnd(10)} mouth ${String(m.open).padStart(5)}px ` +
+              `-> ${String(m.clear).padStart(5)}px clear after obstacles`);
+check(mouths.length >= 5, 'the walled-target levels are being checked', `${mouths.length} levels`);
+check(mouths.every(m => m.clear >= 20),
+  'every obligatory passage leaves the ball real room, not a sliver',
+  `tightest ${Math.min(...mouths.map(m => m.clear))}px`);
+/* An obstacle may shave the edge of a mouth - L15's does, and at 75px of 84
+   the ball is in no danger of needing luck. What must never happen again is
+   one standing in the middle of it: the version of L20 this guards against
+   left 1.5px of a 72px mouth, or 2%. */
+const mouthKept = mouths.reduce((w, m) => Math.min(w, m.clear / m.open), 1);
+check(mouthKept >= 0.6, 'and none has most of its mouth taken away by an obstacle',
+  `tightest keeps ${(mouthKept * 100).toFixed(0)}% of its mouth`);
 
 /* ---------------------------------------------------------------- */
 section('3. Walls are real physics, not decoration');
