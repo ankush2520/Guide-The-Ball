@@ -526,6 +526,33 @@ st = await page.evaluate(() => window.__gtb.state());
 check(st.levelId === 2, 'progress survives a reload', `resumed at level ${st.levelId}`);
 
 /* ---------------------------------------------------------------- */
+/* The trail is the one piece of the visual pass that carries state across
+   frames, so it is the one piece that can leak between drops. */
+section('7b. Ball trail');
+const trailState = await page.evaluate(async () => {
+  const { state, reset, setLevel, setRamps, setSeed } = window.__gtb;
+  const idle = state().juice.trail;
+  setLevel(0); setRamps([{x1:110,y1:300,x2:240,y2:360}]); setSeed(7);
+  const planning = state().juice.trail;
+  document.getElementById('btn-drop').click();
+  await new Promise(r => setTimeout(r, 300));
+  const flying = state().juice.trail;
+  reset();
+  await new Promise(r => setTimeout(r, 120));
+  const afterReset = state().juice.trail;
+  return { idle, planning, flying, afterReset, stars: state().juice.stars };
+});
+check(trailState.planning === 0, 'no trail while planning - a parked ball must not smear',
+  `${trailState.planning} points`);
+check(trailState.flying > 1, 'the ball leaves a trail once it is falling',
+  `${trailState.flying} points`);
+check(trailState.flying <= 16, 'the trail is capped, not unbounded', `${trailState.flying} points`);
+check(trailState.afterReset === 0, 'the trail is cleared with the rest of the drop state',
+  `${trailState.afterReset} points`);
+check(trailState.stars === 46, 'the star field is present', `${trailState.stars} stars`);
+await page.evaluate(() => { window.__gtb.reset(); window.__gtb.setSeed(null); });
+
+/* ---------------------------------------------------------------- */
 section('8. Miss and stuck: a label, not a modal');
 /* a board geometry probe - the label must never move the board */
 const boardBox = () => page.evaluate(() => {

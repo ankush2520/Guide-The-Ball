@@ -6,15 +6,36 @@
 <title>Guide the Ball</title>
 <style>
   :root{
-    --bg:#0d1022; --panel:#181c33; --panel-2:#212745; --ink:#e9ecff; --muted:#9099c2;
+    --bg:#080a18; --panel:#171b33; --panel-2:#232a4d; --ink:#e9ecff; --muted:#8f99c4;
     --obstacle:#ff4d5e; --target:#2fd97a; --ramp:#3ec8ff; --wall:#93a0b8;
     --ball:#ffffff; --accent:#ffc93c;
+    /* one border colour and one hairline highlight, used everywhere, so every
+       panel in the game catches the light from the same direction */
+    --edge:#333c6b;
+    --sheen:rgba(255,255,255,.07);
+    --glow-ramp:rgba(62,200,255,.45);
+    --glow-accent:rgba(255,201,60,.40);
+    /* Deliberately system fonts, not a webfont: the whole game is one
+       index.html with no assets, which is what makes the portal build
+       drop-in and offline-safe. Weight, size and tracking carry the
+       typographic hierarchy instead of a second typeface. */
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-display:"SF Pro Display",ui-sans-serif,system-ui,-apple-system,
+                   "Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overflow:hidden;overscroll-behavior:none}
   body{
-    margin:0;background:radial-gradient(120% 80% at 50% 0%, #1c2145 0%, var(--bg) 65%);
-    color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    margin:0;
+    /* two stacked glows, warm over cool, so the page has a light source
+       instead of a flat wash */
+    background:
+      radial-gradient(90% 55% at 50% -8%, rgba(90,120,255,.16) 0%, rgba(90,120,255,0) 60%),
+      radial-gradient(120% 80% at 50% 0%, #1a1f42 0%, var(--bg) 68%);
+    background-attachment:fixed;
+    color:var(--ink);font:500 14px/1.45 var(--font);
+    font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;
     display:flex;justify-content:center;align-items:flex-start;padding:10px;
     /* svh, NOT dvh: dvh follows Safari's toolbar as it collapses under your
        finger, which re-lays out the stage and slides the board sideways in
@@ -30,21 +51,29 @@
 
   .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;
        flex:none;min-height:34px}
-  .title{font-size:15px;font-weight:700;letter-spacing:.02em;min-width:0;
+  .title{font-family:var(--font-display);font-size:15.5px;font-weight:800;
+         letter-spacing:-.005em;min-width:0;
          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .title span{color:var(--muted);font-weight:500}
-  .counter{background:var(--panel);border:1px solid #2c3358;border-radius:999px;
-           padding:5px 12px;font-size:13px;font-weight:600;white-space:nowrap}
-  .counter b{color:var(--accent);font-variant-numeric:tabular-nums}
+  .title span{color:var(--muted);font-weight:500;letter-spacing:0}
+  .counter{background:linear-gradient(180deg,#1e2440,#151931);
+           border:1px solid var(--edge);border-radius:999px;
+           box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
+           padding:5px 12px;font-size:12.5px;font-weight:600;white-space:nowrap;
+           color:#bcc4e8;letter-spacing:.01em}
+  .counter b{color:var(--accent);font-weight:800;font-size:13.5px;
+             text-shadow:0 0 10px var(--glow-accent)}
   .chips{display:flex;align-items:center;gap:6px;flex:none}
   .chips .counter{padding:5px 10px;font-size:12.5px}
-  .iconbtn{flex:none;background:var(--panel);border:1px solid #2c3358;border-radius:999px;
+  .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
+           border:1px solid var(--edge);border-radius:999px;
+           box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
            width:32px;height:32px;padding:0;font-size:14px;line-height:1;display:grid;place-items:center}
   .iconbtn.off{opacity:.45}
   /* stars: filled ones glow, unearned ones stay as faint outlines */
   .stars{display:flex;justify-content:center;gap:7px;font-size:27px;line-height:1;margin:2px 0 10px}
   .stars i{font-style:normal;color:#2b3560}
-  .stars i.on{color:var(--accent);text-shadow:0 0 10px rgba(255,201,60,.55)}
+  .stars i.on{color:var(--accent);
+              text-shadow:0 0 6px rgba(255,201,60,.9), 0 0 18px rgba(255,170,40,.55)}
   .starnote{color:var(--muted);font-size:12px;margin:-6px 0 12px}
   .grid button{position:relative;padding-bottom:15px}
   .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--accent)}
@@ -88,7 +117,10 @@
   /* The stage owns the board's 3:5 ratio, so its border hugs the canvas
      exactly and no reflow can leave the board sitting off to one side. */
   .stage{position:relative;border-radius:14px;overflow:hidden;
-         border:1px solid #2c3358;box-shadow:0 10px 34px rgba(0,0,0,.45);
+         border:1px solid #313a6e;
+         box-shadow:0 18px 48px rgba(0,0,0,.6),
+                    0 0 0 1px rgba(120,160,255,.06),
+                    0 0 34px -6px rgba(70,110,255,.22);
          flex:1 1 auto;min-height:0;align-self:center;
          /* content-box so the 1px border does not skew the board's ratio */
          box-sizing:content-box;aspect-ratio:3 / 5;width:auto;max-width:calc(100% - 2px)}
@@ -99,35 +131,57 @@
            background:rgba(8,10,22,.72);backdrop-filter:blur(3px);padding:18px}
   /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
   .overlay[hidden]{display:none}
-  .card{background:var(--panel);border:1px solid #333b66;border-radius:16px;
+  .card{background:linear-gradient(180deg,#1d2342,#141830);
+        border:1px solid #3a4374;border-radius:18px;
         padding:20px 18px;text-align:center;width:100%;max-width:290px;
-        box-shadow:0 14px 40px rgba(0,0,0,.5)}
-  .card .big{font-size:24px;font-weight:800;margin-bottom:4px}
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.09),
+                   0 20px 54px rgba(0,0,0,.62)}
+  .card .big{font-family:var(--font-display);font-size:25px;font-weight:800;
+             letter-spacing:-.015em;margin-bottom:4px}
   .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
   .card .row{display:flex;gap:8px}
-  .win .big{color:var(--target)}
-  .lose .big{color:var(--obstacle)}
+  .win .big{color:#7dffb4;text-shadow:0 0 22px rgba(47,217,122,.55)}
+  .lose .big{color:#ff8792;text-shadow:0 0 22px rgba(255,77,94,.45)}
 
-  button{font:inherit;font-weight:650;color:var(--ink);background:var(--panel-2);
-         border:1px solid #39416e;border-radius:11px;padding:11px 12px;cursor:pointer;
-         flex:1;transition:filter .12s,transform .06s}
-  button:hover:not(:disabled){filter:brightness(1.18)}
-  button:active:not(:disabled){transform:translateY(1px)}
-  button:disabled{opacity:.38;cursor:not-allowed}
+  button{font:inherit;font-weight:650;color:var(--ink);
+         background:linear-gradient(180deg,#2a3157,#1c2140);
+         border:1px solid #39416e;border-radius:12px;padding:11px 12px;cursor:pointer;
+         flex:1;letter-spacing:.005em;
+         box-shadow:inset 0 1px 0 var(--sheen), 0 2px 6px rgba(0,0,0,.35);
+         transition:filter .12s, transform .07s ease, box-shadow .12s}
+  button:hover:not(:disabled){filter:brightness(1.16)}
+  /* a real press: the button gets smaller and its shadow collapses under it,
+     so the finger feels like it moved something */
+  button:active:not(:disabled){transform:scale(.968);
+         box-shadow:inset 0 2px 5px rgba(0,0,0,.4)}
+  button:disabled{opacity:.34;cursor:not-allowed;box-shadow:none}
   button[hidden]{display:none}
-  .primary{background:linear-gradient(180deg,#4a8cff,#2f6ae0);border-color:#5f9bff}
+  .primary{background:linear-gradient(180deg,#5d9bff 0%,#3d76ec 52%,#2a5cd4 100%);
+           border-color:#7cb0ff;color:#fff;font-weight:750;
+           box-shadow:inset 0 1px 0 rgba(255,255,255,.28),
+                      0 3px 10px rgba(0,0,0,.4),
+                      0 0 20px -3px rgba(90,150,255,.65)}
+  .primary:active:not(:disabled){box-shadow:inset 0 2px 6px rgba(0,20,60,.45),
+                      0 0 14px -4px rgba(90,150,255,.6)}
+  @media (prefers-reduced-motion:reduce){ button:active:not(:disabled){transform:none} }
   .controls{display:flex;gap:8px}
   .controls .primary{flex:1.6}
 
-  .legend{background:var(--panel);border:1px solid #2c3358;border-radius:12px;
+  .legend{background:linear-gradient(180deg,rgba(30,36,64,.85),rgba(19,23,45,.85));
+          border:1px solid var(--edge);border-radius:12px;
+          box-shadow:inset 0 1px 0 var(--sheen);
           padding:9px 11px;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px}
   .legend i{display:inline-flex;align-items:center;gap:7px;font-style:normal;color:#cdd4f5}
   .sw{width:15px;height:15px;flex:none;display:block}
-  .sw.ob{border-radius:50%;background:var(--obstacle);box-shadow:inset 0 0 0 2px rgba(0,0,0,.25)}
-  .sw.tg{border-radius:3px;background:rgba(47,217,122,.28);border:2px solid var(--target)}
-  .sw.rp{height:6px;width:18px;border-radius:3px;background:var(--ramp);transform:rotate(-20deg)}
+  .sw.ob{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ff8a94,#e0303f);
+         box-shadow:0 0 9px rgba(255,77,94,.6)}
+  .sw.tg{border-radius:50%;background:radial-gradient(circle,rgba(47,217,122,.45),rgba(47,217,122,.08));
+         border:2px solid var(--target);box-shadow:0 0 9px rgba(47,217,122,.55)}
+  .sw.rp{height:6px;width:18px;border-radius:3px;background:var(--ramp);
+         transform:rotate(-20deg);box-shadow:0 0 9px var(--glow-ramp)}
   .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
-  .sw.bl{border-radius:50%;background:var(--ball)}
+  .sw.bl{border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#ffd98a);
+         box-shadow:0 0 9px rgba(255,201,60,.7)}
   /* the text swaps between one and two lines as you play; reserving the tall
      state keeps the stage - and therefore the board - perfectly still */
   .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0;
@@ -137,13 +191,16 @@
   @media (max-height:700px){ .legend,.hint{display:none} }
 
   button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
-               cursor:pointer;font-size:15px;font-weight:700;color:var(--ink)}
+               box-shadow:none;cursor:pointer;font-size:15.5px;font-weight:800;color:var(--ink)}
+  button.title:active:not(:disabled){transform:none;box-shadow:none;filter:brightness(1.3)}
   button.title:after{content:' \25BE';color:var(--muted);font-size:12px}
   .selcard{max-width:330px}
   .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
   .grid button{flex:none;padding:10px 0;font-size:13px;font-variant-numeric:tabular-nums}
   .grid button.done{border-color:#2fd97a;color:#8dffbe}
-  .grid button.cur{background:linear-gradient(180deg,#4a8cff,#2f6ae0);border-color:#5f9bff}
+  .grid button.cur{background:linear-gradient(180deg,#5d9bff,#2f6ae0);border-color:#7cb0ff;
+                   box-shadow:0 0 16px -3px rgba(90,150,255,.7)}
+  .grid button.done{box-shadow:inset 0 0 12px -4px rgba(47,217,122,.5)}
   .grid button:disabled{opacity:.3}
 </style>
 </head>
@@ -194,7 +251,7 @@
   </div>
 
   <div class="legend">
-    <i><span class="sw tg"></span>Green box = Target (goal)</i>
+    <i><span class="sw tg"></span>Green ring = Target (goal)</i>
     <i><span class="sw ob"></span>Red circle = Obstacle (random bounce)</i>
     <i><span class="sw rp"></span>Blue bar = Your ramp</i>
     <i><span class="sw wl"></span>Grey bar = Wall (fixed, blocks the ball)</i>
@@ -879,20 +936,45 @@ let renderScale = 1;
 // otherwise it lays out at the 300x150 canvas default for one frame
 canvas.width = W; canvas.height = H;
 
+/* Everything in here is static, so it is painted once per resize and blitted
+   as a single image each frame. The vignette in particular would be an
+   expensive full-board gradient fill if it were done live. */
 function buildBackdrop(){
   backdrop.width  = canvas.width;
   backdrop.height = canvas.height;
   bctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+
   const g = bctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#141936');
-  g.addColorStop(1, '#0b0e1e');
+  g.addColorStop(0,    '#1a2048');
+  g.addColorStop(0.55, '#101433');
+  g.addColorStop(1,    '#06081a');
   bctx.fillStyle = g;
   bctx.fillRect(0, 0, W, H);
-  bctx.strokeStyle = 'rgba(255,255,255,.035)';
+
+  // a cool wash spilling in from above the ceiling - the ball falls out of
+  // the light and into the dark, which is what sells the board as deep
+  const top = bctx.createRadialGradient(W * 0.5, -H * 0.10, 0, W * 0.5, -H * 0.10, H * 0.75);
+  top.addColorStop(0, 'rgba(104,146,255,.22)');
+  top.addColorStop(1, 'rgba(104,146,255,0)');
+  bctx.fillStyle = top;
+  bctx.fillRect(0, 0, W, H);
+
+  // the grid fades out toward the floor rather than ruling the whole board
   bctx.lineWidth = 1;
   for (let y = 50; y < H; y += 50){
+    bctx.strokeStyle = 'rgba(150,180,255,' + (0.010 + 0.050 * (1 - y / H)).toFixed(4) + ')';
     bctx.beginPath(); bctx.moveTo(0, y + .5); bctx.lineTo(W, y + .5); bctx.stroke();
   }
+
+  // vignette: pulls the eye to the middle of the board and hides the fact
+  // that the gradient above has to end somewhere
+  const vig = bctx.createRadialGradient(W / 2, H * 0.46, H * 0.28,
+                                        W / 2, H * 0.46, H * 0.80);
+  vig.addColorStop(0,   'rgba(0,0,0,0)');
+  vig.addColorStop(0.7, 'rgba(0,0,0,.26)');
+  vig.addColorStop(1,   'rgba(0,0,0,.60)');
+  bctx.fillStyle = vig;
+  bctx.fillRect(0, 0, W, H);
 }
 
 function sizeCanvas(){
@@ -1008,7 +1090,7 @@ function setLevel(i){
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   ramps = []; draft = null; ball = null; capture = null;
   selected = -1; dragging = null; lastResult = null; hideFlash();
-  seenHit = 0; squash.amt = 0; clearParticles();
+  seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
   tries = 0;
   phase = 'plan'; overlay.hidden = true;
   if (levelIndex > highest){ highest = levelIndex; saveProgress(); }
@@ -1194,7 +1276,7 @@ function drop(){
   hideFlash();
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
   ball  = makeBall(level(), seed);
-  seenHit = 0; squash.amt = 0; clearParticles();
+  seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
   tries++;
   phase = 'drop';
   overlay.hidden = true;
@@ -1219,7 +1301,7 @@ function land(result){
 function missed(result){
   lastResult = result;
   ball = null; capture = null; draft = null;
-  clearParticles(); squash.amt = 0; seenHit = 0;
+  clearParticles(); clearTrail(); squash.amt = 0; seenHit = 0;
   phase = 'plan';
   overlay.hidden = true;
   showFlash(result === 'timeout'
@@ -1411,6 +1493,66 @@ function drawParticles(){
   ctx.restore();
 }
 
+/* ============================================================
+   ATMOSPHERE - a drifting star field
+   Fixed positions seeded once, so the field is identical on every
+   load and every device. Plain arcs with no shadow: 46 of them
+   cost nothing, which is the whole point of doing depth this way
+   rather than with another blurred layer.
+   ============================================================ */
+const STAR_N = 46;
+const stars = [];
+(function(){
+  const r = mulberry32(0x5eed);
+  for (let i = 0; i < STAR_N; i++)
+    stars.push({ x: r() * W, y: r() * H, r: 0.6 + r() * 1.5,
+                 drift: 2 + r() * 7,          // px/sec downward - barely motion
+                 tw: 0.5 + r() * 1.4, phase: r() * Math.PI * 2 });
+})();
+function drawStars(){
+  ctx.save();
+  ctx.fillStyle = '#cfe0ff';
+  for (let i = 0; i < STAR_N; i++){
+    const s = stars[i];
+    // drift down forever and wrap, so the field never runs out
+    const y = (s.y + clock * s.drift) % (H + 20) - 10;
+    ctx.globalAlpha = 0.09 + 0.13 * (0.5 + 0.5 * Math.sin(clock * s.tw + s.phase));
+    ctx.beginPath(); ctx.arc(s.x, y, s.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   BALL TRAIL
+   A short history of painted positions, drawn as a tapering
+   comet. It is the only thing on the board that reports speed -
+   the ball itself is a 9px circle and looks identical at every
+   velocity, which is what made the fall read as floaty.
+   ============================================================ */
+const TRAIL_MAX = 16;
+const trail = [];                    // oldest first; {x,y} in board space
+function pushTrail(x, y){
+  trail.push({ x: x, y: y });
+  if (trail.length > TRAIL_MAX) trail.shift();
+}
+function clearTrail(){ trail.length = 0; }
+function drawTrail(){
+  if (trail.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#ffd479';
+  for (let i = 1; i < trail.length; i++){
+    const k = i / trail.length;               // 0 at the tail, 1 at the ball
+    ctx.globalAlpha = k * k * 0.5;
+    ctx.lineWidth = BALL_R * 1.5 * k;
+    ctx.beginPath();
+    ctx.moveTo(trail[i-1].x, trail[i-1].y);
+    ctx.lineTo(trail[i].x,   trail[i].y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /* The ball's impact deformation. `amt` is tweened; nx/ny is the axis it is
    squashed along, which is whatever surface it just met. */
 const squash = { amt: 0, nx: 0, ny: -1 };
@@ -1438,16 +1580,54 @@ function roundRect(x, y, w, h, r){
   ctx.arcTo(x,     y,     x + w, y,     r);
   ctx.closePath();
 }
+/* A player ramp: a neon tube. Two wide translucent passes make the bloom and
+   a bright thin pass makes the lit core. Deliberately NOT shadowBlur - a
+   blurred shadow per segment per frame is what used to make drawing a ramp
+   stutter on a phone, and this costs three ordinary strokes. */
 function drawSeg(s, color, halfT, glow){
   ctx.save();
   ctx.lineCap = 'round';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = halfT * 2;
-  if (glow){ ctx.shadowColor = glow; ctx.shadowBlur = 10; }
   ctx.beginPath();
   ctx.moveTo(s.x1, s.y1);
   ctx.lineTo(s.x2, s.y2);
+  if (glow){
+    ctx.strokeStyle = glow;
+    ctx.globalAlpha = 0.15; ctx.lineWidth = halfT * 2 + 15; ctx.stroke();
+    ctx.globalAlpha = 0.26; ctx.lineWidth = halfT * 2 + 7;  ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = halfT * 2;
   ctx.stroke();
+  if (glow){                                  // the lit filament down the middle
+    ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = Math.max(1, halfT * 0.55);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* A level wall is structural and dead, and must not read as something the
+   player placed: no bloom, a seat of shadow under it, and a lengthwise
+   gradient so it looks extruded rather than drawn. */
+function drawWall(s){
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(s.x1, s.y1);
+  ctx.lineTo(s.x2, s.y2);
+  ctx.strokeStyle = 'rgba(0,0,0,.45)';
+  ctx.lineWidth = WALL_HT * 2 + 7; ctx.stroke();
+  const g = ctx.createLinearGradient(s.x1, s.y1, s.x2, s.y2);
+  g.addColorStop(0,   '#aeb9cf');
+  g.addColorStop(0.5, '#7f8ba6');
+  g.addColorStop(1,   '#aeb9cf');
+  ctx.strokeStyle = g;
+  ctx.lineWidth = WALL_HT * 2; ctx.stroke();
+  ctx.globalAlpha = 0.30;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.4; ctx.stroke();
   ctx.restore();
 }
 
@@ -1455,6 +1635,7 @@ function render(){
   const lv = level();
 
   ctx.drawImage(backdrop, 0, 0, W, H);
+  drawStars();
 
   const c = lv.target;
 
@@ -1495,8 +1676,13 @@ function render(){
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, 0, c.r * 0.66, 0, Math.PI * 2); ctx.stroke();
 
-  // inner ring + pulsing core
-  ctx.fillStyle = 'rgba(47,217,122,.16)';
+  // inner ring + pulsing core. The disc is a gradient, not a flat wash, so
+  // the mouth of the target looks like a well rather than a sticker.
+  const well = ctx.createRadialGradient(0, 0, 0, 0, 0, c.r * 0.66);
+  well.addColorStop(0,    'rgba(47,217,122,.34)');
+  well.addColorStop(0.65, 'rgba(47,217,122,.13)');
+  well.addColorStop(1,    'rgba(20,120,70,.05)');
+  ctx.fillStyle = well;
   ctx.beginPath(); ctx.arc(0, 0, c.r * 0.66, 0, Math.PI * 2); ctx.fill();
   ctx.save();
   ctx.shadowColor = 'rgba(47,217,122,.9)';
@@ -1532,21 +1718,34 @@ function render(){
   }
 
   /* static walls - structural, not player-placed */
-  for (let i = 0; i < lv.walls.length; i++)
-    drawSeg(lv.walls[i], '#93a0b8', WALL_HT, 'rgba(0,0,0,.5)');
+  for (let i = 0; i < lv.walls.length; i++) drawWall(lv.walls[i]);
 
-  /* obstacles */
+  /* obstacles - spheres, lit from the upper left. Every round thing on this
+     board agrees about where the light is, which is most of what stops a
+     canvas game looking like flat cut-out shapes. */
   for (let i = 0; i < lv.obstacles.length; i++){
     const o = lv.obstacles[i];
     ctx.save();
-    ctx.shadowColor = 'rgba(255,77,94,.55)';
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#ff4d5e';
+    const bloom = ctx.createRadialGradient(o.x, o.y, o.r * 0.8, o.x, o.y, o.r * 1.65);
+    bloom.addColorStop(0, 'rgba(255,77,94,.32)');
+    bloom.addColorStop(1, 'rgba(255,77,94,0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.65, 0, Math.PI * 2); ctx.fill();
+
+    const body = ctx.createRadialGradient(o.x - o.r * 0.34, o.y - o.r * 0.40, o.r * 0.05,
+                                          o.x, o.y, o.r);
+    body.addColorStop(0,    '#ffa7ae');
+    body.addColorStop(0.42, '#ff4d5e');
+    body.addColorStop(1,    '#a81c2b');
+    ctx.fillStyle = body;
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = 'rgba(0,0,0,.30)';
-    ctx.lineWidth = 4;
+
+    // rim light along the shaded edge, then the dark inner ring it always had
+    ctx.strokeStyle = 'rgba(255,190,196,.45)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 0.8, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(60,0,10,.32)'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
   }
 
   /* ramps */
@@ -1664,7 +1863,8 @@ function render(){
     ctx.restore();
   }
 
-  /* impact sparks - above the board, under the ball */
+  /* the comet behind the ball, then the impact sparks over it */
+  drawTrail();
   drawParticles();
 
   /* ball - drawn between the last two physics states, so motion stays smooth
@@ -1685,23 +1885,38 @@ function render(){
     alpha = 1 - e;
   }
   lastDraw.x = b.x; lastDraw.y = b.y;
+  // only a ball that is actually travelling leaves a trail; a ball parked on
+  // the spawn marker during planning must not smear
+  if ((ball && phase === 'drop') || capture) pushTrail(b.x, b.y);
+
   if (rad > 0.2){
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.shadowColor = 'rgba(255,255,255,.65)';
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = '#ffffff';
+
+    // amber bloom around it, as a gradient rather than shadowBlur
+    const bloom = ctx.createRadialGradient(b.x, b.y, rad * 0.45, b.x, b.y, rad * 3.4);
+    bloom.addColorStop(0,   'rgba(255,196,74,.42)');
+    bloom.addColorStop(0.5, 'rgba(255,150,50,.13)');
+    bloom.addColorStop(1,   'rgba(255,150,50,0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath(); ctx.arc(b.x, b.y, rad * 3.4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.translate(b.x, b.y);
     const q = squash.amt;
     if (Math.abs(q) > 0.002){
       // flatten along the surface it hit, bulge across it; outBack drives q
       // slightly negative on the way home, which stretches it the other way
-      ctx.translate(b.x, b.y);
       ctx.rotate(Math.atan2(squash.ny, squash.nx));
       ctx.scale(1 - q, 1 + q * 0.55);
-      ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.beginPath(); ctx.arc(b.x, b.y, rad, 0, Math.PI * 2); ctx.fill();
     }
+    // white-hot at the highlight falling off to gold: the legend still calls
+    // this a white ball, and it still is - the amber lives in the falloff
+    const core = ctx.createRadialGradient(-rad * 0.30, -rad * 0.34, rad * 0.05, 0, 0, rad);
+    core.addColorStop(0,   '#ffffff');
+    core.addColorStop(0.5, '#fff6dc');
+    core.addColorStop(1,   '#ffc451');
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 }
@@ -1816,6 +2031,7 @@ window.__gtb = {
                             vx: ball.vx, vy: ball.vy, hits: ball.hit.n,
                             speed: Math.hypot(ball.vx, ball.vy) } : null,
              juice: { squash: squash.amt, tweens: tweens.length,
+                      trail: trail.length, stars: STAR_N,
                       live: particles.reduce(function(n,p){ return n + (p.life > 0 ? 1 : 0); }, 0) },
              draw: { x: lastDraw.x, y: lastDraw.y } };
   },
@@ -1832,6 +2048,7 @@ window.__gtb = {
   tries: function(){ return tries; },
   select: selectRamp,
   reset: function(){ ramps = []; ball = null; draft = null; tries = 0;
+                     clearParticles(); clearTrail();
                      selected = -1; dragging = null; lastResult = null; hideFlash();
                      phase = 'plan'; overlay.hidden = true; syncUI(); }
 };
