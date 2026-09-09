@@ -14,6 +14,68 @@ ready for CrazyGames / Poki / Softgames.
 
 `npm` is only needed for the tests; the game itself has no toolchain.
 
+## Worlds and mechanics
+
+The game is planned as 14 worlds of levels 1-150. **World 1 (levels 1-20) is
+hand-designed and frozen** - the mechanics below are written so that a level
+with none of them runs the identical code path, and the harness output for
+world 1 is byte-for-byte what it was before they existed.
+
+`WORLDS[]` gives each world a level range, a name and a theme. A theme
+recolours the **backdrop and the chrome accent only**. The entity palette -
+red obstacle, green target, blue ramp - is the game's vocabulary and never
+changes: a player who learned that red hurts must not relearn it in world 6.
+
+| Entity | Behaviour |
+|---|---|
+| `boosters` | On entry, sets velocity to a fixed angle and speed. Deterministic, unlike the red obstacles' scatter. Fires once per entry, and the chevron drawn on it is the exact heading you leave on. |
+| `wind` | Rectangular, never moves. Constant acceleration while the ball's centre is inside; gone the instant it leaves. |
+| `slippery` | Rectangular. Raises restitution to `SLIP_REST` for bounces resolved inside it. |
+| `portals` | A pair of ends. Direction is preserved unless the exit states a `facing`. |
+| `breakables` | Bounces exactly like an obstacle - same code - then is gone for the rest of the session. |
+| `stars` | Pickups. Never touch the trajectory; the suite asserts a run is bit-identical with and without them. |
+
+**`SPEED_CAP` is the universal clamp**, set at exactly `hypot(MAX_VX,
+TERMINAL_VY)` - the fastest the base game can already go. That makes it a
+*provable* no-op for world 1 (a bounce is lossy, so nothing there reaches it)
+while stopping boosters and wind from compounding into speeds that tunnel
+through ramps and destroy the constant-feel trajectory model.
+
+Two ordering rules inside a substep are load-bearing: a portal fires on where
+the ball *arrived*, before anything can bounce it back out; and a booster
+fires *after* collisions, so it always wins the substep. A booster that can be
+cancelled by the wall it is pushing you into is unreadable.
+
+`npm run mech` runs the per-mechanic isolation tests on purpose-built boards.
+
+### Generating a world
+
+    node tools/genlevels.mjs 2            # dry run, report only
+    node tools/genlevels.mjs 2 --write    # splice into index.html
+
+Levels 21+ are semi-procedural: a per-world template produces candidates from
+a seeded RNG, and **nothing reaches `index.html` until it has passed the same
+solver sweep the original twenty were held to**, extended for the new
+mechanics. A candidate must be winnable on all seven obstacle seeds, not
+winnable by blind guessing, inside that slot's difficulty band, and *fair* -
+the winning line may not depend on random obstacle bounces, which is the
+level-20 lesson encoded as a gate. Only the boss level of each world is
+shaped by hand (via its own branch in the template).
+
+Because the solver must find ramps a booster or portal throws the ball
+towards, it sweeps the whole board, not just the spawn column. `tests/levels.mjs`
+still only sweeps the spawn column, so from world 2 on its "1-ramp band"
+column often reads `none` for a level that is perfectly solvable - the
+generator is the authoritative gate.
+
+**What the "mechanic matters" gate does and does not prove.** It proves the
+featured mechanic is unavoidable on the natural drop line (drop with no ramps
+and the ball goes through it) and that a verified solution routes through it.
+It does *not* prove no route exists around it - proving that negative needs an
+exhaustive multi-ramp search of a stripped board, and at a workable budget it
+rejected every candidate. A player finding a second solution is a puzzle game
+working, not a defect.
+
 ## Levels
 
 `LEVELS[]` in [index.html](index.html) holds all 20: `id`, `name`, `maxBlocks`,

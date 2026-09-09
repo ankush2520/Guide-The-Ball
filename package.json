@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node tools/serve.mjs",
-    "test": "node tests/play.test.mjs"
+    "test": "node tests/mechanics.mjs && node tests/play.test.mjs",
+    "mech": "node tests/mechanics.mjs",
+    "gen": "node tools/genlevels.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

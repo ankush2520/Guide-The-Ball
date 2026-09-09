@@ -119,7 +119,11 @@ for (const r of report){
   if (!r.tol1 && !r.sols2) problems.push(`L${r.id} ${r.name}: NO SOLUTION FOUND`);
   if (r.blind > 0.30)      problems.push(`L${r.id} ${r.name}: trivially winnable (${(r.blind*100).toFixed(0)}% blind)`);
 }
-console.log('\n  1-ramp band = widest contiguous winning angle window at one ramp height');
+console.log('\n  1-ramp band = widest winning angle window for a ramp UNDER THE SPAWN.');
+console.log("  'none' from world 2 on usually just means the solving ramp is elsewhere -");
+console.log('  a booster or portal throws the ball out of the spawn column. The 2-ramp');
+console.log('  column is what proves those levels winnable; tools/genlevels.mjs sweeps the');
+console.log('  whole board and is the authoritative gate.');
 if (problems.length){ console.log('\n  PROBLEMS:'); problems.forEach(p => console.log('   ! ' + p)); }
 else console.log('\n  No problems: every level winnable, none trivial.');
 console.log();

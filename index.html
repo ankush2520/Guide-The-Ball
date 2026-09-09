@@ -625,6 +625,27 @@ const MAX_STEPS = 60 * 14;           // 14s of bouncing, then it's a loss
 // ...or sooner, if it has visibly stopped travelling (see stepBall)
 const REST_STEPS = 30, REST_PX = 4;
 const MIN_RAMP  = 28, MAX_RAMP = 160;
+
+/* ============================================================
+   MECHANIC CONSTANTS  (worlds 2+)
+   ============================================================ */
+/* The universal speed clamp. Set at exactly the speed the base game can
+   already reach - hypot(MAX_VX, TERMINAL_VY) - which makes it a PROVABLE
+   no-op for world 1: a bounce is lossy, so nothing there ever exceeds it.
+   Boosters and wind can stack, and without this they would compound into
+   speeds that both tunnel through thin ramps and destroy the constant-feel
+   trajectory model the whole game is built on. */
+const SPEED_CAP  = MAX_SPEED;
+const SLIP_REST  = 0.985;            // restitution inside a slippery zone
+/* Substeps of immunity after a teleport. This alone is NOT enough: the ball
+   arrives at the centre of the exit and is still well inside it when the
+   count runs out, so a pair with any distance between them ping-pongs. The
+   real guard is portalHold below - the exit will not fire again until the
+   ball has actually left it. The cooldown remains as a second line for a
+   level that puts two ends close enough to touch. */
+const PORTAL_CD  = 12;
+const STAR_R     = 13;               // star collection radius (plus the ball's)
+const WIND_CAP   = 1.2;              // hard ceiling on a level's wind accel
 // Obstacle bounces mirror off the circle like a real bounce, then scatter by
 // up to OB_JITTER. OB_MAX_DEV keeps the result pointing away from the circle
 // so the ball can never bounce back into the thing it just hit.
@@ -759,7 +780,70 @@ const LEVELS = [
   { id:20, name:"Master's Drop", maxBlocks:3, targetType:'ENCLOSED',
     spawn:{x:92,y:40},
     obstacles:[{x:196,y:330,r:34},{x:300,y:430,r:34},{x:140,y:470,r:28}],
-    target:{x:356,y:646,r:32} }
+    target:{x:356,y:646,r:32} },
+
+  /* ============================================================
+     GENERATED LEVELS - worlds 2 and up.
+     Written by tools/genlevels.mjs. Every level between these markers was
+     built from a world template and then PROVED winnable, non-trivial and
+     fair by the same solver sweep the original twenty were held to, before
+     it was allowed in here. Do not hand-edit: change the template and
+     re-run the generator, or the next run will overwrite you.
+     ============================================================ */
+/* GEN:START */
+
+  /* ---- World 2: Boost Ridge ---- */
+  { id:21, name:"Ricochet", maxBlocks:2, targetType:'OPEN',
+    spawn:{x:144,y:40},
+    obstacles:[{x:263,y:444,r:30}],
+    boosters:[{x:147,y:319,r:29,angle:8,speed:11.99}],
+    target:{x:362,y:719,r:36} },
+  { id:22, name:"Overshoot", maxBlocks:2, targetType:'OPEN',
+    spawn:{x:371,y:40},
+    obstacles:[{x:238,y:425,r:32}],
+    boosters:[{x:370,y:323,r:32,angle:211,speed:9.98}],
+    target:{x:107,y:716,r:33} },
+  { id:23, name:"Overshoot", maxBlocks:2, targetType:'OPEN',
+    spawn:{x:73,y:40},
+    obstacles:[{x:228,y:351,r:34}],
+    boosters:[{x:67,y:273,r:33,angle:19,speed:11.89}],
+    target:{x:382,y:616,r:30} },
+  { id:24, name:"Green Light", maxBlocks:2, targetType:'OPEN',
+    spawn:{x:356,y:40},
+    obstacles:[{x:392,y:488,r:28},{x:207,y:466,r:31}],
+    boosters:[{x:359,y:285,r:33,angle:165,speed:12.21}],
+    target:{x:138,y:665,r:38} },
+  { id:25, name:"Overshoot", maxBlocks:2, targetType:'OPEN',
+    spawn:{x:127,y:40},
+    obstacles:[{x:329,y:591,r:34},{x:317,y:446,r:29}],
+    boosters:[{x:133,y:305,r:33,angle:6,speed:11.88}],
+    target:{x:412,y:726,r:38} },
+  { id:26, name:"Updraft", maxBlocks:2, targetType:'OPEN',
+    spawn:{x:394,y:40},
+    obstacles:[{x:315,y:255,r:30},{x:302,y:366,r:31}],
+    boosters:[{x:403,y:330,r:32,angle:177,speed:11.83}],
+    target:{x:125,y:621,r:37} },
+  { id:27, name:"Slingshot", maxBlocks:2, targetType:'SIDE_WALL', wallSide:'right',
+    spawn:{x:147,y:40},
+    obstacles:[{x:360,y:570,r:30},{x:330,y:423,r:34}],
+    boosters:[{x:143,y:307,r:30,angle:-11,speed:12.17}],
+    target:{x:400,y:677,r:30} },
+  { id:28, name:"Updraft", maxBlocks:2, targetType:'SIDE_WALL', wallSide:'left',
+    spawn:{x:374,y:40},
+    obstacles:[{x:321,y:530,r:30},{x:259,y:334,r:34}],
+    boosters:[{x:381,y:329,r:33,angle:208,speed:10.78}],
+    target:{x:63,y:674,r:33} },
+  { id:29, name:"The Sling", maxBlocks:2, targetType:'SIDE_WALL', wallSide:'right',
+    spawn:{x:139,y:40},
+    obstacles:[{x:261,y:428,r:29},{x:237,y:306,r:30}],
+    boosters:[{x:142,y:284,r:29,angle:-2,speed:10.69}],
+    target:{x:358,y:657,r:33} },
+  { id:30, name:"Ridgeline", maxBlocks:2, targetType:'POCKET', wallSide:'left',
+    spawn:{x:380,y:40},
+    obstacles:[{x:327,y:483,r:32},{x:411,y:551,r:28},{x:98,y:361,r:33}],
+    boosters:[{x:386,y:305,r:34,angle:195,speed:11.9}],
+    target:{x:57,y:618,r:28} }
+/* GEN:END */
 ];
 
 /* Build the static wall segments around a CIRCULAR target centred at c.
@@ -800,8 +884,64 @@ function buildWalls(lv, c){
       return [];
   }
 }
-// targets never move, so every level's walls are built once at boot
-LEVELS.forEach(function(lv){ lv.walls = buildWalls(lv, lv.target); });
+/* Normalise every level to the full entity set, so the simulation can loop
+   over each list without a guard and world 1 simply loops over nothing. */
+/* ============================================================
+   WORLDS
+   A world recolours the BACKDROP and the chrome accent only.
+   The entity palette - red obstacle, green target, blue ramp -
+   is the game's vocabulary and never changes: a player who has
+   learned that red hurts must not have to relearn it in world 6.
+   ============================================================ */
+const WORLDS = [
+  { id:1,  name:'First Steps',        from:1,   to:20,
+    sky:['#1a2048','#101433','#06081a'], wash:'104,146,255', accent:'#ffc93c' },
+  { id:2,  name:'Boost Ridge',        from:21,  to:30,
+    sky:['#102c2e','#0a1d26','#040d15'], wash:'64,224,190',  accent:'#48e0be' },
+  { id:3,  name:'Windwake Canyon',    from:31,  to:40,
+    sky:['#1d2740','#121a30','#070b18'], wash:'150,190,255', accent:'#9fc4ff' },
+  { id:4,  name:'Frostline',          from:41,  to:50,
+    sky:['#16304a','#0e1f33','#050d18'], wash:'150,220,255', accent:'#bfe9ff' },
+  { id:5,  name:'Rift Gate',          from:51,  to:60,
+    sky:['#26163f','#180e2b','#080416'], wash:'186,120,255', accent:'#c58bff' },
+  { id:6,  name:'Shatterstone',       from:61,  to:70,
+    sky:['#33231a','#211610','#0d0705'], wash:'255,168,96',  accent:'#ffb066' },
+  { id:7,  name:'Starfall',           from:71,  to:80,
+    sky:['#1b1638','#120e26','#060412'], wash:'255,214,120', accent:'#ffd479' },
+  { id:8,  name:'Twin Circuits',      from:81,  to:90,
+    sky:['#132a34','#0c1c24','#040c11'], wash:'96,220,255',  accent:'#6ddcff' },
+  { id:9,  name:'Deep Convergence',   from:91,  to:100,
+    sky:['#101a3a','#0a1128','#030612'], wash:'120,150,255', accent:'#8ea8ff' },
+  { id:10, name:"Needle's Eye",       from:101, to:110,
+    sky:['#2a1830','#1b0f20','#0a040d'], wash:'255,140,220', accent:'#ff8cdc' },
+  { id:11, name:'The Long Descent',   from:111, to:120,
+    sky:['#12212c','#0b161e','#04080c'], wash:'120,200,210', accent:'#7fd0d8' },
+  { id:12, name:'Overdrive',          from:121, to:130,
+    sky:['#3a1420','#260d16','#0f0409'], wash:'255,110,140', accent:'#ff6e8c' },
+  { id:13, name:'Ascension',          from:131, to:140,
+    sky:['#241a44','#17102e','#080516'], wash:'190,160,255', accent:'#bea0ff' },
+  { id:14, name:'The Summit',         from:141, to:150,
+    sky:['#3a2c10','#261c0a','#0f0b03'], wash:'255,206,90',  accent:'#ffce5a' }
+];
+function worldOf(id){
+  for (let i = 0; i < WORLDS.length; i++)
+    if (id >= WORLDS[i].from && id <= WORLDS[i].to) return WORLDS[i];
+  return WORLDS[0];
+}
+
+const ENTITY_LISTS = ['boosters','wind','slippery','portals','breakables','stars'];
+function initLevel(lv){
+  for (let i = 0; i < ENTITY_LISTS.length; i++)
+    if (!lv[ENTITY_LISTS[i]]) lv[ENTITY_LISTS[i]] = [];
+  // a level may never configure wind stronger than the ceiling
+  lv.wind.forEach(function(z){
+    z.ax = clamp(z.ax || 0, -WIND_CAP, WIND_CAP);
+    z.ay = clamp(z.ay || 0, -WIND_CAP, WIND_CAP);
+  });
+  lv.walls = buildWalls(lv, lv.target);
+  return lv;
+}
+LEVELS.forEach(initLevel);
 
 /* ---------------- math helpers ---------------- */
 function mulberry32(a){
@@ -825,7 +965,12 @@ function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
    SIMULATION - pure, no rendering. Shared by the live game and
    the headless solver sweep in the test harness.
    ============================================================ */
-function makeBall(lv, seed){
+function falses(n){ const a = []; for (let i = 0; i < n; i++) a.push(false); return a; }
+
+/** `broken` seeds which breakable blocks are ALREADY gone - that state
+    survives free retries inside one level entry, so a drop must be able to
+    start from it. Pass nothing for a fresh, fully-intact board. */
+function makeBall(lv, seed, broken){
   return {
     x: lv.spawn.x, y: lv.spawn.y,
     px: lv.spawn.x, py: lv.spawn.y,        // previous step, for render interpolation
@@ -842,9 +987,33 @@ function makeBall(lv, seed){
        reads any of this back. */
     hit: { n: 0, x: 0, y: 0, nx: 0, ny: 0, kind: '', speed: 0 },
     bounces: [],                           // {inAng,nAng,outAng} per obstacle hit
+    /* ---- world 2+ mechanics ---- */
+    boostIn: falses(lv.boosters.length),   // boosters the ball is inside RIGHT NOW,
+                                           // so one only fires as you enter it
+    portalCd: 0,                           // substeps before any portal may fire
+    portalHold: null,                      // the end just arrived at, until it is left
+    broken: broken ? broken.slice() : falses(lv.breakables.length),
+    justBroke: [],                         // broke during THIS run, for the shatter
+    got: falses(lv.stars.length),          // stars collected this run
+    stars: 0, boosts: 0, teleports: 0,
     rng: mulberry32(seed),
     result: null                           // null | 'win' | 'out' | 'timeout'
   };
+}
+/** The universal magnitude clamp. Never binds in world 1 - see SPEED_CAP. */
+function clampSpeed(b){
+  const m = Math.hypot(b.vx, b.vy);
+  if (m > SPEED_CAP){ const k = SPEED_CAP / m; b.vx *= k; b.vy *= k; }
+}
+function inDisc(b, c, r){
+  const dx = b.x - c.x, dy = b.y - c.y;
+  return dx*dx + dy*dy <= r*r;
+}
+/* Zones are axis-aligned rectangles and NEVER move. That is deliberate: a
+   region that slides through the space a player just drew a ramp in is the
+   same class of bug that got moving targets deleted. */
+function inZone(b, z){
+  return b.x >= z.x && b.x <= z.x + z.w && b.y >= z.y && b.y <= z.y + z.h;
 }
 function noteSpeed(b){
   const m = Math.hypot(b.vx, b.vy);
@@ -876,7 +1045,7 @@ function inTarget(b, c){
     normal and scale it by RESTITUTION. Gravity keeps acting on vy afterwards,
     so the ball arcs away rather than holding a fixed heading. Used for BOTH
     player ramps and level walls - identical physics. */
-function segmentBounce(b, s, halfT, kind){
+function segmentBounce(b, s, halfT, kind, rest){
   const c = closestOnSeg(b.x, b.y, s.x1, s.y1, s.x2, s.y2);
   let nx = b.x - c.x, ny = b.y - c.y;
   let d = Math.hypot(nx, ny);
@@ -892,8 +1061,8 @@ function segmentBounce(b, s, halfT, kind){
   b.y = c.y + ny * min;
   const dot = b.vx*nx + b.vy*ny;
   if (dot < 0){
-    b.vx = (b.vx - 2*dot*nx) * RESTITUTION;
-    b.vy = (b.vy - 2*dot*ny) * RESTITUTION;
+    b.vx = (b.vx - 2*dot*nx) * rest;
+    b.vy = (b.vy - 2*dot*ny) * rest;
     // never let a glancing contact leave the ball with nothing to travel on
     const m = Math.hypot(b.vx, b.vy);
     if (m < MIN_BOUNCE){
@@ -912,54 +1081,151 @@ function segmentBounce(b, s, halfT, kind){
   return true;
 }
 
-function resolveCollisions(b, lv, ramps, walls){
-  /* The board has no walls - the ball is free to leave by any edge, which
-     ends the run. Only ramps, level walls and obstacles change its direction. */
-  for (let i = 0; i < ramps.length; i++)  if (segmentBounce(b, ramps[i], RAMP_HT, 'ramp')) b.segHits++;
-  for (let i = 0; i < walls.length; i++)  if (segmentBounce(b, walls[i], WALL_HT, 'wall')) b.segHits++;
+/** Mirror off a circle, then scatter. Shared VERBATIM by red obstacles and
+    breakable blocks - a breakable must feel exactly like an obstacle on the
+    hit that destroys it, or the mechanic reads as a different thing. Returns
+    true if contact was made. */
+function bounceOffCircle(b, o, kind, rest){
+  let nx = b.x - o.x, ny = b.y - o.y;
+  let d = Math.hypot(nx, ny);
+  const min = BALL_R + o.r;
+  if (d >= min) return false;
+  if (d < 1e-6){ nx = 0; ny = -1; } else { nx /= d; ny /= d; }
+  b.x = o.x + nx * (min + 0.5);         // nudge clear so we can't re-trigger
+  b.y = o.y + ny * (min + 0.5);
+  const inAng = Math.atan2(b.vy, b.vx);
+  const dot = b.vx*nx + b.vy*ny;
+  let bx = b.vx, by = b.vy;
+  if (dot < 0){ bx = b.vx - 2*dot*nx; by = b.vy - 2*dot*ny; }
+  let a = Math.atan2(by, bx) + (b.rng()*2 - 1) * OB_JITTER;
+  const nAng = Math.atan2(ny, nx);
+  let rel = a - nAng;
+  rel = Math.atan2(Math.sin(rel), Math.cos(rel));   // wrap to [-PI, PI]
+  if (rel >  OB_MAX_DEV) rel =  OB_MAX_DEV;
+  else if (rel < -OB_MAX_DEV) rel = -OB_MAX_DEV;
+  a = nAng + rel;
+  b.bounces.push({ inAng: inAng, nAng: nAng, outAng: a });
+  // the scatter re-aims the bounce; the restitution decides what it costs
+  const sp = Math.max(MIN_BOUNCE, Math.hypot(b.vx, b.vy) * rest);
+  b.vx = Math.cos(a) * sp;
+  b.vy = Math.sin(a) * sp;
+  capVelocity(b);
+  noteHit(b, o.x + nx * o.r, o.y + ny * o.r, nx, ny, kind);
+  b.hits++;
+  return true;
+}
 
-  /* red obstacles: mirror off the circle, then scatter */
-  for (let i = 0; i < lv.obstacles.length; i++){
-    const o = lv.obstacles[i];
-    let nx = b.x - o.x, ny = b.y - o.y;
-    let d = Math.hypot(nx, ny);
-    const min = BALL_R + o.r;
-    if (d < min){
-      if (d < 1e-6){ nx = 0; ny = -1; } else { nx /= d; ny /= d; }
-      b.x = o.x + nx * (min + 0.5);         // nudge clear so we can't re-trigger
-      b.y = o.y + ny * (min + 0.5);
-      const inAng = Math.atan2(b.vy, b.vx);
-      const dot = b.vx*nx + b.vy*ny;
-      let bx = b.vx, by = b.vy;
-      if (dot < 0){ bx = b.vx - 2*dot*nx; by = b.vy - 2*dot*ny; }
-      let a = Math.atan2(by, bx) + (b.rng()*2 - 1) * OB_JITTER;
-      const nAng = Math.atan2(ny, nx);
-      let rel = a - nAng;
-      rel = Math.atan2(Math.sin(rel), Math.cos(rel));   // wrap to [-PI, PI]
-      if (rel >  OB_MAX_DEV) rel =  OB_MAX_DEV;
-      else if (rel < -OB_MAX_DEV) rel = -OB_MAX_DEV;
-      a = nAng + rel;
-      b.bounces.push({ inAng: inAng, nAng: nAng, outAng: a });
-      // the scatter re-aims the bounce; RESTITUTION decides what it costs
-      const sp = Math.max(MIN_BOUNCE, Math.hypot(b.vx, b.vy) * RESTITUTION);
-      b.vx = Math.cos(a) * sp;
-      b.vy = Math.sin(a) * sp;
-      capVelocity(b);
-      noteHit(b, o.x + nx * o.r, o.y + ny * o.r, nx, ny, 'obstacle');
-      b.hits++;
+function resolveCollisions(b, lv, ramps, walls, rest){
+  /* The board has no walls - the ball is free to leave by any edge, which
+     ends the run. Only ramps, level walls, obstacles and breakables change
+     its direction. */
+  for (let i = 0; i < ramps.length; i++)  if (segmentBounce(b, ramps[i], RAMP_HT, 'ramp', rest)) b.segHits++;
+  for (let i = 0; i < walls.length; i++)  if (segmentBounce(b, walls[i], WALL_HT, 'wall', rest)) b.segHits++;
+
+  for (let i = 0; i < lv.obstacles.length; i++)
+    bounceOffCircle(b, lv.obstacles[i], 'obstacle', rest);
+
+  /* Breakables bounce once, exactly like an obstacle, and are then gone for
+     the rest of the SESSION - free retries keep the cleared board, so the
+     level is learned and then solved. A fresh entry rebuilds them. */
+  for (let i = 0; i < lv.breakables.length; i++){
+    if (b.broken[i]) continue;
+    if (bounceOffCircle(b, lv.breakables[i], 'breakable', rest)){
+      b.broken[i] = true;
+      b.justBroke.push(i);
     }
   }
 }
 
-/** Advance one 1/60s step. Sets b.result when the run ends. */
+/** Advance one 1/60s step. Sets b.result when the run ends.
+
+    The order inside a substep is deliberate and worth keeping:
+      gravity -> wind -> move -> portal -> collide -> boost -> stars
+    Wind is an acceleration, so it belongs beside gravity. A portal fires on
+    where the ball ARRIVED, before anything can bounce it back out. A booster
+    fires AFTER collisions so it always wins the substep - a booster that can
+    be cancelled by a wall it is pushing you into is unreadable.
+
+    With no zones, no portals, no boosters, no breakables and no stars, every
+    added branch is skipped and this reduces to exactly the world 1 loop. */
 function stepBall(b, lv, ramps){
   const c = lv.target, walls = lv.walls;
   for (let i = 0; i < SUBSTEPS; i++){
     b.vy += GRAVITY / SUBSTEPS;     // gravity touches vy and nothing else
     if (b.vy > TERMINAL_VY) b.vy = TERMINAL_VY;
+
+    // wind: a constant push for exactly as long as the centre is inside
+    for (let k = 0; k < lv.wind.length; k++){
+      const z = lv.wind[k];
+      if (inZone(b, z)){
+        b.vx += (z.ax || 0) / SUBSTEPS;
+        b.vy += (z.ay || 0) / SUBSTEPS;
+        clampSpeed(b);
+      }
+    }
+
     b.x += b.vx / SUBSTEPS;
     b.y += b.vy / SUBSTEPS;
-    resolveCollisions(b, lv, ramps, walls);
+
+    // portals, on arrival. The ball must clear the end it came out of before
+    // anything may fire again, or the pair simply throws it back and forth.
+    if (b.portalHold){
+      const h = lv.portals[b.portalHold.k][b.portalHold.side];
+      if (!inDisc(b, h, h.r)) b.portalHold = null;
+    }
+    if (b.portalCd > 0) b.portalCd--;
+    if (!b.portalHold && b.portalCd === 0) for (let k = 0; k < lv.portals.length; k++){
+      const p = lv.portals[k];
+      let exit = null, side = '';
+      if (inDisc(b, p.a, p.a.r)){ exit = p.b; side = 'b'; }
+      else if (inDisc(b, p.b, p.b.r)){ exit = p.a; side = 'a'; }
+      if (!exit) continue;
+      b.x = exit.x; b.y = exit.y;
+      // direction is preserved unless the exit states a facing of its own
+      if (exit.facing !== undefined && exit.facing !== null){
+        const sp = Math.hypot(b.vx, b.vy) || MIN_BOUNCE;
+        const a = exit.facing * Math.PI / 180;
+        b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+      }
+      b.portalCd = PORTAL_CD;
+      b.portalHold = { k: k, side: side };
+      b.teleports++;
+      noteHit(b, exit.x, exit.y, 0, -1, 'portal');
+      break;
+    }
+
+    // a slippery floor gives back almost everything the bounce would cost
+    let rest = RESTITUTION;
+    for (let k = 0; k < lv.slippery.length; k++)
+      if (inZone(b, lv.slippery[k])){ rest = SLIP_REST; break; }
+
+    resolveCollisions(b, lv, ramps, walls, rest);
+
+    // boosters: fire once, on entry, and overrule whatever just happened
+    for (let k = 0; k < lv.boosters.length; k++){
+      const z = lv.boosters[k];
+      const inside = inDisc(b, z, z.r);
+      if (inside && !b.boostIn[k]){
+        const a = z.angle * Math.PI / 180;
+        const sp = Math.min(z.speed, SPEED_CAP);
+        b.vx = Math.cos(a) * sp;
+        b.vy = Math.sin(a) * sp;
+        b.boosts++;
+        noteHit(b, z.x, z.y, Math.cos(a), Math.sin(a), 'booster');
+      }
+      b.boostIn[k] = inside;
+    }
+
+    // stars are scenery to the physics - they never touch the trajectory
+    for (let k = 0; k < lv.stars.length; k++){
+      if (b.got[k]) continue;
+      const st = lv.stars[k];
+      if (Math.hypot(b.x - st.x, b.y - st.y) <= STAR_R + BALL_R){
+        b.got[k] = true; b.stars++;
+      }
+    }
+
+    clampSpeed(b);
     noteSpeed(b);
     if (inTarget(b, c)) { b.result = 'win'; b.hitX = c.x; b.hitY = c.y; return; }
     if (b.x < -BALL_R || b.x > W + BALL_R ||
@@ -980,13 +1246,14 @@ function stepBall(b, lv, ramps){
 }
 
 /** Run a whole drop headlessly and report the outcome. */
-function simulate(ramps, seed, levelIdx){
+function simulate(ramps, seed, levelIdx, broken){
   const lv = LEVELS[levelIdx === undefined ? levelIndex : levelIdx];
-  const b = makeBall(lv, seed >>> 0);
+  const b = makeBall(lv, seed >>> 0, broken);
   while (!b.result) stepBall(b, lv, ramps);
   return { result: b.result, steps: b.steps, hits: b.hits, segHits: b.segHits,
            spdMin: b.spdMin, spdMax: b.spdMax, vyMax: b.vyMax, restMin: b.restMin,
-           secs: b.steps / 60,
+           secs: b.steps / 60, stars: b.stars, boosts: b.boosts,
+           teleports: b.teleports, broken: b.broken.slice(),
            bounces: b.bounces, x: b.x, y: b.y };
 }
 
@@ -1020,7 +1287,7 @@ function loadCleared(){
 function saveProgress(){
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      highest: highest, stars: bestStars, cleared: clearedLevels,
+      highest: highest, stars: bestStars, cleared: clearedLevels, pickups: bestPickups,
       tutorialSeen: tutorialSeen, obstacleTipSeen: obstacleTipSeen
     }));
   }
@@ -1178,11 +1445,20 @@ function starNote(nTries, rampsUsed, budget, s){
    GAME STATE
    ============================================================ */
 let levelIndex = 0;
+const scratchIx = [];   // indices of the generator's scratch levels, if pushed
 let highest    = 0;
 let phase  = 'plan';    // 'plan' | 'drop' | 'over'
 let tries  = 0;         // drops on the current level, reset when the level changes
 let bestStars = {};     // levelIndex -> best stars earned, persisted
 let clearedLevels = {}; // levelIndex -> true once ever cleared, persisted
+/* Breakables survive re-drops inside one level and reset when the level is
+   entered again. The brief tied the reset to "spending a new ball", which was
+   written when a ball bought a whole level attempt; now that a ball buys one
+   drop, the reset hangs off entering the level instead. That keeps the point
+   of the mechanic - learn the board, then solve it - which per-drop resetting
+   would destroy. */
+let sessionBroken = [];
+let bestPickups = {};   // levelIndex -> most stars ever collected there
 let ramps  = [];
 let draft  = null;
 let ball   = null;
@@ -1243,25 +1519,26 @@ function buildBackdrop(){
   backdrop.height = canvas.height;
   bctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
 
+  const th = worldOf(LEVELS[levelIndex] ? LEVELS[levelIndex].id : 1);
   const g = bctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0,    '#1a2048');
-  g.addColorStop(0.55, '#101433');
-  g.addColorStop(1,    '#06081a');
+  g.addColorStop(0,    th.sky[0]);
+  g.addColorStop(0.55, th.sky[1]);
+  g.addColorStop(1,    th.sky[2]);
   bctx.fillStyle = g;
   bctx.fillRect(0, 0, W, H);
 
   // a cool wash spilling in from above the ceiling - the ball falls out of
   // the light and into the dark, which is what sells the board as deep
   const top = bctx.createRadialGradient(W * 0.5, -H * 0.10, 0, W * 0.5, -H * 0.10, H * 0.75);
-  top.addColorStop(0, 'rgba(104,146,255,.22)');
-  top.addColorStop(1, 'rgba(104,146,255,0)');
+  top.addColorStop(0, 'rgba(' + th.wash + ',.22)');
+  top.addColorStop(1, 'rgba(' + th.wash + ',0)');
   bctx.fillStyle = top;
   bctx.fillRect(0, 0, W, H);
 
   // the grid fades out toward the floor rather than ruling the whole board
   bctx.lineWidth = 1;
   for (let y = 50; y < H; y += 50){
-    bctx.strokeStyle = 'rgba(150,180,255,' + (0.010 + 0.050 * (1 - y / H)).toFixed(4) + ')';
+    bctx.strokeStyle = 'rgba(' + th.wash + ',' + (0.010 + 0.050 * (1 - y / H)).toFixed(4) + ')';
     bctx.beginPath(); bctx.moveTo(0, y + .5); bctx.lineTo(W, y + .5); bctx.stroke();
   }
 
@@ -1393,7 +1670,9 @@ function setLevel(i){
   levelIndex = clamp(i, 0, LEVELS.length - 1);
   ramps = []; draft = null; ball = null; capture = null;
   selected = -1; dragging = null; lastResult = null; hideFlash();
-  seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
+  seenHit = 0; seenBroke = 0; squash.amt = 0; clearParticles(); clearTrail();
+  sessionBroken = falses(LEVELS[levelIndex].breakables.length);
+  applyWorldTheme();
   tries = 0;
   phase = 'plan'; overlay.hidden = true;
   if (levelIndex > highest){ highest = levelIndex; saveProgress(); }
@@ -1585,8 +1864,8 @@ function drop(){
   draft = null; capture = null; dragging = null; selected = -1;
   hideFlash();
   const seed = seedOverride !== null ? seedOverride : (Math.random() * 0x7fffffff) | 0;
-  ball  = makeBall(level(), seed);
-  seenHit = 0; squash.amt = 0; clearParticles(); clearTrail();
+  ball  = makeBall(level(), seed, sessionBroken);
+  seenHit = 0; seenBroke = 0; squash.amt = 0; clearParticles(); clearTrail();
   // one ball per press, win or lose: what costs is throwing it, not the
   // result. Committed before the drop runs, so an interrupted run still paid.
   balls--;
@@ -1615,7 +1894,7 @@ function land(result){
 function missed(result){
   lastResult = result;
   ball = null; capture = null; draft = null;
-  clearParticles(); clearTrail(); squash.amt = 0; seenHit = 0;
+  clearParticles(); clearTrail(); squash.amt = 0; seenHit = 0; seenBroke = 0;
   phase = 'plan';
   overlay.hidden = true;
   showFlash(result === 'timeout'
@@ -1995,7 +2274,7 @@ const stars = [];
                  drift: 2 + r() * 7,          // px/sec downward - barely motion
                  tw: 0.5 + r() * 1.4, phase: r() * Math.PI * 2 });
 })();
-function drawStars(){
+function drawStarfield(){
   ctx.save();
   ctx.fillStyle = '#cfe0ff';
   for (let i = 0; i < STAR_N; i++){
@@ -2042,8 +2321,10 @@ function drawTrail(){
 /* The ball's impact deformation. `amt` is tweened; nx/ny is the axis it is
    squashed along, which is whatever surface it just met. */
 const squash = { amt: 0, nx: 0, ny: -1 };
-const HIT_COLOR = { ramp:'#3ec8ff', wall:'#c3ccdd', obstacle:'#ff6b78' };
+const HIT_COLOR = { ramp:'#3ec8ff', wall:'#c3ccdd', obstacle:'#ff6b78',
+                    breakable:'#ffb066', booster:'#7dffd4', portal:'#d8a0ff' };
 let seenHit = 0;                              // last b.hit.n the juice reacted to
+let seenBroke = 0;                            // breakables already shattered on screen
 
 /** Fire everything a single contact is worth: sound, sparks, squash. */
 function reactToHit(h){
@@ -2094,6 +2375,224 @@ function drawSeg(s, color, halfT, glow){
   ctx.restore();
 }
 
+/** Recolour the chrome to the current world and repaint the backdrop. */
+function applyWorldTheme(){
+  const th = worldOf(level().id);
+  document.documentElement.style.setProperty('--accent', th.accent);
+  buildBackdrop();
+}
+
+/* ---------------- world 2+ entity rendering ----------------
+   Every one of these has to TELEGRAPH what it does before the ball arrives -
+   the whole game is plan-first, so a zone whose effect is only discoverable
+   by flying through it would be the same unfairness as the obstacle that
+   used to sit on level 20's cup. */
+
+/** Wind: a tinted region with streaks drifting the way it pushes. */
+function drawWindZone(z){
+  ctx.save();
+  const horiz = Math.abs(z.ax || 0) >= Math.abs(z.ay || 0);
+  const dir = horiz ? Math.sign(z.ax || 1) : Math.sign(z.ay || 1);
+  const g = horiz ? ctx.createLinearGradient(z.x, 0, z.x + z.w, 0)
+                  : ctx.createLinearGradient(0, z.y, 0, z.y + z.h);
+  const a0 = dir > 0 ? 0.02 : 0.13, a1 = dir > 0 ? 0.13 : 0.02;
+  g.addColorStop(0, 'rgba(150,200,255,' + a0 + ')');
+  g.addColorStop(1, 'rgba(150,200,255,' + a1 + ')');
+  ctx.fillStyle = g;
+  roundRect(z.x, z.y, z.w, z.h, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(160,205,255,.22)'; ctx.lineWidth = 1.5;
+  roundRect(z.x, z.y, z.w, z.h, 10); ctx.stroke();
+
+  // streaks: seeded off the zone's own position, so they never jitter
+  ctx.lineCap = 'round';
+  const n = 9, sp = 70;
+  for (let i = 0; i < n; i++){
+    const seed = (z.x * 13 + z.y * 7 + i * 91) % 997;
+    const off  = (seed / 997);
+    let px, py, len = 16 + (seed % 13);
+    if (horiz){
+      const t = ((clock * sp * dir) / z.w + off) % 1;
+      px = z.x + ((t + 1) % 1) * z.w;
+      py = z.y + 8 + off * (z.h - 16);
+    } else {
+      const t = ((clock * sp * dir) / z.h + off) % 1;
+      py = z.y + ((t + 1) % 1) * z.h;
+      px = z.x + 8 + off * (z.w - 16);
+    }
+    ctx.globalAlpha = 0.30;
+    ctx.strokeStyle = '#cfe6ff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px - (horiz ? len * dir : 0), py - (horiz ? 0 : len * dir));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Slippery: a pale frozen sheet with a slow sheen crossing it. */
+function drawSlippery(z){
+  ctx.save();
+  const g = ctx.createLinearGradient(z.x, z.y, z.x, z.y + z.h);
+  g.addColorStop(0, 'rgba(190,235,255,.16)');
+  g.addColorStop(1, 'rgba(120,190,230,.07)');
+  ctx.fillStyle = g;
+  roundRect(z.x, z.y, z.w, z.h, 8); ctx.fill();
+  ctx.strokeStyle = 'rgba(200,240,255,.34)'; ctx.lineWidth = 1.5;
+  roundRect(z.x, z.y, z.w, z.h, 8); ctx.stroke();
+  ctx.save();
+  roundRect(z.x, z.y, z.w, z.h, 8); ctx.clip();
+  const k = (clock * 0.22 + (z.x + z.y) / 900) % 1;
+  const sx = z.x - z.w * 0.5 + k * z.w * 2;
+  const sh = ctx.createLinearGradient(sx - 30, 0, sx + 30, 0);
+  sh.addColorStop(0, 'rgba(255,255,255,0)');
+  sh.addColorStop(0.5, 'rgba(255,255,255,.16)');
+  sh.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sh; ctx.fillRect(z.x, z.y, z.w, z.h);
+  ctx.restore();
+  ctx.restore();
+}
+
+/** Booster: a green-cyan disc with a chevron aimed exactly where it fires. */
+function drawBooster(z){
+  const a = z.angle * Math.PI / 180;
+  const pulse = 0.5 + 0.5 * Math.sin(clock * 3.4 + z.x * 0.05);
+  ctx.save();
+  const bloom = ctx.createRadialGradient(z.x, z.y, z.r * 0.3, z.x, z.y, z.r * 1.7);
+  bloom.addColorStop(0, 'rgba(64,232,190,' + (0.28 + pulse * 0.12) + ')');
+  bloom.addColorStop(1, 'rgba(64,232,190,0)');
+  ctx.fillStyle = bloom;
+  ctx.beginPath(); ctx.arc(z.x, z.y, z.r * 1.7, 0, Math.PI * 2); ctx.fill();
+  const body = ctx.createRadialGradient(z.x, z.y, 0, z.x, z.y, z.r);
+  body.addColorStop(0, 'rgba(150,255,225,.30)');
+  body.addColorStop(1, 'rgba(40,190,160,.10)');
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(90,255,215,.85)'; ctx.lineWidth = 2.5;
+  ctx.setLineDash([7, 6]);
+  ctx.lineDashOffset = -(clock * 26) % 13;
+  ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  // the chevron IS the promise: this is the exact heading you leave on
+  ctx.translate(z.x, z.y); ctx.rotate(a);
+  ctx.strokeStyle = '#dfffe8'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const L = z.r * 0.62;
+  for (let i = 0; i < 2; i++){
+    const ox = -L * 0.35 + i * L * 0.62 + pulse * 3;
+    ctx.beginPath();
+    ctx.moveTo(ox - L * 0.32, -L * 0.42);
+    ctx.lineTo(ox + L * 0.20, 0);
+    ctx.lineTo(ox - L * 0.32, L * 0.42);
+    ctx.globalAlpha = i ? 0.95 : 0.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Portal: a pair of rings in the pair's own hue, so which goes where is
+    readable at a glance on a board holding more than one pair. */
+const PORTAL_HUES = [285, 190, 45, 330];
+function drawPortalEnd(e, hue, spin){
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  const bloom = ctx.createRadialGradient(0, 0, e.r * 0.2, 0, 0, e.r * 1.7);
+  bloom.addColorStop(0, 'hsla(' + hue + ',100%,72%,.30)');
+  bloom.addColorStop(1, 'hsla(' + hue + ',100%,72%,0)');
+  ctx.fillStyle = bloom;
+  ctx.beginPath(); ctx.arc(0, 0, e.r * 1.7, 0, Math.PI * 2); ctx.fill();
+  const well = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r);
+  well.addColorStop(0, 'hsla(' + hue + ',100%,88%,.55)');
+  well.addColorStop(0.6, 'hsla(' + hue + ',90%,60%,.18)');
+  well.addColorStop(1, 'hsla(' + hue + ',80%,40%,.05)');
+  ctx.fillStyle = well;
+  ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI * 2); ctx.fill();
+  ctx.rotate(spin);
+  ctx.strokeStyle = 'hsla(' + hue + ',100%,80%,.9)';
+  ctx.lineWidth = 2.5; ctx.setLineDash([e.r * 0.7, e.r * 0.5]);
+  ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.rotate(-spin * 2.2);
+  ctx.strokeStyle = 'hsla(' + hue + ',100%,90%,.5)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(0, 0, e.r * 0.6, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  if (e.facing !== undefined && e.facing !== null){
+    const a = e.facing * Math.PI / 180;
+    ctx.save();
+    ctx.translate(e.x + Math.cos(a) * e.r * 1.15, e.y + Math.sin(a) * e.r * 1.15);
+    ctx.rotate(a);
+    ctx.fillStyle = 'hsla(' + hue + ',100%,85%,.95)';
+    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, 5); ctx.lineTo(-5, -5);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** Breakable: an obstacle that is visibly cracked, so it never reads as a
+    permanent one. Different hue AND different surface, not colour alone. */
+function drawBreakable(o){
+  ctx.save();
+  const bloom = ctx.createRadialGradient(o.x, o.y, o.r * 0.8, o.x, o.y, o.r * 1.5);
+  bloom.addColorStop(0, 'rgba(255,168,96,.22)');
+  bloom.addColorStop(1, 'rgba(255,168,96,0)');
+  ctx.fillStyle = bloom;
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.5, 0, Math.PI * 2); ctx.fill();
+  const body = ctx.createRadialGradient(o.x - o.r * 0.34, o.y - o.r * 0.4, o.r * 0.05,
+                                        o.x, o.y, o.r);
+  body.addColorStop(0,    '#ffd7a8');
+  body.addColorStop(0.45, '#e08a3c');
+  body.addColorStop(1,    '#8c4a18');
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+  // fracture lines - fixed per position, so they never crawl
+  ctx.strokeStyle = 'rgba(60,26,4,.55)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  const seed = (o.x * 7 + o.y * 13) % 360;
+  for (let i = 0; i < 3; i++){
+    const a = (seed + i * 118) * Math.PI / 180;
+    ctx.beginPath();
+    ctx.moveTo(o.x + Math.cos(a) * o.r * 0.15, o.y + Math.sin(a) * o.r * 0.15);
+    ctx.lineTo(o.x + Math.cos(a + 0.25) * o.r * 0.92, o.y + Math.sin(a + 0.25) * o.r * 0.92);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,220,180,.45)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 0.8, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+/** Star pickup. Dimmed to an outline once taken, so the board still shows
+    what is left to find on a replay. */
+function drawStar(st, taken){
+  const tw = 0.5 + 0.5 * Math.sin(clock * 3 + st.x * 0.07 + st.y * 0.03);
+  ctx.save();
+  ctx.translate(st.x, st.y);
+  if (!taken){
+    const bloom = ctx.createRadialGradient(0, 0, 1, 0, 0, STAR_R * 1.8);
+    bloom.addColorStop(0, 'rgba(255,214,120,' + (0.34 + tw * 0.18) + ')');
+    bloom.addColorStop(1, 'rgba(255,214,120,0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath(); ctx.arc(0, 0, STAR_R * 1.8, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.rotate(clock * 0.6);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++){
+    const rr = i % 2 ? STAR_R * 0.42 : STAR_R * (taken ? 0.85 : 1);
+    const a = -Math.PI / 2 + i * Math.PI / 5;
+    const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+    if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  if (taken){
+    ctx.strokeStyle = 'rgba(255,214,120,.32)'; ctx.lineWidth = 1.5; ctx.stroke();
+  } else {
+    const g = ctx.createLinearGradient(0, -STAR_R, 0, STAR_R);
+    g.addColorStop(0, '#fff6d2'); g.addColorStop(1, '#ffc451');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = 'rgba(120,80,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /* A level wall is structural and dead, and must not read as something the
    player placed: no bloom, a seat of shadow under it, and a lengthwise
    gradient so it looks extruded rather than drawn. */
@@ -2121,7 +2620,12 @@ function render(){
   const lv = level();
 
   ctx.drawImage(backdrop, 0, 0, W, H);
-  drawStars();
+  drawStarfield();
+
+  /* Zones are ground: they sit under everything so the ball, the ramps and
+     the obstacles all read as being ON the board rather than behind it. */
+  for (let i = 0; i < lv.slippery.length; i++) drawSlippery(lv.slippery[i]);
+  for (let i = 0; i < lv.wind.length; i++)     drawWindZone(lv.wind[i]);
 
   const c = lv.target;
 
@@ -2233,6 +2737,20 @@ function render(){
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 7, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
+
+  /* breakables, boosters, portals and pickups sit with the obstacles */
+  const gone = ball ? ball.broken : sessionBroken;
+  for (let i = 0; i < lv.breakables.length; i++)
+    if (!gone[i]) drawBreakable(lv.breakables[i]);
+  for (let i = 0; i < lv.boosters.length; i++) drawBooster(lv.boosters[i]);
+  for (let i = 0; i < lv.portals.length; i++){
+    const hue = PORTAL_HUES[i % PORTAL_HUES.length];
+    const spin = clock * 0.7;
+    drawPortalEnd(lv.portals[i].a, hue, spin);
+    drawPortalEnd(lv.portals[i].b, hue, -spin);
+  }
+  for (let i = 0; i < lv.stars.length; i++)
+    drawStar(lv.stars[i], ball ? ball.got[i] : false);
 
   /* ramps */
   for (let i = 0; i < ramps.length; i++) drawSeg(ramps[i], '#3ec8ff', RAMP_HT, 'rgba(62,200,255,.55)');
@@ -2423,9 +2941,16 @@ function frame(now){
       // Sound and juice are driven from here, never from the physics -
       // stepBall only records what it touched, so simulate() stays silent and
       // side-effect free for the test suite and the solver.
+      // a block that shattered this step throws its pieces
+      while (seenBroke < ball.justBroke.length){
+        const bk = level().breakables[ball.justBroke[seenBroke++]];
+        burst(bk.x, bk.y, 0, -1, '#e08a3c', 16, 3.2, Math.PI, 460);
+        burst(bk.x, bk.y, 0, -1, '#ffd7a8', 8, 2.2, Math.PI, 340);
+      }
       if (ball.hit.n !== seenHit){
         seenHit = ball.hit.n;
-        Sound.bounce(ball.hit.kind === 'obstacle' ? 'obstacle' : 'ramp');
+        Sound.bounce(ball.hit.kind === 'obstacle' || ball.hit.kind === 'breakable'
+                     ? 'obstacle' : 'ramp');
         reactToHit(ball.hit);
         /* Step 3, and the reason it needs its own flag: level 1 has no
            obstacles at all, so this can only ever fire on a later level -
@@ -2436,7 +2961,14 @@ function frame(now){
           showFlash('Obstacles bounce you randomly — try to avoid them.');
         }
       }
-      if (ball.result){ land(ball.result); break; }
+      if (ball.result){
+        // a block broken this run stays broken for the next drop
+        sessionBroken = ball.broken.slice();
+        if (ball.stars > (bestPickups[levelIndex] | 0)){
+          bestPickups[levelIndex] = ball.stars; saveProgress();
+        }
+        land(ball.result); break;
+      }
     }
   } else {
     acc = 0;
@@ -2463,6 +2995,7 @@ function frame(now){
 highest   = loadHighest();
 bestStars = loadStars();
 clearedLevels = loadCleared();
+bestPickups = (function(){ const v = loadSave().pickups; return (v && typeof v === 'object') ? v : {}; })();
 loadBalls();
 loadSpin();
 /* "Genuinely first-time" means no save at all. Anyone who already has
@@ -2512,6 +3045,8 @@ window.__gtb = {
   tween: tween, Ease: Ease, burst: burst,     // juice helpers, for the suite
   buildWalls: buildWalls,
   clock: function(){ return clock; },   // lets tests build any target type on any level
+  WORLDS: WORLDS,
+  worldOf: worldOf,
   state: function(){
     const lv = level();
     return { phase: phase, levelIndex: levelIndex, levelId: lv.id, highest: highest,
@@ -2531,6 +3066,9 @@ window.__gtb = {
              ball: ball ? { x: ball.x, y: ball.y, px: ball.px, py: ball.py,
                             vx: ball.vx, vy: ball.vy, hits: ball.hit.n,
                             speed: Math.hypot(ball.vx, ball.vy) } : null,
+             mech: ball ? { boosts: ball.boosts, teleports: ball.teleports,
+                            stars: ball.stars, broken: ball.broken.slice() }
+                        : { broken: sessionBroken.slice() },
              juice: { squash: squash.amt, tweens: tweens.length,
                       trail: trail.length, stars: STAR_N,
                       live: particles.reduce(function(n,p){ return n + (p.life > 0 ? 1 : 0); }, 0) },
@@ -2562,6 +3100,34 @@ window.__gtb = {
              dropDisabled: btnDrop.disabled, stopShown: !panelNoBalls.hidden,
              buyDisabled: buy.disabled, buyText: buy.textContent };
   },
+  /* A scratch slot at the end of LEVELS. The generator injects a candidate
+     here, sweeps it with the real simulator, and only levels that pass are
+     ever written into the shipped LEVELS[]. */
+  scratch: function(lv, slot){
+    slot = slot | 0;
+    initLevel(lv);
+    while (scratchIx.length <= slot){ LEVELS.push(lv); scratchIx.push(LEVELS.length - 1); }
+    LEVELS[scratchIx[slot]] = lv;
+    return scratchIx[slot];
+  },
+  /* Per-step samples of a whole drop. The isolation tests assert on the
+     velocity curve itself rather than inferring a mechanic from where the
+     ball happened to land. */
+  trace: function(ramps, seed, levelIdx, broken){
+    const lv = LEVELS[levelIdx];
+    const b = makeBall(lv, seed >>> 0, broken);
+    const out = [];
+    while (!b.result && out.length < 900){
+      stepBall(b, lv, ramps);
+      out.push({ x:b.x, y:b.y, vx:b.vx, vy:b.vy, sp:Math.hypot(b.vx, b.vy),
+                 boosts:b.boosts, teleports:b.teleports, stars:b.stars,
+                 broken:b.broken.filter(Boolean).length });
+    }
+    return { result: b.result, steps: b.steps, samples: out };
+  },
+  MECH: { SPEED_CAP:SPEED_CAP, SLIP_REST:SLIP_REST, PORTAL_CD:PORTAL_CD,
+          STAR_R:STAR_R, WIND_CAP:WIND_CAP, RESTITUTION:RESTITUTION },
+  pickups: function(){ return Object.assign({}, bestPickups); },
   setSeed:  function(s){ seedOverride = s === null ? null : (s >>> 0); },
   setRamps: function(list){ ramps = list.map(function(r){ return Object.assign({}, r); }); syncUI(); },
   setLevel: setLevel,

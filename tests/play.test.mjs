@@ -114,13 +114,21 @@ const lvinfo = await page.evaluate(() => {
     (l.target.x > l.spawn.x) ? right++ : left++;
     ys.push(l.target.y);
     // 30px apart on a 480x800 board is a visibly different board position
-    seen.forEach(q => { if (Math.hypot(q.x-l.target.x, q.y-l.target.y) < 30) tooClose++; });
-    seen.push({x:l.target.x, y:l.target.y});
+    // variety is a within-world property: two levels twenty apart, in
+    // different worlds with different mechanics, may sit in the same place
+    const w = window.__gtb.worldOf(l.id).id;
+    seen.forEach(q => { if (q.w === w && Math.hypot(q.x-l.target.x, q.y-l.target.y) < 30) tooClose++; });
+    seen.push({x:l.target.x, y:l.target.y, w:w});
   });
+  // World 1 is pinned exactly; later worlds are generated and only have to
+  // obey the structural rules, not a hand-written plan
+  const W1 = LEVELS.slice(0, 20);
   return { n: LEVELS.length, badId, badType, outOfBoard, overlap,
-           blocks: LEVELS.map(l=>l.maxBlocks).join(','),
-           obst:   LEVELS.map(l=>l.obstacles.length).join(','),
-           types:  LEVELS.map(l=>l.targetType).join(','),
+           worlds: window.__gtb.WORLDS.map(w => `${w.id}:${w.from}-${w.to}`).join(' '),
+           worldSpan: window.__gtb.WORLDS[window.__gtb.WORLDS.length-1].to,
+           blocks: W1.map(l=>l.maxBlocks).join(','),
+           obst:   W1.map(l=>l.obstacles.length).join(','),
+           types:  W1.map(l=>l.targetType).join(','),
            moving: LEVELS.map((l,i)=>l.move?i+1:0).filter(Boolean).join(','),
            hasMoveKey: LEVELS.some(l => 'move' in l),
            right, left, tooClose,
@@ -132,14 +140,17 @@ const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
                     'SIDE_WALL,POCKET,NARROW_GAP,NARROW_GAP,ENCLOSED,OPEN,SIDE_WALL,NARROW_GAP,POCKET,ENCLOSED';
 console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
             `target y spread ${lvinfo.ySpread}px`);
-check(lvinfo.n === 20, 'all 20 levels present', `${lvinfo.n}`);
+console.log(`  worlds: ${lvinfo.worlds}`);
+check(lvinfo.n >= 20, 'the original twenty are still all there', `${lvinfo.n} levels total`);
+check(lvinfo.n <= lvinfo.worldSpan,
+  'no level exists outside the declared world ranges', `${lvinfo.n} of ${lvinfo.worldSpan} planned`);
 check(lvinfo.badId === 0, 'level ids are sequential from 1');
 check(lvinfo.badType === 0, 'every targetType is one of the five');
 check(lvinfo.outOfBoard === 0, 'spawns, targets and obstacles are inside the board');
 check(lvinfo.overlap === 0, 'no obstacle sits on a target or blocks a spawn');
-check(lvinfo.blocks === PLAN_BLOCKS, 'ramp budgets match the plan, drops at 7/14/17/18 intact');
-check(lvinfo.obst === PLAN_OBST, 'obstacle counts match the plan');
-check(lvinfo.types === PLAN_TYPES, 'target types match the plan');
+check(lvinfo.blocks === PLAN_BLOCKS, 'world 1 ramp budgets match the plan, drops at 7/14/17/18 intact');
+check(lvinfo.obst === PLAN_OBST, 'world 1 obstacle counts match the plan');
+check(lvinfo.types === PLAN_TYPES, 'world 1 target types match the plan');
 check(lvinfo.moving === '' && !lvinfo.hasMoveKey, 'no level defines target movement', lvinfo.moving || 'none');
 check(lvinfo.right >= 7 && lvinfo.left >= 7,
   'targets are reached both leftward and rightward', `${lvinfo.right}R / ${lvinfo.left}L`);
@@ -823,8 +834,9 @@ let grid = await page.evaluate(() => {
   return { n: b.length, locked: b.filter(x => x.disabled).length,
            labels: b.map(x => x.textContent).join(',') };
 });
-check(grid.n === 20, 'picker shows all 20 levels', `${grid.n}`);
-check(grid.locked === 19, 'everything past your best is locked', `${grid.locked} locked`);
+const nLevels = await page.evaluate(() => window.__gtb.LEVELS.length);
+check(grid.n === nLevels, 'the picker shows every level', `${grid.n}`);
+check(grid.locked === nLevels - 1, 'everything past your best is locked', `${grid.locked} locked`);
 check(await page.locator('#lvgrid button').nth(4).isDisabled(), 'level 5 locked on a fresh save');
 
 // unlock a few and re-open
@@ -836,7 +848,7 @@ grid = await page.evaluate(() => {
   const b = [...document.querySelectorAll('#lvgrid button')];
   return { locked: b.filter(x => x.disabled).length };
 });
-check(grid.locked === 13, 'reaching level 7 unlocks the first seven', `${grid.locked} locked`);
+check(grid.locked === nLevels - 7, 'reaching level 7 unlocks the first seven', `${grid.locked} locked`);
 await page.locator('#lvgrid button').nth(3).click();
 const sel = await page.evaluate(() => window.__gtb.state());
 check(sel.levelId === 4 && sel.phase === 'plan', 'picking a level jumps straight to it', `level ${sel.levelId}`);
