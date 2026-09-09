@@ -218,12 +218,9 @@
   .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
   .card .row{display:flex;gap:8px}
   .card .row + .row{margin-top:8px}
-  /* the way back out of the stop screen: present, but never competing with
-     the two things it is actually offering */
-  button.quiet{background:none;border:0;box-shadow:none;color:var(--muted);
-               font-weight:600;font-size:12.5px;padding:6px}
-  button.quiet:hover:not(:disabled){filter:brightness(1.5)}
-  button.quiet:active:not(:disabled){transform:none;box-shadow:none}
+  /* The ad may look like the recommended action, but declining it must be
+     just as easy to hit: same box, same type, same reach. */
+  #btn-nb-close{flex:1}
   .win .big{color:#7dffb4;text-shadow:0 0 22px rgba(47,217,122,.55)}
   .lose .big{color:#ff8792;text-shadow:0 0 22px rgba(255,77,94,.45)}
 
@@ -345,7 +342,10 @@
           first time to earn more, or spin the daily wheel.</div>
         <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
         <div class="row"><button id="btn-buy" disabled>Buy Balls &mdash; Coming Soon</button></div>
-        <div class="row"><button id="btn-nb-close" class="quiet">Not now</button></div>
+        <!-- Full peer of the other two, deliberately. CrazyGames prohibits
+             buttons sized to encourage ads, and a glowing ad button over a
+             bare text link is exactly that shape. -->
+        <div class="row"><button id="btn-nb-close">Not now</button></div>
       </div>
     </div>
     <div class="overlay" id="spinpanel" hidden>

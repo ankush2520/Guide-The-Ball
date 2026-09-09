@@ -144,6 +144,43 @@ asked to draw the wheel as well.
 
 ## Portal compliance (CrazyGames)
 
+Audited against
+[docs.crazygames.com/requirements/quality](https://docs.crazygames.com/requirements/quality/).
+The mechanical items are asserted in sections 15-17 of the suite; the rest are
+judgement calls recorded here so they are not silently forgotten.
+
+**Met and tested.** Onboarding lands the player straight in gameplay (zero
+clicks) and is a mime drawn on the board rather than a splash screen; it is
+skippable and never blocks play. Every button carries a label. Escape and
+Ctrl/Cmd+W are never swallowed. No custom fullscreen control exists. Layout
+holds from 800x450 to 1920x1080. Audio levels are consistent and the master bus
+has headroom (worst case 0.86 of 1.0; the loudest single event is an obstacle
+hit at 0.46 after the sfx gain, not the win arpeggio, whose notes decay too
+fast to stack).
+
+**"Buttons must not be sized to encourage ads."** The out-of-balls screen used
+to put a glowing full-width ad button over a bare "Not now" text link - 1.5x
+the area, heavier type. All three offers are now the same box, the same type
+and the same height. If a purchase offer or a second ad placement is ever
+added, keep them peers.
+
+**Open, and not code problems:**
+
+- *"Not easily confused with similar-named games."* **Guide the Ball** is a
+  generic name on a portal with a lot of ball games. This is the most likely
+  thing to come back from review. Worth deciding before submission.
+- *"Frequently maintained and updated"* and *"major features should not change
+  after submission"* - a release-cadence commitment, not a build task. The
+  economy and the level set should settle before submitting.
+- *No keyboard controls exist.* The game is pointer/touch only, which is
+  allowed, and "control bindings should adapt to keyboard layout" is therefore
+  moot. If keys are ever added, that requirement wakes up.
+- *The legend and hint are hidden below 700px tall*, so a landscape phone gets
+  no reference text. The board is meant to carry itself there (green ring =
+  goal, red = danger) and the onboarding mime still runs, but it is a
+  deliberate trade worth re-checking if the art changes.
+
+
 Asserted in section 15-17 of the suite, because these are pass/fail gates on
 the portal's side rather than matters of taste.
 

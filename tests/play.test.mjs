@@ -1455,6 +1455,60 @@ check((await page.evaluate(() => window.__gtb.state().tutorial.step)) === 1,
 check(landing.dropReady, 'and it does not block play - it is a hint, not a gate');
 await topUp();
 
+/* --- quality guidelines: buttons must not be sized to encourage ads --- */
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.setBalls(0); g.setLevel(0);
+  g.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]);
+});
+await page.locator('#btn-drop').click();          // raises the out-of-balls screen
+await page.waitForTimeout(200);
+const offer = await page.evaluate(() => ['btn-ad','btn-buy','btn-nb-close'].map(id => {
+  const e = document.getElementById(id), b = e.getBoundingClientRect(), cs = getComputedStyle(e);
+  return { id, w:+b.width.toFixed(1), h:+b.height.toFixed(1), area:+(b.width*b.height).toFixed(0),
+           font: parseFloat(cs.fontSize), label: e.textContent.trim() };
+}));
+const [adBtn, buyBtn, closeBtn] = offer;
+console.log('  out-of-balls offers: ' + offer.map(o => `${o.label} ${o.w}x${o.h}`).join('  |  '));
+check(closeBtn.area >= adBtn.area * 0.95,
+  'declining the ad is the same size as taking it - no button sized to push an ad',
+  `dismiss ${closeBtn.area}px2 vs ad ${adBtn.area}px2`);
+check(closeBtn.font >= adBtn.font,
+  'and set in the same size type', `${closeBtn.font}px vs ${adBtn.font}px`);
+check(closeBtn.h === adBtn.h, 'and the same height to hit', `${closeBtn.h}px vs ${adBtn.h}px`);
+check(buyBtn.area <= adBtn.area * 1.05, 'the disabled purchase offer is not oversized either');
+await page.evaluate(() => document.getElementById('btn-nb-close').click());
+await topUp();
+
+/* --- quality guidelines: every button is actually labelled --- */
+const unlabelled = await page.evaluate(() => {
+  const bad = [];
+  document.querySelectorAll('button').forEach(b => {
+    const text = (b.textContent || '').trim();
+    const aria = b.getAttribute('aria-label') || b.getAttribute('title') || '';
+    if (!text && !aria) bad.push(b.id || b.className || '(anonymous)');
+  });
+  return bad;
+});
+check(unlabelled.length === 0, 'every button carries a readable label or an aria-label',
+  unlabelled.join(',') || 'all labelled');
+
+/* --- quality guidelines: onboarding lands in gameplay and is skippable --- */
+await page.evaluate(() => { localStorage.clear(); });
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+const onboard = await page.evaluate(() => {
+  const s = window.__gtb.state();
+  return { step: s.tutorial.step, skipShown: s.tutorial.skipShown,
+           playable: !document.getElementById('btn-drop').disabled,
+           onCanvas: !document.querySelector('.stage .overlay:not([hidden])') };
+});
+check(onboard.step === 1 && onboard.onCanvas,
+  'onboarding happens in gameplay, drawn on the board - not on a splash screen');
+check(onboard.skipShown, 'and it is skippable');
+check(onboard.playable, 'and never blocks play while it is up');
+await topUp();
+
 /* --- legible across the whole required viewport range --- */
 const VIEWPORTS = [[800,450,'CG minimum'], [1920,1080,'CG maximum'],
                    [1280,720,'desktop'], [844,390,'phone landscape'], [390,844,'phone portrait']];
