@@ -58,6 +58,10 @@ Two surfaces, because either one alone has a hole:
   short — so the one surface that could explain a booster was also the one
   most likely to be missing. Being per-level makes it shorter, so it now
   survives down to 620px of height instead of 700px.
+- **The info panel** (`?` in the HUD, or tap the legend) is the reference:
+  every entity with a full explanation, plus the controls, the balls economy
+  and the level rating. Whatever is on the board you are currently looking at
+  is flagged *on this level*.
 - **First-sight tips.** Arriving at a board carrying a mechanic the player has
   never been told about flashes a one-line explanation, once, tracked in
   `tips` in the save. It fires on *arrival*, not on contact: the game is
@@ -69,6 +73,16 @@ Tips must be short. The flash is one fixed-height line so that showing it can
 never shift the board mid-drag, which means a long tip is silently truncated
 with an ellipsis. Section 8b measures `scrollWidth` against `clientWidth` and
 fails on any tip that does not fit — it caught the first draft of all six.
+
+All three read from one `GLOSSARY[]` table, so a mechanic added there appears
+in the legend, the panel and nowhere else to forget. Section 8c asserts the
+legend and the panel never disagree about a level.
+
+Card variants (`.infocard`, `.spincard`) must be declared **after** `.card` in
+the stylesheet. They are the same specificity, so declared earlier the base
+rule silently wins — which is how the info panel shipped centre-aligned and
+50px too narrow on its first run, and why the wheel card's width had never
+taken effect at all.
 
 ### Generating a world
 

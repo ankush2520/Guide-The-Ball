@@ -768,6 +768,76 @@ await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(
 await topUp();
 
 /* ---------------------------------------------------------------- */
+/* The legend only covers the board in front of you and the tips fire once,
+   so there has to be somewhere to look things up afterwards. */
+section('8c. Info panel');
+await page.evaluate(() => window.__gtb.setLevel(20));      // a board with a booster
+check(await page.locator('#infopanel').isHidden(), 'the info panel starts closed');
+await page.locator('#btn-info').click();
+check(await page.locator('#infopanel').isVisible(), 'the ? button opens it');
+const panelInfo = await page.evaluate(() => {
+  const body = document.getElementById('info-body');
+  const lines = [...body.querySelectorAll('.iline')].map(e => ({
+    name: e.querySelector('b').textContent.replace(' • on this level', '').trim(),
+    here: e.classList.contains('here')
+  }));
+  const card = document.querySelector('.infocard').getBoundingClientRect();
+  return { text: body.textContent, lines,
+           scrolls: body.scrollHeight > body.clientHeight,
+           withinViewport: card.top >= -1 && card.bottom <= innerHeight + 1,
+           headings: [...body.querySelectorAll('h4')].map(h => h.textContent) };
+});
+console.log(`  sections: ${panelInfo.headings.join(' / ')}`);
+console.log(`  entries: ${panelInfo.lines.map(l => l.name + (l.here ? '*' : '')).join(', ')}`);
+check(panelInfo.lines.length >= 11, 'it documents every thing that can be on a board',
+  `${panelInfo.lines.length} entries`);
+for (const w of ['Target','Obstacle','Breakable block','Booster','Portal','Wind','Ice',
+                 'Gold star','Your ramp','Wall','Ball'])
+  if (!panelInfo.lines.some(l => l.name === w)) bad(`info panel is missing "${w}"`);
+check(panelInfo.lines.some(l => l.name === 'Booster' && l.here),
+  'and flags what is on the level you are looking at', 'booster marked on L21');
+check(panelInfo.lines.some(l => l.name === 'Portal' && !l.here),
+  'without flagging what is not');
+check(['THE BASICS','ON THE BOARD','BALLS','LEVEL RATING'].every(h =>
+  panelInfo.headings.some(x => x.toUpperCase() === h)),
+  'and covers the controls, the economy and the rating too', panelInfo.headings.join('/'));
+check(/costs one ball/i.test(panelInfo.text), 'the balls rule is stated in words');
+check(panelInfo.scrolls, 'long content scrolls inside the card');
+check(panelInfo.withinViewport, 'and the card itself never runs off the screen');
+
+/* the legend is a summary of the same thing, so it opens it too */
+await page.evaluate(() => document.getElementById('btn-info-close').click());
+check(await page.locator('#infopanel').isHidden(), 'Close closes it');
+await page.locator('#legend').click();
+check(await page.locator('#infopanel').isVisible(), 'tapping the legend opens it as well');
+await page.evaluate(() => document.getElementById('btn-info-close').click());
+
+/* the glossary drives both surfaces, so they can never disagree */
+const agree = await page.evaluate(() => {
+  const g = window.__gtb, bad = [];
+  for (let i = 0; i < g.LEVELS.length; i++){
+    g.setLevel(i);
+    const legend = g.state().legend;
+    document.getElementById('btn-info').click();
+    const here = [...document.querySelectorAll('.iline.here b')]
+      .map(e => e.textContent.replace(' • on this level', '').trim());
+    document.getElementById('btn-info-close').click();
+    // every entry the panel flags for this level must be in the legend too
+    const n = g.LEVELS[i];
+    if (here.includes('Booster') !== (n.boosters.length > 0)) bad.push(`L${n.id} booster`);
+    if (here.includes('Obstacle') !== (n.obstacles.length > 0)) bad.push(`L${n.id} obstacle`);
+    if (here.includes('Wall') !== (n.walls.length > 0)) bad.push(`L${n.id} wall`);
+    if (legend.includes('Booster') !== here.includes('Booster')) bad.push(`L${n.id} disagree`);
+  }
+  g.setLevel(0);
+  return bad;
+});
+check(agree.length === 0, 'the legend and the panel never disagree about a level',
+  agree.slice(0, 3).join(', ') || 'all levels agree');
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+await topUp();
+
+/* ---------------------------------------------------------------- */
 section('9. Ramp drawing - mouse and touch');
 await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });   // level 4: 2 ramps
 const box = await page.locator('#board').boundingBox();

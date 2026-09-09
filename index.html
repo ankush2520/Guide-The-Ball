@@ -86,11 +86,11 @@
   .counter{background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
            box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
-           padding:4px 9px;font-size:12px;font-weight:600;white-space:nowrap;
+           padding:4px 8px;font-size:12px;font-weight:600;white-space:nowrap;
            color:#bcc4e8;letter-spacing:.01em}
   .counter b{color:var(--accent);font-weight:800;font-size:13px;
              text-shadow:0 0 10px var(--glow-accent)}
-  .chips{display:flex;align-items:center;gap:5px;flex:none}
+  .chips{display:flex;align-items:center;gap:4px;flex:none}
   /* the ball chip leads with the thing it counts, drawn the same way the
      board draws the ball, so the HUD and the board agree */
   .counter.balls{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
@@ -105,7 +105,7 @@
 
   /* the topbar wheel button. It grows a countdown while it is locked, so it
      is 32px square when ready and a pill when it is not. */
-  .iconbtn.spin{width:auto;min-width:30px;height:30px;padding:0 7px;gap:4px;
+  .iconbtn.spin{width:auto;min-width:27px;height:27px;padding:0 6px;gap:4px;
                 display:inline-flex;align-items:center;justify-content:center}
   .iconbtn.spin .wheelicon{width:14px;height:14px;border-radius:50%;flex:none;
      background:conic-gradient(#ffc93c 0 25%, #3ec8ff 0 50%, #ffc93c 0 75%, #3ec8ff 0);
@@ -125,7 +125,23 @@
   @media (prefers-reduced-motion:reduce){ .iconbtn.spin.ready{animation:none;
     box-shadow:0 0 0 2px rgba(255,201,60,.45)} }
 
-  .spincard{max-width:270px}
+  /* the panel is a reference, so it is allowed to be long - it scrolls
+     inside the card rather than growing the card past the board */
+  .info{max-height:min(58vh,430px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+        margin:2px -4px 14px;padding:0 4px}
+  .info h4{margin:14px 0 7px;font-size:12px;font-weight:800;letter-spacing:.07em;
+           text-transform:uppercase;color:var(--accent);opacity:.9}
+  .info h4:first-child{margin-top:2px}
+  .info p{margin:0 0 7px;font-size:12.5px;line-height:1.5;color:#c3cbee}
+  .iline{display:flex;gap:9px;align-items:flex-start;margin:0 0 8px}
+  .iline .sw{margin-top:3px}
+  .iline b{display:block;font-size:12.5px;font-weight:700;color:var(--ink)}
+  .iline span.d{display:block;font-size:12px;line-height:1.45;color:var(--muted)}
+  /* what is on the board you are looking at right now, called out */
+  .iline.here b:after{content:' • on this level';font-size:10.5px;font-weight:700;
+                      color:var(--accent);letter-spacing:.02em}
+  .legend{cursor:pointer}
+  #btn-info{font-weight:800;font-size:14px}
   .wheelwrap{position:relative;width:212px;height:212px;margin:4px auto 14px}
   #wheel{display:block;width:212px;height:212px;
          transform:rotate(0deg);will-change:transform;
@@ -140,11 +156,11 @@
             background:radial-gradient(circle at 36% 32%,#fff,#ffc451);
             box-shadow:0 0 12px rgba(255,201,60,.7), 0 2px 6px rgba(0,0,0,.5)}
   #spin-sub b{color:#ffd479;font-weight:800}
-  .chips .counter{padding:4px 9px;font-size:12px}
+  .chips .counter{padding:4px 8px;font-size:12px}
   .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
            box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
-           width:30px;height:30px;padding:0;font-size:13px;line-height:1;display:grid;place-items:center}
+           width:27px;height:27px;padding:0;font-size:12.5px;line-height:1;display:grid;place-items:center}
   .iconbtn.off{opacity:.45}
   /* stars: filled ones glow, unearned ones stay as faint outlines */
   .stars{display:flex;justify-content:center;gap:7px;font-size:27px;line-height:1;margin:2px 0 10px}
@@ -218,6 +234,13 @@
   .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
   .card .row{display:flex;gap:8px}
   .card .row + .row{margin-top:8px}
+  /* Card variants live HERE, directly after .card. They are the same
+     specificity as it, so declared any earlier the base rule wins and the
+     override silently does nothing - which is exactly what happened to the
+     info panel's width and left-alignment, and to the wheel's width. */
+  .spincard{max-width:270px}
+  .infocard{max-width:340px;text-align:left}
+  .infocard .big{text-align:center}
   /* The ad may look like the recommended action, but declining it must be
      just as easy to hit: same box, same type, same reach. */
   #btn-nb-close{flex:1}
@@ -312,6 +335,7 @@
       </div>
       <div class="counter">Try <b id="try-count">0</b></div>
       <div class="counter">Ramps <b id="ramps-left">1</b></div>
+      <button class="iconbtn" id="btn-info" title="What everything means" aria-label="Info">?</button>
       <button class="iconbtn spin" id="btn-spin" title="Daily spin" aria-label="Daily spin">
         <i class="wheelicon"></i><b id="spin-cd" hidden></b>
       </button>
@@ -362,6 +386,13 @@
              buttons sized to encourage ads, and a glowing ad button over a
              bare text link is exactly that shape. -->
         <div class="row"><button id="btn-nb-close">Not now</button></div>
+      </div>
+    </div>
+    <div class="overlay" id="infopanel" hidden>
+      <div class="card infocard">
+        <div class="big">How to play</div>
+        <div class="info" id="info-body"></div>
+        <div class="row"><button id="btn-info-close" class="primary">Close</button></div>
       </div>
     </div>
     <div class="overlay" id="spinpanel" hidden>
@@ -1523,6 +1554,9 @@ const btnSound= document.getElementById('btn-sound');
 const elFlash = document.getElementById('flash');
 const btnSkip = document.getElementById('btn-skip');
 const elLegend = document.getElementById('legend');
+const panelInfo = document.getElementById('infopanel');
+const elInfoBody = document.getElementById('info-body');
+const btnInfo = document.getElementById('btn-info');
 const elBalls    = document.getElementById('ball-count');
 const chipBalls  = document.getElementById('balls-chip');
 const panelNoBalls = document.getElementById('noballs');
@@ -1604,7 +1638,7 @@ function sizeCanvas(){
   buildBackdrop();
 }
 sizeCanvas();
-window.addEventListener('resize', sizeCanvas);
+window.addEventListener('resize', function(){ sizeCanvas(); fitTitle(); });
 window.addEventListener('orientationchange', sizeCanvas);
 if (window.ResizeObserver) new ResizeObserver(sizeCanvas).observe(canvas.parentNode);
 
@@ -1679,28 +1713,107 @@ function hideFlash(){
 
 function level(){ return LEVELS[levelIndex]; }
 
+/* ============================================================
+   GLOSSARY
+   The single description of every thing on a board. The legend
+   under the board renders the SHORT line for whatever is on the
+   current level; the info panel renders the LONG one for all of
+   them. Two surfaces, one source - a mechanic added here shows
+   up in both, which is exactly what went wrong when the legend
+   was a hand-written list and world 2 arrived.
+   ============================================================ */
+const GLOSSARY = [
+  { cls:'tg', has: lv => true, short:'Green ring = Target (goal)', name:'Target',
+    long:'Land the ball anywhere inside the ring and the level is cleared.' },
+  { cls:'ob', has: lv => lv.obstacles.length, short:'Red circle = Obstacle (random bounce)',
+    name:'Obstacle',
+    long:'Bounces the ball off at a RANDOM angle. Plan around it, not through it - a route ' +
+         'that depends on hitting one is a gamble, not a plan.' },
+  { cls:'bk', has: lv => lv.breakables.length, short:'Cracked block = Breakable (shatters)',
+    name:'Breakable block',
+    long:'Bounces you randomly exactly like an obstacle, then shatters and is gone. It stays ' +
+         'gone for your next drop on this level, so a first attempt can be spent clearing a path.' },
+  { cls:'bs', has: lv => lv.boosters.length, short:'Dashed ring = Booster (fires along the arrow)',
+    name:'Booster',
+    long:'Fires the ball along the arrow at a fixed speed, every single time. Unlike an ' +
+         'obstacle there is nothing random about it - the arrow is exactly the heading you leave on.' },
+  { cls:'pt', has: lv => lv.portals.length, short:'Matching rings = Portal (in one, out the other)',
+    name:'Portal',
+    long:'Two rings of the same colour. Go into one and you come out of the other keeping your ' +
+         'direction, unless the exit has an arrow, which turns you to face it.' },
+  { cls:'wd', has: lv => lv.wind.length, short:'Shaded band = Wind (pushes sideways)',
+    name:'Wind',
+    long:'Pushes the ball steadily while it is inside the band, and stops the moment it leaves. ' +
+         'The drifting streaks show which way it blows.' },
+  { cls:'sl', has: lv => lv.slippery.length, short:'Frosted band = Ice (keeps speed)',
+    name:'Ice',
+    long:'Bounces inside this band lose almost no speed, so the ball carries much further and ' +
+         'is far harder to settle where you want it.' },
+  { cls:'st', has: lv => lv.stars.length, short:'Gold star = Optional pickup',
+    name:'Gold star',
+    long:'Collect it by passing close. Purely optional: it never changes where the ball goes ' +
+         'and never affects winning. Your best count per level is remembered.' },
+  { cls:'rp', has: lv => true, short:'Blue bar = Your ramp', name:'Your ramp',
+    long:'What you place. The ball mirrors off it like a real bounce and loses a little speed.' },
+  { cls:'wl', has: lv => lv.walls.length, short:'Grey bar = Wall (fixed, blocks the ball)',
+    name:'Wall',
+    long:'Fixed level scenery guarding the target. It bounces the ball the same predictable way ' +
+         'your ramps do - it just is not yours to move.' },
+  { cls:'bl', has: lv => true, short:'White = Ball', name:'Ball',
+    long:'Falls from the marker at the top the instant you press Drop Ball. Gravity does the ' +
+         'rest; you never steer it directly.' }
+];
+
 /* The legend lists what is ON THIS BOARD and nothing else. A fixed list went
    stale the moment world 2 added a mechanic to it, and it was long enough
    that it was the first thing dropped when the window got short - so the one
    surface that could have explained a booster was also the one most likely
    to be missing. */
+/* "Level 22 - Ove..." is worse than "Level 22": the number is the functional
+   half and a dangling em-dash and ellipsis just look broken. So the name is
+   rendered, measured, and dropped outright if it does not fit. */
+function fitTitle(){
+  const lv = level();
+  elTitle.innerHTML = 'Level ' + lv.id + ' <span>&mdash; ' + lv.name + '</span>';
+  const nm = elTitle.querySelector('span');
+  if (elTitle.scrollWidth > elTitle.clientWidth + 1) nm.hidden = true;
+}
+
 function syncLegend(){
   const lv = level();
-  const row = [];
-  row.push(['tg', 'Green ring = Target (goal)']);
-  if (lv.obstacles.length)  row.push(['ob', 'Red circle = Obstacle (random bounce)']);
-  if (lv.breakables.length) row.push(['bk', 'Cracked block = Breakable (shatters)']);
-  if (lv.boosters.length)   row.push(['bs', 'Dashed ring = Booster (fires along the arrow)']);
-  if (lv.portals.length)    row.push(['pt', 'Matching rings = Portal (in one, out the other)']);
-  if (lv.wind.length)       row.push(['wd', 'Shaded band = Wind (pushes sideways)']);
-  if (lv.slippery.length)   row.push(['sl', 'Frosted band = Ice (keeps speed)']);
-  if (lv.stars.length)      row.push(['st', 'Gold star = Optional pickup']);
-  row.push(['rp', 'Blue bar = Your ramp']);
-  if (lv.walls.length)      row.push(['wl', 'Grey bar = Wall (fixed, blocks the ball)']);
-  row.push(['bl', 'White = Ball']);
-  elLegend.innerHTML = row.map(function(r){
-    return '<i><span class="sw ' + r[0] + '"></span>' + r[1] + '</i>';
-  }).join('');
+  elLegend.innerHTML = GLOSSARY.filter(function(g){ return g.has(lv); })
+    .map(function(g){ return '<i><span class="sw ' + g.cls + '"></span>' + g.short + '</i>'; })
+    .join('');
+}
+
+/** The info panel: everything, always available, with whatever is on the
+    board you are currently looking at called out. */
+function buildInfo(){
+  const lv = level();
+  const item = g => '<div class="iline' + (g.has(lv) ? ' here' : '') + '">' +
+                    '<span class="sw ' + g.cls + '"></span><span><b>' + g.name + '</b>' +
+                    '<span class="d">' + g.long + '</span></span></div>';
+  elInfoBody.innerHTML =
+    '<h4>The basics</h4>' +
+    '<p>Drag anywhere on the board to draw a ramp, then press <b>Drop Ball</b>. ' +
+    'You never steer the ball - you set the board up beforehand and watch it play out.</p>' +
+    '<p>Tap a ramp you have placed to select it: drag either end to reshape it, drag the ' +
+    'middle to move it, or hit the <b>&times;</b> to delete it. <b>Undo</b> and <b>Clear</b> ' +
+    'work on the whole set. Missing costs you nothing but the ball - your ramps stay put so ' +
+    'the next go is an adjustment, not a rebuild.</p>' +
+    '<h4>On the board</h4>' +
+    GLOSSARY.map(item).join('') +
+    '<h4>Balls</h4>' +
+    '<p>Every drop costs one ball, whether it wins or loses. Moving between levels is free.</p>' +
+    '<p>You start with <b>' + STARTING_BALLS + '</b>. Clearing a level for the first time ever ' +
+    'pays a bonus that grows through the game (+' + CLEAR_BONUS[0] + ' early, up to +' +
+    CLEAR_BONUS[CLEAR_BONUS.length - 1] + ' late), the daily wheel pays 1-5, and the ad button ' +
+    'on the out-of-balls screen pays +' + AD_REWARD + '.</p>' +
+    '<h4>Level rating</h4>' +
+    '<p>Separate from the gold star pickups. Clearing a level earns one to three <b>&#9733;</b>: ' +
+    'you start at three, lose one for needing a second try and another past three tries, and ' +
+    'win one back for clearing it under the ramp budget. A scrappy but efficient solve can ' +
+    'still reach three.</p>';
 }
 
 /** Explain, once, the first unseen mechanic on this board. One at a time:
@@ -1722,7 +1835,7 @@ function teachNewMechanics(){
 function syncUI(){
   const lv = level();
   const planning = phase === 'plan';
-  elTitle.innerHTML = 'Level ' + lv.id + ' <span>&mdash; ' + lv.name + '</span>';
+  fitTitle();
   if (typeof selPanel !== 'undefined' && !selPanel.hidden) buildGrid();
   elLeft.textContent = lv.maxBlocks - ramps.length;
   elTries.textContent = tries;
@@ -2224,6 +2337,19 @@ btnSpin.addEventListener('click', function(e){
   syncSpinUI();
   e.stopPropagation();
 });
+function openInfo(e){
+  buildInfo();
+  panelInfo.hidden = false;
+  elInfoBody.scrollTop = 0;
+  if (e) e.stopPropagation();
+}
+btnInfo.addEventListener('click', openInfo);
+// the legend is a summary of the same thing, so tapping it opens the full one
+elLegend.addEventListener('click', openInfo);
+document.getElementById('btn-info-close').addEventListener('click', function(){
+  panelInfo.hidden = true;
+});
+
 btnSpinGo.addEventListener('click', doSpin);
 document.getElementById('btn-spin-close').addEventListener('click', function(){
   panelSpin.hidden = true;
@@ -3144,6 +3270,7 @@ window.__gtb = {
                          dropPulsing: btnDrop.classList.contains('tut-pulse'),
                          handT: tutHand.t },
              legend: elLegend.textContent,
+             infoOpen: !panelInfo.hidden, infoText: elInfoBody.textContent,
              tips: Object.assign({}, tipsSeen),
              flash: flashText, flashOn: elFlash.classList.contains('on'),
              result: ball ? ball.result : lastResult,
