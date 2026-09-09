@@ -127,8 +127,7 @@
 
   /* the panel is a reference, so it is allowed to be long - it scrolls
      inside the card rather than growing the card past the board */
-  .info{max-height:min(58vh,430px);overflow-y:auto;-webkit-overflow-scrolling:touch;
-        margin:2px -4px 14px;padding:0 4px}
+  .info{margin:2px 0 14px;text-align:left}
   .info h4{margin:14px 0 7px;font-size:12px;font-weight:800;letter-spacing:.07em;
            text-transform:uppercase;color:var(--accent);opacity:.9}
   .info h4:first-child{margin-top:2px}
@@ -140,7 +139,6 @@
   /* what is on the board you are looking at right now, called out */
   .iline.here b:after{content:' • on this level';font-size:10.5px;font-weight:700;
                       color:var(--accent);letter-spacing:.02em}
-  .legend{cursor:pointer}
   #btn-info{font-weight:800;font-size:14px}
   .wheelwrap{position:relative;width:212px;height:212px;margin:4px auto 14px}
   #wheel{display:block;width:212px;height:212px;
@@ -220,15 +218,38 @@
   canvas{display:block;width:100%;height:100%;
          touch-action:none;cursor:crosshair}
 
-  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-           background:rgba(8,10,22,.72);backdrop-filter:blur(3px);padding:18px}
+  /* Viewport-level, not board-level. Anchored to .stage these were cropped
+     to a 190px-wide box on a short window. They also carry the safe area
+     themselves, since they sit outside the padded body. */
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+           background:rgba(8,10,22,.74);backdrop-filter:blur(4px);
+           padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+                   calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+  /* One stacking order, stated once. The wheel must open ON TOP of the
+     out-of-balls screen, because it is a way out of it. */
+  #select{z-index:50} #overlay{z-index:55} #noballs{z-index:60}
+  #spinpanel{z-index:70} #infopanel{z-index:80}
   /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
   .overlay[hidden]{display:none}
+  /* A column: heading and buttons pinned, the long middle scrolls. Without
+     this a tall card simply grew past the screen and lost both ends. */
   .card{background:linear-gradient(180deg,#1d2342,#141830);
         border:1px solid #3a4374;border-radius:18px;
-        padding:20px 18px;text-align:center;width:100%;max-width:290px;
+        padding:18px;text-align:center;width:100%;max-width:290px;
+        max-height:100%;display:flex;flex-direction:column;overflow:hidden;
         box-shadow:inset 0 1px 0 rgba(255,255,255,.09),
                    0 20px 54px rgba(0,0,0,.62)}
+  .card > *{flex:none}
+  /* the one scrolling region per card */
+  .card .scroll{flex:1 1 auto;min-height:0;overflow-y:auto;
+                -webkit-overflow-scrolling:touch;margin:0 -6px;padding:0 6px;
+                /* fade the last line out instead of guillotining it, so
+                   "there is more below" is visible rather than inferred */
+                -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);
+                mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
+  .card .scroll::-webkit-scrollbar{width:6px}
+  .card .scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:3px}
+  .card .scroll::-webkit-scrollbar-track{background:transparent}
   .card .big{font-family:var(--font-display);font-size:25px;font-weight:800;
              letter-spacing:-.015em;margin-bottom:4px}
   .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
@@ -271,11 +292,7 @@
   .controls{display:flex;gap:8px}
   .controls .primary{flex:1.6}
 
-  .legend{background:linear-gradient(180deg,rgba(30,36,64,.85),rgba(19,23,45,.85));
-          border:1px solid var(--edge);border-radius:12px;
-          box-shadow:inset 0 1px 0 var(--sheen);
-          padding:9px 11px;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px}
-  .legend i{display:inline-flex;align-items:center;gap:7px;font-style:normal;color:#cdd4f5}
+  /* swatches, shared by the info panel's entries */
   .sw{width:15px;height:15px;flex:none;display:block}
   .sw.ob{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ff8a94,#e0303f);
          box-shadow:0 0 9px rgba(255,77,94,.6)}
@@ -303,19 +320,22 @@
      state keeps the stage - and therefore the board - perfectly still */
   .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0;
         flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
-  .controls,.legend{flex:none}
+  .controls{flex:none}
   /* a phone has no height to spare - drop the reference text, keep the controls */
   /* The legend now lists only what is on the current board, so it is short
      enough to survive further down the height range than the old fixed list.
      Below this it goes, and the first-sight tips carry the teaching instead. */
-  @media (max-height:620px){ .legend,.hint{display:none} }
+  /* the board takes the height on a short window; the info panel carries the
+     reference material at every size */
+  @media (max-height:620px){ .hint{display:none} }
 
   button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
                box-shadow:none;cursor:pointer;font-size:15.5px;font-weight:800;color:var(--ink)}
   button.title:active:not(:disabled){transform:none;box-shadow:none;filter:brightness(1.3)}
   button.title:after{content:' \25BE';color:var(--muted);font-size:12px}
   .selcard{max-width:330px}
-  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;
+        align-content:start}
   .grid button{flex:none;padding:10px 0;font-size:13px;font-variant-numeric:tabular-nums}
   .grid button.done{border-color:#2fd97a;color:#8dffbe}
   .grid button.cur{background:linear-gradient(180deg,#5d9bff,#2f6ae0);border-color:#7cb0ff;
@@ -348,68 +368,6 @@
   <div class="stage">
     <canvas id="board" aria-label="Game board"></canvas>
     <button class="tut-skip" id="btn-skip" hidden>Skip</button>
-    <!-- Running out is a real stop, so unlike a miss this one does get the
-         full-screen treatment. It sits BEFORE the level picker in the DOM so
-         a player with no balls left can still browse levels on top of it. -->
-    <div class="overlay" id="select" hidden>
-      <div class="card selcard">
-        <div class="big">Levels</div>
-        <div class="sub" id="sel-sub">Cleared levels stay unlocked.</div>
-        <div class="grid" id="lvgrid"></div>
-        <div class="row"><button id="btn-close-sel">Close</button></div>
-      </div>
-    </div>
-    <div class="overlay" id="overlay" hidden>
-      <div class="card" id="card">
-        <div class="big" id="ov-title">Target hit!</div>
-        <div class="stars" id="ov-stars" hidden><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i></div>
-        <div class="starnote" id="ov-starnote" hidden></div>
-        <div class="sub" id="ov-sub"></div>
-        <div class="row">
-          <button id="btn-retry">Replay</button>
-          <button id="btn-adjust">Adjust</button>
-          <button id="btn-next" class="primary" hidden>Next</button>
-        </div>
-      </div>
-    </div>
-    <!-- After the win overlay so it can appear over it (pressing Next with an
-         empty tank), but before the wheel so a player can still spin for balls
-         from here. -->
-    <div class="overlay" id="noballs" hidden>
-      <div class="card">
-        <div class="big nb">Out of balls</div>
-        <div class="sub">Every drop costs one ball. Clear a level for the
-          first time to earn more, or spin the daily wheel.</div>
-        <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
-        <div class="row"><button id="btn-buy" disabled>Buy Balls &mdash; Coming Soon</button></div>
-        <!-- Full peer of the other two, deliberately. CrazyGames prohibits
-             buttons sized to encourage ads, and a glowing ad button over a
-             bare text link is exactly that shape. -->
-        <div class="row"><button id="btn-nb-close">Not now</button></div>
-      </div>
-    </div>
-    <div class="overlay" id="infopanel" hidden>
-      <div class="card infocard">
-        <div class="big">How to play</div>
-        <div class="info" id="info-body"></div>
-        <div class="row"><button id="btn-info-close" class="primary">Close</button></div>
-      </div>
-    </div>
-    <div class="overlay" id="spinpanel" hidden>
-      <div class="card spincard">
-        <div class="big sp">Daily Spin</div>
-        <div class="sub" id="spin-sub">One free spin every 24 hours.</div>
-        <div class="wheelwrap">
-          <canvas id="wheel" aria-label="Prize wheel"></canvas>
-          <div class="wheelptr"></div>
-          <div class="wheelhub"></div>
-        </div>
-        <div class="row">
-          <button id="btn-spin-go" class="primary">Spin</button>
-          <button id="btn-spin-close">Close</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <div class="controls">
@@ -418,11 +376,82 @@
     <button id="btn-clear">Clear</button>
   </div>
 
-  <!-- built per level from what is actually on the board: see syncLegend() -->
-  <div class="legend" id="legend"></div>
-
   <p class="hint" id="hint">Drag on the board to draw a ramp, then press Drop Ball.</p>
 </div>
+
+<!-- ============================================================
+     MODALS. These used to live inside .stage, which is sized to the
+     BOARD's 3:5 aspect - so on a short window the stage is barely 190px
+     wide and every card was clipped: the info panel lost its title and
+     its Close button, and the win card and the wheel were no better.
+     They are viewport-level now, and cannot be cropped by the board.
+     ============================================================ -->
+  <!-- Running out is a real stop, so unlike a miss this one does get the
+       full-screen treatment. It sits BEFORE the level picker in the DOM so
+       a player with no balls left can still browse levels on top of it. -->
+  <div class="overlay" id="select" hidden>
+    <div class="card selcard">
+      <div class="big">Levels</div>
+      <div class="sub" id="sel-sub">Cleared levels stay unlocked.</div>
+      <div class="grid scroll" id="lvgrid"></div>
+      <div class="row"><button id="btn-close-sel">Close</button></div>
+    </div>
+  </div>
+  <div class="overlay" id="overlay" hidden>
+    <div class="card" id="card">
+      <div class="big" id="ov-title">Target hit!</div>
+      <div class="stars" id="ov-stars" hidden><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i></div>
+      <div class="starnote" id="ov-starnote" hidden></div>
+      <div class="sub" id="ov-sub"></div>
+      <div class="row">
+        <button id="btn-retry">Replay</button>
+        <button id="btn-adjust">Adjust</button>
+        <button id="btn-next" class="primary" hidden>Next</button>
+      </div>
+    </div>
+  </div>
+  <!-- After the win overlay so it can appear over it (pressing Next with an
+       empty tank), but before the wheel so a player can still spin for balls
+       from here. -->
+  <div class="overlay" id="noballs" hidden>
+    <div class="card">
+      <div class="big nb">Out of balls</div>
+      <div class="sub">Every drop costs one ball. Clear a level for the
+        first time to earn more, or spin the daily wheel.</div>
+      <div class="row"><button id="btn-ad" class="primary">Watch Ad for +3 Balls</button></div>
+      <!-- The wheel used to be reachable behind this screen, because this
+           screen only covered the board. It covers the viewport now, so the
+           way out has to be offered here rather than found on the topbar. -->
+      <div class="row"><button id="btn-nb-spin" hidden>Spin the daily wheel</button></div>
+      <div class="row"><button id="btn-buy" disabled>Buy Balls &mdash; Coming Soon</button></div>
+      <!-- Full peer of the other two, deliberately. CrazyGames prohibits
+           buttons sized to encourage ads, and a glowing ad button over a
+           bare text link is exactly that shape. -->
+      <div class="row"><button id="btn-nb-close">Not now</button></div>
+    </div>
+  </div>
+  <div class="overlay" id="infopanel" hidden>
+    <div class="card infocard">
+      <div class="big">How to play</div>
+      <div class="info scroll" id="info-body"></div>
+      <div class="row"><button id="btn-info-close" class="primary">Close</button></div>
+    </div>
+  </div>
+  <div class="overlay" id="spinpanel" hidden>
+    <div class="card spincard">
+      <div class="big sp">Daily Spin</div>
+      <div class="sub" id="spin-sub">One free spin every 24 hours.</div>
+      <div class="wheelwrap">
+        <canvas id="wheel" aria-label="Prize wheel"></canvas>
+        <div class="wheelptr"></div>
+        <div class="wheelhub"></div>
+      </div>
+      <div class="row">
+        <button id="btn-spin-go" class="primary">Spin</button>
+        <button id="btn-spin-close">Close</button>
+      </div>
+    </div>
+  </div>
 
 <script>
 (function(){
@@ -1553,7 +1582,6 @@ const elTries = document.getElementById('try-count');
 const btnSound= document.getElementById('btn-sound');
 const elFlash = document.getElementById('flash');
 const btnSkip = document.getElementById('btn-skip');
-const elLegend = document.getElementById('legend');
 const panelInfo = document.getElementById('infopanel');
 const elInfoBody = document.getElementById('info-body');
 const btnInfo = document.getElementById('btn-info');
@@ -1715,12 +1743,10 @@ function level(){ return LEVELS[levelIndex]; }
 
 /* ============================================================
    GLOSSARY
-   The single description of every thing on a board. The legend
-   under the board renders the SHORT line for whatever is on the
-   current level; the info panel renders the LONG one for all of
-   them. Two surfaces, one source - a mechanic added here shows
-   up in both, which is exactly what went wrong when the legend
-   was a hand-written list and world 2 arrived.
+   The single description of every thing that can be on a board,
+   rendered by the info panel. It replaced a hand-written list
+   under the board, which is what let world 2 ship a booster that
+   the game never explained anywhere.
    ============================================================ */
 const GLOSSARY = [
   { cls:'tg', has: lv => true, short:'Green ring = Target (goal)', name:'Target',
@@ -1777,13 +1803,6 @@ function fitTitle(){
   elTitle.innerHTML = 'Level ' + lv.id + ' <span>&mdash; ' + lv.name + '</span>';
   const nm = elTitle.querySelector('span');
   if (elTitle.scrollWidth > elTitle.clientWidth + 1) nm.hidden = true;
-}
-
-function syncLegend(){
-  const lv = level();
-  elLegend.innerHTML = GLOSSARY.filter(function(g){ return g.has(lv); })
-    .map(function(g){ return '<i><span class="sw ' + g.cls + '"></span>' + g.short + '</i>'; })
-    .join('');
 }
 
 /** The info panel: everything, always available, with whatever is on the
@@ -1865,7 +1884,6 @@ function setLevel(i){
   seenHit = 0; seenBroke = 0; squash.amt = 0; clearParticles(); clearTrail();
   sessionBroken = falses(LEVELS[levelIndex].breakables.length);
   applyWorldTheme();
-  syncLegend();
   teachNewMechanics();
   tries = 0;
   phase = 'plan'; overlay.hidden = true;
@@ -1873,6 +1891,11 @@ function setLevel(i){
   syncUI();
 }
 
+/** Raise the stop screen, offering whatever ways out are actually available. */
+function openNoBalls(){
+  document.getElementById('btn-nb-spin').hidden = !spinReady(Date.now());
+  panelNoBalls.hidden = false;
+}
 /** Dismiss the stop screen and hand the board back. */
 function closeNoBalls(){ panelNoBalls.hidden = true; }
 
@@ -2052,7 +2075,7 @@ function drop(){
   /* Out of balls. Drop Ball is deliberately left ENABLED for this: a dead
      grey button tells a player they are stuck without telling them what to
      do about it, so the press opens the way to get more instead. */
-  if (balls <= 0){ panelNoBalls.hidden = false; return; }
+  if (balls <= 0){ openNoBalls(); return; }
   // steps 1 and 2 have both happened: a ramp went down, and this is the tap
   if (tutorialStep() === 2) tutorialDone();
   draft = null; capture = null; dragging = null; selected = -1;
@@ -2161,6 +2184,8 @@ btnAd.addEventListener('click', function(){
   closeNoBalls();            // straight back to the board, ready to drop
 });
 document.getElementById('btn-nb-close').addEventListener('click', closeNoBalls);
+// z-index puts the wheel above this screen, so it reads as opening on top
+document.getElementById('btn-nb-spin').addEventListener('click', function(){ openSpin(); });
 
 document.getElementById('btn-retry').addEventListener('click', function(){
   phase = 'plan'; overlay.hidden = true; drop();
@@ -2330,13 +2355,13 @@ function landSpin(ix){
   syncSpinUI();
 }
 
-btnSpin.addEventListener('click', function(e){
+function openSpin(){
   drawWheel();
   spinShown = 0;                               // a fresh visit, not a stale win
   panelSpin.hidden = false;
   syncSpinUI();
-  e.stopPropagation();
-});
+}
+btnSpin.addEventListener('click', function(e){ openSpin(); e.stopPropagation(); });
 function openInfo(e){
   buildInfo();
   panelInfo.hidden = false;
@@ -2344,8 +2369,6 @@ function openInfo(e){
   if (e) e.stopPropagation();
 }
 btnInfo.addEventListener('click', openInfo);
-// the legend is a summary of the same thing, so tapping it opens the full one
-elLegend.addEventListener('click', openInfo);
 document.getElementById('btn-info-close').addEventListener('click', function(){
   panelInfo.hidden = true;
 });
@@ -3269,7 +3292,6 @@ window.__gtb = {
                          skipShown: !btnSkip.hidden,
                          dropPulsing: btnDrop.classList.contains('tut-pulse'),
                          handT: tutHand.t },
-             legend: elLegend.textContent,
              infoOpen: !panelInfo.hidden, infoText: elInfoBody.textContent,
              tips: Object.assign({}, tipsSeen),
              flash: flashText, flashOn: elFlash.classList.contains('on'),

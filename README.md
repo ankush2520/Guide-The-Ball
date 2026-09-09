@@ -58,10 +58,11 @@ Two surfaces, because either one alone has a hole:
   short — so the one surface that could explain a booster was also the one
   most likely to be missing. Being per-level makes it shorter, so it now
   survives down to 620px of height instead of 700px.
-- **The info panel** (`?` in the HUD, or tap the legend) is the reference:
-  every entity with a full explanation, plus the controls, the balls economy
-  and the level rating. Whatever is on the board you are currently looking at
-  is flagged *on this level*.
+- **The info panel** (`?` in the HUD) is the reference: every entity with a
+  full explanation, plus the controls, the balls economy and the level rating.
+  Whatever is on the board you are currently looking at is flagged *on this
+  level*. It replaced the legend that used to sit under the board — that
+  duplicated the panel and cost the board a chunk of height.
 - **First-sight tips.** Arriving at a board carrying a mechanic the player has
   never been told about flashes a one-line explanation, once, tracked in
   `tips` in the save. It fires on *arrival*, not on contact: the game is
@@ -74,9 +75,27 @@ never shift the board mid-drag, which means a long tip is silently truncated
 with an ellipsis. Section 8b measures `scrollWidth` against `clientWidth` and
 fails on any tip that does not fit — it caught the first draft of all six.
 
-All three read from one `GLOSSARY[]` table, so a mechanic added there appears
-in the legend, the panel and nowhere else to forget. Section 8c asserts the
-legend and the panel never disagree about a level.
+Both read from one `GLOSSARY[]` table, so a mechanic added there is explained
+everywhere it needs to be. Section 8c asserts the panel flags exactly what
+each level actually has.
+
+### Modals
+
+Every overlay — win card, level picker, out-of-balls, wheel, info — is
+**viewport-level** (`position:fixed`), not a child of `.stage`. They used to
+live inside the stage, which is sized to the board's 3:5 aspect: on a short
+window that stage is barely 190px wide, so every card was cropped by it. The
+info panel lost its heading and its Close button entirely.
+
+`.card` is a flex column with `max-height:100%`; headings and button rows are
+`flex:none` and the one long region per card carries `.scroll`. So a tall card
+scrolls its middle instead of growing off the screen, at any window size.
+
+Stacking is declared once, by id: picker 50, win 55, out-of-balls 60, wheel 70,
+info 80. The wheel sitting above the out-of-balls screen is deliberate — it is
+a way to get balls. Note that a viewport-level modal also covers the HUD, so
+the out-of-balls screen now offers the wheel on the card itself rather than
+relying on the topbar button being reachable behind it.
 
 Card variants (`.infocard`, `.spincard`) must be declared **after** `.card` in
 the stylesheet. They are the same specificity, so declared earlier the base

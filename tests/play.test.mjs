@@ -81,44 +81,10 @@ section('1. Boot');
 check(await page.locator('#board').isVisible(), 'board renders');
 check(await page.locator('#overlay').isHidden(), 'no overlay on a fresh board');
 check((await page.locator('#level-title').textContent()).includes('First Drop'), 'level 1 title shown');
-const legend = await page.locator('.legend').textContent();
-check(['Target','ramp','Ball'].every(w => legend.includes(w)),
-  'legend names what is on level 1, in words', JSON.stringify(legend.slice(0, 60)));
-check(!legend.includes('Obstacle') && !legend.includes('Wall'),
-  'and does not list an obstacle or a wall, because level 1 has neither');
-
-/* The legend is built per level. A fixed list went stale the moment world 2
-   added a mechanic, so what matters is that it tracks the board exactly. */
-const legendFit = await page.evaluate(() => {
-  const g = window.__gtb, bad = [];
-  const WANT = [
-    ['obstacles',  'Obstacle'],  ['breakables', 'Breakable'],
-    ['boosters',   'Booster'],   ['portals',    'Portal'],
-    ['wind',       'Wind'],      ['slippery',   'Ice'],
-    ['stars',      'pickup']
-  ];
-  for (let i = 0; i < g.LEVELS.length; i++){
-    g.setLevel(i);
-    const txt = g.state().legend, lv = g.LEVELS[i];
-    for (const [key, word] of WANT){
-      const present = lv[key].length > 0, listed = txt.includes(word);
-      if (present && !listed) bad.push(`L${lv.id} has ${key} but the legend omits it`);
-      if (!present && listed) bad.push(`L${lv.id} lists ${word} but has none`);
-    }
-    const hasWall = lv.targetType !== 'OPEN';
-    if (hasWall !== txt.includes('Wall')) bad.push(`L${lv.id} wall entry wrong`);
-    if (!txt.includes('Target') || !txt.includes('ramp')) bad.push(`L${lv.id} missing the basics`);
-  }
-  g.setLevel(0);
-  return bad;
-});
-check(legendFit.length === 0,
-  'every level lists exactly the entities it actually has, and no others',
-  legendFit.slice(0, 3).join(' | ') || 'all levels match');
-/* that sweep visited every level, which drags `highest` to the end of the
-   game - put the save back the way boot left it */
-await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
-await topUp();
+check(await page.locator('#btn-info').isVisible(),
+  'the info button is on the HUD, since there is no legend under the board');
+check(await page.locator('.legend').count() === 0,
+  'and the old bottom legend is gone - it duplicated the panel');
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'level-01.png') });
 ok('screenshot: level-01.png');
 
@@ -805,35 +771,32 @@ check(/costs one ball/i.test(panelInfo.text), 'the balls rule is stated in words
 check(panelInfo.scrolls, 'long content scrolls inside the card');
 check(panelInfo.withinViewport, 'and the card itself never runs off the screen');
 
-/* the legend is a summary of the same thing, so it opens it too */
 await page.evaluate(() => document.getElementById('btn-info-close').click());
 check(await page.locator('#infopanel').isHidden(), 'Close closes it');
-await page.locator('#legend').click();
-check(await page.locator('#infopanel').isVisible(), 'tapping the legend opens it as well');
-await page.evaluate(() => document.getElementById('btn-info-close').click());
 
-/* the glossary drives both surfaces, so they can never disagree */
+/* the "on this level" flags must track every board exactly - this is the
+   check the old per-level legend used to carry */
 const agree = await page.evaluate(() => {
   const g = window.__gtb, bad = [];
+  const WANT = [['obstacles','Obstacle'], ['breakables','Breakable block'],
+                ['boosters','Booster'],   ['portals','Portal'],
+                ['wind','Wind'],          ['slippery','Ice'], ['stars','Gold star']];
   for (let i = 0; i < g.LEVELS.length; i++){
     g.setLevel(i);
-    const legend = g.state().legend;
     document.getElementById('btn-info').click();
     const here = [...document.querySelectorAll('.iline.here b')]
       .map(e => e.textContent.replace(' • on this level', '').trim());
     document.getElementById('btn-info-close').click();
-    // every entry the panel flags for this level must be in the legend too
-    const n = g.LEVELS[i];
-    if (here.includes('Booster') !== (n.boosters.length > 0)) bad.push(`L${n.id} booster`);
-    if (here.includes('Obstacle') !== (n.obstacles.length > 0)) bad.push(`L${n.id} obstacle`);
-    if (here.includes('Wall') !== (n.walls.length > 0)) bad.push(`L${n.id} wall`);
-    if (legend.includes('Booster') !== here.includes('Booster')) bad.push(`L${n.id} disagree`);
+    const lv = g.LEVELS[i];
+    for (const [key, name] of WANT)
+      if (here.includes(name) !== (lv[key].length > 0)) bad.push(`L${lv.id} ${key}`);
+    if (here.includes('Wall') !== (lv.walls.length > 0)) bad.push(`L${lv.id} wall`);
   }
   g.setLevel(0);
   return bad;
 });
-check(agree.length === 0, 'the legend and the panel never disagree about a level',
-  agree.slice(0, 3).join(', ') || 'all levels agree');
+check(agree.length === 0, 'the panel flags exactly what each level actually has',
+  agree.slice(0, 3).join(', ') || `all ${await page.evaluate(() => window.__gtb.LEVELS.length)} levels agree`);
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
 await topUp();
 
@@ -1527,10 +1490,14 @@ await page.waitForTimeout(200);
 check(await page.locator('#noballs').isVisible(),
   'pressing Drop Ball at zero raises the stop screen');
 
-/* the wheel is reachable FROM the stop screen - it must not be buried under it */
-await page.locator('#btn-spin').click();
+/* the wheel is reachable FROM the stop screen. It used to be reachable
+   because this screen only covered the board; now that it covers the
+   viewport, the offer has to be on the card itself. */
+check(await page.locator('#btn-nb-spin').isVisible(),
+  'the stop screen offers the wheel when a spin is available');
+await page.locator('#btn-nb-spin').click();
 check(await page.locator('#spinpanel').isVisible(),
-  'the wheel opens on top of the stop screen, so it is a way out of it');
+  'and it opens on top of the stop screen, so it is a way out of it');
 await page.locator('#btn-spin-go').click();
 await page.waitForFunction(() => !window.__gtb.spinInfo().spinning, null, { timeout: 20000 });
 await page.locator('#btn-spin-close').click();
@@ -1675,7 +1642,9 @@ const onboard = await page.evaluate(() => {
   const s = window.__gtb.state();
   return { step: s.tutorial.step, skipShown: s.tutorial.skipShown,
            playable: !document.getElementById('btn-drop').disabled,
-           onCanvas: !document.querySelector('.stage .overlay:not([hidden])') };
+           // modals are viewport-level now, so "nothing is covering the board"
+           // means no overlay is open at all
+           onCanvas: !document.querySelector('.overlay:not([hidden])') };
 });
 check(onboard.step === 1 && onboard.onCanvas,
   'onboarding happens in gameplay, drawn on the board - not on a splash screen');
@@ -1693,7 +1662,8 @@ for (const [w,h,label] of VIEWPORTS){
   layout.push(Object.assign({ w, h, label }, await page.evaluate(() => {
     const de = document.documentElement, vw = innerWidth, vh = innerHeight;
     const clipped = [];
-    document.querySelectorAll('.app *').forEach(e => {
+    // modals live outside .app now, so they are swept explicitly too
+    document.querySelectorAll('.app *, .overlay:not([hidden]) *').forEach(e => {
       const st = getComputedStyle(e);
       if (st.display === 'none' || st.visibility === 'hidden' || +st.opacity === 0) return;
       const b = e.getBoundingClientRect();
