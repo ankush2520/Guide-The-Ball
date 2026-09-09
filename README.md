@@ -126,7 +126,7 @@ just cannot throw a ball.
 
 | Source | Amount |
 |---|---|
-| First open, ever | 10 |
+| First open, ever | 75 |
 | First clear of a level (once, ever) | +1 / +2 / +2 / +3 by Act |
 | Daily wheel | 1–5 |
 | Rewarded ad | +3 |
@@ -147,9 +147,13 @@ within two in Acts 2–3, within three in Act 4. Anything slower is a net loss.
 
 That is a demanding bar on the back half. Level 18 has a ±1.5° winning ramp
 window and level 19 has no single-ramp solution at all (`node tests/levels.mjs
-0 19`), so first- or second-try clears there are not realistic. A player who
-takes three or four attempts per level runs the opening ten down inside Act 1
-and lives on the wheel and the ad from then on.
+0 19`), so first- or second-try clears there are not realistic — every level
+past the early Acts is a net drain.
+
+The opening grant of 75 is what absorbs that. At three or four attempts a
+level it covers roughly the first twenty levels on its own, so a new player
+meets the whole of world 1 before the economy ever asks them for anything.
+After that the drain resumes and the wheel and the ad carry it.
 
 That may be exactly the intent — it is what drives ad views. If it is not, the
 levers, cheapest first: raise `STARTING_BALLS`, raise `CLEAR_BONUS`, or bring

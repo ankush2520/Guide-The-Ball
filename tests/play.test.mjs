@@ -997,14 +997,18 @@ const ballsNow = () => page.evaluate(() => window.__gtb.balls());
 
 /* --- a first-ever load grants exactly ten --- */
 await freshPlayer();
-check((await ballsNow()) === 10, 'a first-ever load grants exactly 10 balls', `${await ballsNow()}`);
-check(BALLS.start === 10, 'and the constant says so too', `${BALLS.start}`);
-check((await page.locator('#ball-count').textContent()) === '10', 'the HUD shows the count');
-check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)).balls, BALLS.key)) === 10,
+check((await ballsNow()) === BALLS.start,
+  `a first-ever load grants exactly ${BALLS.start} balls`, `${await ballsNow()}`);
+check(BALLS.start > 0 && Number.isInteger(BALLS.start),
+  'and the opening grant is a sane whole number', `${BALLS.start}`);
+check((await page.locator('#ball-count').textContent()) === String(BALLS.start),
+  'the HUD shows the count');
+check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)).balls, BALLS.key)) === BALLS.start,
   'the opening grant is persisted, so it is granted ONCE');
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
-check((await ballsNow()) === 10, 'a second load does not grant another ten', `${await ballsNow()}`);
+check((await ballsNow()) === BALLS.start,
+  'a second load does not grant it again', `${await ballsNow()}`);
 await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setBalls(4); });
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);

@@ -1304,9 +1304,11 @@ function saveProgress(){
    the daily wheel, and the rewarded ad.
    ============================================================ */
 const BALLS_KEY      = 'gtb.balls.v1';
-// Granted once, on the very first open. Ten is enough to walk most of Act 1
-// before the economy is ever felt, which is when we want it noticed.
-const STARTING_BALLS = 10;
+// Granted once, on the very first open. Generous on purpose: at one ball per
+// drop, a player still learning to read a board burns several per level, and
+// the economy should not be the thing they meet first. 75 carries a new
+// player well past the point where the game has earned the right to ask.
+const STARTING_BALLS = 75;
 const AD_REWARD      = 3;
 // First-clear bonus by Act, indexed by floor((levelId - 1) / 5). A level
 // solved first time pays for the drop that solved it; the deeper Acts pay
