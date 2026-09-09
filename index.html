@@ -263,13 +263,29 @@
   .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
   .sw.bl{border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#ffd98a);
          box-shadow:0 0 9px rgba(255,201,60,.7)}
+  .sw.bs{border-radius:50%;background:radial-gradient(circle,rgba(90,255,215,.5),rgba(40,190,160,.15));
+         border:2px dashed #5affd7;box-shadow:0 0 9px rgba(90,255,215,.55)}
+  .sw.bk{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffd7a8,#a8551c);
+         box-shadow:0 0 9px rgba(255,168,96,.55)}
+  .sw.wd{height:11px;border-radius:3px;
+         background:linear-gradient(90deg,rgba(150,200,255,.12),rgba(150,200,255,.5));
+         border:1px solid rgba(160,205,255,.5)}
+  .sw.sl{height:11px;border-radius:3px;background:rgba(190,235,255,.3);
+         border:1px solid rgba(200,240,255,.6)}
+  .sw.pt{border-radius:50%;background:radial-gradient(circle,hsla(285,100%,80%,.6),hsla(285,80%,45%,.15));
+         border:2px dashed hsl(285,100%,80%);box-shadow:0 0 9px hsla(285,100%,70%,.6)}
+  .sw.st{background:#ffc451;box-shadow:0 0 9px rgba(255,201,60,.7);
+         clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
   /* the text swaps between one and two lines as you play; reserving the tall
      state keeps the stage - and therefore the board - perfectly still */
   .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0;
         flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
   .controls,.legend{flex:none}
   /* a phone has no height to spare - drop the reference text, keep the controls */
-  @media (max-height:700px){ .legend,.hint{display:none} }
+  /* The legend now lists only what is on the current board, so it is short
+     enough to survive further down the height range than the old fixed list.
+     Below this it goes, and the first-sight tips carry the teaching instead. */
+  @media (max-height:620px){ .legend,.hint{display:none} }
 
   button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
                box-shadow:none;cursor:pointer;font-size:15.5px;font-weight:800;color:var(--ink)}
@@ -371,13 +387,8 @@
     <button id="btn-clear">Clear</button>
   </div>
 
-  <div class="legend">
-    <i><span class="sw tg"></span>Green ring = Target (goal)</i>
-    <i><span class="sw ob"></span>Red circle = Obstacle (random bounce)</i>
-    <i><span class="sw rp"></span>Blue bar = Your ramp</i>
-    <i><span class="sw wl"></span>Grey bar = Wall (fixed, blocks the ball)</i>
-    <i><span class="sw bl"></span>White = Ball</i>
-  </div>
+  <!-- built per level from what is actually on the board: see syncLegend() -->
+  <div class="legend" id="legend"></div>
 
   <p class="hint" id="hint">Drag on the board to draw a ramp, then press Drop Ball.</p>
 </div>
@@ -1288,7 +1299,7 @@ function saveProgress(){
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       highest: highest, stars: bestStars, cleared: clearedLevels, pickups: bestPickups,
-      tutorialSeen: tutorialSeen, obstacleTipSeen: obstacleTipSeen
+      tutorialSeen: tutorialSeen, obstacleTipSeen: obstacleTipSeen, tips: tipsSeen
     }));
   }
   catch (e){ /* private mode / blocked storage - progress just won't persist */ }
@@ -1469,6 +1480,30 @@ let selected = -1;      // index of the ramp being edited, or -1
 let dragging = null;    // {mode:'p1'|'p2'|'move', ix, lx, ly} while a handle is held
 let seedOverride = null;
 let tutorialSeen = false, obstacleTipSeen = false;
+/* Which mechanics the player has had explained. The game is plan-first, so
+   a new mechanic is taught the moment it appears on a board - not when the
+   ball hits it, by which point the plan it should have informed is already
+   committed. The obstacle keeps its on-contact tip: "that scattered you
+   randomly" only means something once it has. */
+let tipsSeen = {};
+const MECH_TIPS = [
+  /* Short on purpose. The flash is one fixed-height line so that showing it
+     can never shift the board mid-drag, which means anything long is simply
+     cut off with an ellipsis - a tip nobody can finish reading. The legend
+     below the board carries the fuller wording. */
+  { key:'booster',   has: lv => lv.boosters.length,
+    text:'Booster: fires you where the arrow points.' },
+  { key:'wind',      has: lv => lv.wind.length,
+    text:'Wind: pushes the ball while it is inside.' },
+  { key:'slippery',  has: lv => lv.slippery.length,
+    text:'Ice: bounces here keep nearly all their speed.' },
+  { key:'portal',    has: lv => lv.portals.length,
+    text:'Portal: in one ring, out of the other.' },
+  { key:'breakable', has: lv => lv.breakables.length,
+    text:'Breakable: bounces once, then shatters.' },
+  { key:'star',      has: lv => lv.stars.length,
+    text:'Gold stars are optional pickups.' }
+];
 
 const canvas  = document.getElementById('board');
 // the backdrop is repainted every frame anyway, so an opaque surface just
@@ -1487,6 +1522,7 @@ const elTries = document.getElementById('try-count');
 const btnSound= document.getElementById('btn-sound');
 const elFlash = document.getElementById('flash');
 const btnSkip = document.getElementById('btn-skip');
+const elLegend = document.getElementById('legend');
 const elBalls    = document.getElementById('ball-count');
 const chipBalls  = document.getElementById('balls-chip');
 const panelNoBalls = document.getElementById('noballs');
@@ -1606,6 +1642,7 @@ function tutorialDone(){
 /* Skip means skip all of it, the just-in-time obstacle tip included. */
 function tutorialSkip(){
   tutorialSeen = true; obstacleTipSeen = true;
+  MECH_TIPS.forEach(function(t){ tipsSeen[t.key] = true; });
   saveProgress();
   syncTutorial();
 }
@@ -1642,6 +1679,46 @@ function hideFlash(){
 
 function level(){ return LEVELS[levelIndex]; }
 
+/* The legend lists what is ON THIS BOARD and nothing else. A fixed list went
+   stale the moment world 2 added a mechanic to it, and it was long enough
+   that it was the first thing dropped when the window got short - so the one
+   surface that could have explained a booster was also the one most likely
+   to be missing. */
+function syncLegend(){
+  const lv = level();
+  const row = [];
+  row.push(['tg', 'Green ring = Target (goal)']);
+  if (lv.obstacles.length)  row.push(['ob', 'Red circle = Obstacle (random bounce)']);
+  if (lv.breakables.length) row.push(['bk', 'Cracked block = Breakable (shatters)']);
+  if (lv.boosters.length)   row.push(['bs', 'Dashed ring = Booster (fires along the arrow)']);
+  if (lv.portals.length)    row.push(['pt', 'Matching rings = Portal (in one, out the other)']);
+  if (lv.wind.length)       row.push(['wd', 'Shaded band = Wind (pushes sideways)']);
+  if (lv.slippery.length)   row.push(['sl', 'Frosted band = Ice (keeps speed)']);
+  if (lv.stars.length)      row.push(['st', 'Gold star = Optional pickup']);
+  row.push(['rp', 'Blue bar = Your ramp']);
+  if (lv.walls.length)      row.push(['wl', 'Grey bar = Wall (fixed, blocks the ball)']);
+  row.push(['bl', 'White = Ball']);
+  elLegend.innerHTML = row.map(function(r){
+    return '<i><span class="sw ' + r[0] + '"></span>' + r[1] + '</i>';
+  }).join('');
+}
+
+/** Explain, once, the first unseen mechanic on this board. One at a time:
+    two flashes would replace each other and the player would read neither. */
+function teachNewMechanics(){
+  if (!tutorialSeen) return;              // the ramp lesson comes first
+  const lv = level();
+  for (let i = 0; i < MECH_TIPS.length; i++){
+    const t = MECH_TIPS[i];
+    if (!tipsSeen[t.key] && t.has(lv)){
+      tipsSeen[t.key] = true;
+      saveProgress();
+      showFlash(t.text);
+      return;
+    }
+  }
+}
+
 function syncUI(){
   const lv = level();
   const planning = phase === 'plan';
@@ -1675,6 +1752,8 @@ function setLevel(i){
   seenHit = 0; seenBroke = 0; squash.amt = 0; clearParticles(); clearTrail();
   sessionBroken = falses(LEVELS[levelIndex].breakables.length);
   applyWorldTheme();
+  syncLegend();
+  teachNewMechanics();
   tries = 0;
   phase = 'plan'; overlay.hidden = true;
   if (levelIndex > highest){ highest = levelIndex; saveProgress(); }
@@ -3005,6 +3084,7 @@ loadSpin();
    worked out how to place a ramp, so they never get shown it. */
 tutorialSeen    = loadSave().tutorialSeen    === true || highest > 0;
 obstacleTipSeen = loadSave().obstacleTipSeen === true || highest > 0;
+tipsSeen = (function(){ const v = loadSave().tips; return (v && typeof v === 'object') ? v : {}; })();
 btnSkip.addEventListener('click', function(e){ tutorialSkip(); e.stopPropagation(); });
 function paintSoundBtn(){
   btnSound.textContent = Sound.muted() ? '\uD83D\uDD07' : '\uD83D\uDD0A';
@@ -3063,6 +3143,8 @@ window.__gtb = {
                          skipShown: !btnSkip.hidden,
                          dropPulsing: btnDrop.classList.contains('tut-pulse'),
                          handT: tutHand.t },
+             legend: elLegend.textContent,
+             tips: Object.assign({}, tipsSeen),
              flash: flashText, flashOn: elFlash.classList.contains('on'),
              result: ball ? ball.result : lastResult,
              ball: ball ? { x: ball.x, y: ball.y, px: ball.px, py: ball.py,
@@ -3141,7 +3223,7 @@ window.__gtb = {
                             balls = STARTING_BALLS; saveBalls();
                             clearedLevels = {}; panelNoBalls.hidden = true;
                             spinLast = 0; spinning = false; saveSpin(0);
-                            tutorialSeen = false; obstacleTipSeen = false;
+                            tutorialSeen = false; obstacleTipSeen = false; tipsSeen = {};
                             syncTutorial(); syncSpinUI(); syncUI(); },
   skipTutorial: tutorialSkip,
   stars: function(){ return Object.assign({}, bestStars); },

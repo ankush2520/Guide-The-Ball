@@ -82,8 +82,43 @@ check(await page.locator('#board').isVisible(), 'board renders');
 check(await page.locator('#overlay').isHidden(), 'no overlay on a fresh board');
 check((await page.locator('#level-title').textContent()).includes('First Drop'), 'level 1 title shown');
 const legend = await page.locator('.legend').textContent();
-check(['Target','Obstacle','Wall','ramp'].every(w => legend.includes(w)),
-  'legend names target, obstacle, wall and ramp in words');
+check(['Target','ramp','Ball'].every(w => legend.includes(w)),
+  'legend names what is on level 1, in words', JSON.stringify(legend.slice(0, 60)));
+check(!legend.includes('Obstacle') && !legend.includes('Wall'),
+  'and does not list an obstacle or a wall, because level 1 has neither');
+
+/* The legend is built per level. A fixed list went stale the moment world 2
+   added a mechanic, so what matters is that it tracks the board exactly. */
+const legendFit = await page.evaluate(() => {
+  const g = window.__gtb, bad = [];
+  const WANT = [
+    ['obstacles',  'Obstacle'],  ['breakables', 'Breakable'],
+    ['boosters',   'Booster'],   ['portals',    'Portal'],
+    ['wind',       'Wind'],      ['slippery',   'Ice'],
+    ['stars',      'pickup']
+  ];
+  for (let i = 0; i < g.LEVELS.length; i++){
+    g.setLevel(i);
+    const txt = g.state().legend, lv = g.LEVELS[i];
+    for (const [key, word] of WANT){
+      const present = lv[key].length > 0, listed = txt.includes(word);
+      if (present && !listed) bad.push(`L${lv.id} has ${key} but the legend omits it`);
+      if (!present && listed) bad.push(`L${lv.id} lists ${word} but has none`);
+    }
+    const hasWall = lv.targetType !== 'OPEN';
+    if (hasWall !== txt.includes('Wall')) bad.push(`L${lv.id} wall entry wrong`);
+    if (!txt.includes('Target') || !txt.includes('ramp')) bad.push(`L${lv.id} missing the basics`);
+  }
+  g.setLevel(0);
+  return bad;
+});
+check(legendFit.length === 0,
+  'every level lists exactly the entities it actually has, and no others',
+  legendFit.slice(0, 3).join(' | ') || 'all levels match');
+/* that sweep visited every level, which drags `highest` to the end of the
+   game - put the save back the way boot left it */
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+await topUp();
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'level-01.png') });
 ok('screenshot: level-01.png');
 
@@ -678,6 +713,59 @@ check((await page.locator('#flash').textContent()) === 'Got stuck! Try readjusti
 await page.waitForTimeout(3200);
 check(await page.locator('#flash').isHidden(), 'the label fades out on its own');
 check(await boardBox() === geoIdle, 'the board is unmoved after the label goes', await boardBox());
+
+/* ---------------------------------------------------------------- */
+/* Every mechanic gets explained the moment it first appears on a board -
+   the game is plan-first, so learning what a booster does by watching one
+   fire is learning it one drop too late. */
+section('8b. Mechanics are taught on sight, and the tips fit');
+const tipCheck = await page.evaluate(async () => {
+  const g = window.__gtb;
+  // a player who has done the ramp tutorial but never seen a mechanic
+  const save = JSON.parse(localStorage.getItem('gtb.progress.v1') || '{}');
+  save.tips = {}; save.tutorialSeen = true;
+  localStorage.setItem('gtb.progress.v1', JSON.stringify(save));
+  return null;
+});
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+await topUp();
+const flashEl = () => page.evaluate(() => {
+  const e = document.getElementById('flash');
+  return { text: e.textContent, on: e.classList.contains('on'),
+           clipped: e.scrollWidth > e.clientWidth + 1 };
+});
+// find the first level carrying each mechanic and check it teaches itself
+const firstWith = await page.evaluate(() => {
+  const g = window.__gtb, out = {};
+  ['boosters','wind','slippery','portals','breakables','stars'].forEach(k => {
+    for (let i = 0; i < g.LEVELS.length; i++)
+      if (g.LEVELS[i][k].length){ out[k] = i; break; }
+  });
+  return out;
+});
+const taught = [];
+for (const [key, li] of Object.entries(firstWith)){
+  await page.evaluate(i => window.__gtb.setLevel(i), li);
+  const f = await flashEl();
+  taught.push({ key, li, text: f.text, on: f.on, clipped: f.clipped });
+}
+for (const t of taught)
+  console.log(`  ${t.key.padEnd(11)} first seen on L${t.li + 1}: ${JSON.stringify(t.text)}`);
+check(taught.length > 0, 'at least one new mechanic ships to be taught', `${taught.length}`);
+check(taught.every(t => t.on && t.text.length > 0),
+  'arriving at a board with a new mechanic explains it straight away',
+  taught.filter(t => !t.on).map(t => t.key).join(',') || 'all taught');
+check(taught.every(t => !t.clipped),
+  'and every tip fits the one-line label instead of being cut off',
+  taught.filter(t => t.clipped).map(t => `${t.key} truncated`).join(', ') || 'all fit');
+/* seen once, never again */
+const firstKey = taught[0];
+await page.evaluate(() => window.__gtb.setLevel(0));
+await page.evaluate(i => window.__gtb.setLevel(i), firstKey.li);
+check(!(await flashEl()).on, 'and it is not repeated on a later visit', firstKey.key);
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+await topUp();
 
 /* ---------------------------------------------------------------- */
 section('9. Ramp drawing - mouse and touch');

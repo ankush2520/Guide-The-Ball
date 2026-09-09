@@ -48,6 +48,28 @@ cancelled by the wall it is pushing you into is unreadable.
 
 `npm run mech` runs the per-mechanic isolation tests on purpose-built boards.
 
+### Teaching a mechanic
+
+Two surfaces, because either one alone has a hole:
+
+- **The legend is built per level** from what is actually on that board. A
+  fixed list went stale the moment world 2 added a booster to the game, and it
+  was long enough that it was the first thing dropped when the window got
+  short — so the one surface that could explain a booster was also the one
+  most likely to be missing. Being per-level makes it shorter, so it now
+  survives down to 620px of height instead of 700px.
+- **First-sight tips.** Arriving at a board carrying a mechanic the player has
+  never been told about flashes a one-line explanation, once, tracked in
+  `tips` in the save. It fires on *arrival*, not on contact: the game is
+  plan-first, so learning what a booster does by watching one fire is learning
+  it a drop too late. The red obstacle keeps its on-contact tip, because
+  "that scattered you randomly" only means anything once it has.
+
+Tips must be short. The flash is one fixed-height line so that showing it can
+never shift the board mid-drag, which means a long tip is silently truncated
+with an ellipsis. Section 8b measures `scrollWidth` against `clientWidth` and
+fails on any tip that does not fit — it caught the first draft of all six.
+
 ### Generating a world
 
     node tools/genlevels.mjs 2            # dry run, report only
