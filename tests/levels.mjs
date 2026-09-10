@@ -9,6 +9,7 @@
  *   trivial?    - win rate of blind random placements.
  */
 import { chromium } from 'playwright';
+import { attachHarness } from '../tools/harness.mjs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -17,8 +18,9 @@ const LO = Number(process.argv[2] ?? 0), HI = Number(process.argv[3] ?? 19);
 
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
-await page.goto(pathToFileURL(path.join(root, 'index.html')).href);
-await page.waitForFunction(() => !!window.__gtb);
+/* Only the simulator is needed here, so this runs against the headless
+   harness rather than the built app - no server, no React. */
+await attachHarness(page);
 
 const report = await page.evaluate(([lo, hi]) => {
   const { LEVELS, simulate, CONSTS } = window.__gtb;

@@ -2,7 +2,7 @@
  * Semi-procedural level generation with solver verification.
  *
  *   node tools/genlevels.mjs 2            # generate world 2, report, write nothing
- *   node tools/genlevels.mjs 2 --write    # ...and splice it into index.html
+ *   node tools/genlevels.mjs 2 --write    # ...and splice it into the level data
  *
  * Nothing reaches index.html until it has PROVED, in the real simulator, that
  * it is winnable on every obstacle seed, not winnable by accident, and not
@@ -10,12 +10,12 @@
  * level is reported as a template problem - never shipped unverified.
  */
 import { chromium } from 'playwright';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { attachHarness } from './harness.mjs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const GAME = pathToFileURL(path.join(root, 'index.html')).href;
 const WORLD = Number(process.argv[2]);
 const WRITE = process.argv.includes('--write');
 const W = 480, H = 800;
@@ -127,8 +127,10 @@ const FROM = 21 + (WORLD - 2) * 10, TO = FROM + 9;
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
 page.on('pageerror', e => console.log('  PAGE ERROR:', e.message));
-await page.goto(GAME);
-await page.waitForFunction(() => !!window.__gtb);
+/* The sweep needs the simulator, not the game: attachHarness bundles the
+   physics half of the test hook into a blank page, so a regeneration never
+   depends on a dev server or on React booting. */
+await attachHarness(page);
 
 /** The acceptance sweep. Runs entirely inside the page against the real
     simulator, so it can never disagree with the shipped physics. */
@@ -336,11 +338,11 @@ if (WRITE){
     out += `    target:{x:${num(lv.target.x)},y:${num(lv.target.y)},r:${num(lv.target.r)}} }`;
     return out;
   };
-  const file = path.join(root, 'index.html');
+  const file = path.join(root, 'src/levels/levels.data.ts');
   let src = fs.readFileSync(file, 'utf8');
   const S = '/* GEN:START */', E = '/* GEN:END */';
   const a = src.indexOf(S), b = src.indexOf(E);
-  if (a < 0 || b < 0) throw new Error('generation markers missing from index.html');
+  if (a < 0 || b < 0) throw new Error('generation markers missing from src/levels/levels.data.ts');
   const existing = src.slice(a + S.length, b);
   /* Keep every world already written and replace only this one's range.
      Chunks are split on the start of a level object; anything that is not a
@@ -373,7 +375,7 @@ if (WRITE){
   body += '\n';
   src = src.slice(0, a + S.length) + body + src.slice(b);
   fs.writeFileSync(file, src);
-  console.log(`  Written into index.html (levels ${FROM}-${TO}).`);
+  console.log(`  Written into src/levels/levels.data.ts (levels ${FROM}-${TO}).`);
 } else {
-  console.log('  (dry run - pass --write to splice these into index.html)');
+  console.log('  (dry run - pass --write to splice these into src/levels/levels.data.ts)');
 }

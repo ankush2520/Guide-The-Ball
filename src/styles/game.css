@@ -1,0 +1,353 @@
+:root{
+    --bg:#080a18; --panel:#171b33; --panel-2:#232a4d; --ink:#e9ecff; --muted:#8f99c4;
+    --obstacle:#ff4d5e; --target:#2fd97a; --ramp:#3ec8ff; --wall:#93a0b8;
+    --ball:#ffffff; --accent:#ffc93c;
+    /* one border colour and one hairline highlight, used everywhere, so every
+       panel in the game catches the light from the same direction */
+    --edge:#333c6b;
+    --sheen:rgba(255,255,255,.07);
+    --glow-ramp:rgba(62,200,255,.45);
+    --glow-accent:rgba(255,201,60,.40);
+    /* Deliberately system fonts, not a webfont: the whole game is one
+       index.html with no assets, which is what makes the portal build
+       drop-in and offline-safe. Weight, size and tracking carry the
+       typographic hierarchy instead of a second typeface. */
+    --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-display:"SF Pro Display",ui-sans-serif,system-ui,-apple-system,
+                   "Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{
+    margin:0;
+    /* two stacked glows, warm over cool, so the page has a light source
+       instead of a flat wash */
+    background:
+      radial-gradient(90% 55% at 50% -8%, rgba(90,120,255,.16) 0%, rgba(90,120,255,0) 60%),
+      radial-gradient(120% 80% at 50% 0%, #1a1f42 0%, var(--bg) 68%);
+    background-attachment:fixed;
+    color:var(--ink);font:500 14px/1.45 var(--font);
+    font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;
+    display:flex;justify-content:center;align-items:flex-start;
+    /* Safe area on ALL FOUR sides, not just the bottom. The CrazyGames App
+       runs the game genuinely fullscreen, so the notch and the rounded
+       corners are ours to avoid - and in landscape the cutout is on a SIDE,
+       which a bottom-only inset does nothing about. Paired with
+       viewport-fit=cover in the meta tag, which is already set. */
+    padding:calc(10px + env(safe-area-inset-top))
+            calc(10px + env(safe-area-inset-right))
+            calc(10px + env(safe-area-inset-bottom))
+            calc(10px + env(safe-area-inset-left));
+    /* svh, NOT dvh: dvh follows Safari's toolbar as it collapses under your
+       finger, which re-lays out the stage and slides the board sideways in
+       the middle of drawing a ramp. svh stays put. */
+    height:100vh;height:100svh;max-height:100svh;
+    /* a phone must never pan, rubber-band, double-tap-zoom or start a text
+       selection while a finger is dragging a ramp across the board */
+    touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  }
+  /* The board is 3:5 and the column is height-driven, so the width the app
+     can usefully occupy follows the viewport HEIGHT, not its width. A flat
+     430px cap left a 1920x1080 desktop showing a 428px board with 1490px of
+     empty screen either side of it; below about 900px tall the cap never
+     binds anyway, because the board runs out of height first. */
+  .app{width:min(100%, max(430px, 52vh));height:100%;
+       display:flex;flex-direction:column;gap:9px}
+
+  /* Landscape phones and small windows - CrazyGames requires legibility down
+     to 800x450, where the board is squeezed by the chrome above and below it.
+     Give the chrome less room so the board keeps more. */
+  @media (max-height:520px){
+    .app{gap:6px}
+    .hud{min-height:28px}
+    .controls button{padding:8px 10px;font-size:13px}
+    .flash{height:19px;line-height:15px;font-size:12px;margin-bottom:-4px}
+    .iconbtn,.iconbtn.spin{height:27px}
+    .iconbtn{width:27px}
+  }
+
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;
+       flex:none;min-height:34px}
+  .title{font-family:var(--font-display);font-size:15.5px;font-weight:800;
+         letter-spacing:-.005em;min-width:0;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* the level NAME is flavour and the level NUMBER is the functional half, so
+     when the bar is tight the name gives up its size first */
+  .title span{color:var(--muted);font-weight:500;letter-spacing:0;font-size:13px}
+  .counter{background:linear-gradient(180deg,#1e2440,#151931);
+           border:1px solid var(--edge);border-radius:999px;
+           box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
+           padding:4px 8px;font-size:12px;font-weight:600;white-space:nowrap;
+           color:#bcc4e8;letter-spacing:.01em}
+  .counter b{color:var(--accent);font-weight:800;font-size:13px;
+             text-shadow:0 0 10px var(--glow-accent)}
+  .chips{display:flex;align-items:center;gap:4px;flex:none}
+  /* the ball chip leads with the thing it counts, drawn the same way the
+     board draws the ball, so the HUD and the board agree */
+  .counter.balls{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
+  .counter.balls .pip{width:11px;height:11px;border-radius:50%;flex:none;
+       background:radial-gradient(circle at 34% 30%,#fff,#ffc451);
+       box-shadow:0 0 8px rgba(255,201,60,.75)}
+  .counter.balls.empty{border-color:#6b2a38}
+  .counter.balls.empty .pip{background:#4a3040;box-shadow:none}
+  .counter.balls.empty b{color:#ff8792;text-shadow:none}
+  .big.nb{color:#ffc451;text-shadow:0 0 22px rgba(255,201,60,.45)}
+  .big.sp{color:#ffd479;text-shadow:0 0 22px rgba(255,201,60,.45)}
+
+  /* the topbar wheel button. It grows a countdown while it is locked, so it
+     is 32px square when ready and a pill when it is not. */
+  .iconbtn.spin{width:auto;min-width:27px;height:27px;padding:0 6px;gap:4px;
+                display:inline-flex;align-items:center;justify-content:center}
+  .iconbtn.spin .wheelicon{width:14px;height:14px;border-radius:50%;flex:none;
+     background:conic-gradient(#ffc93c 0 25%, #3ec8ff 0 50%, #ffc93c 0 75%, #3ec8ff 0);
+     box-shadow:0 0 0 1.5px rgba(255,255,255,.5) inset}
+  .iconbtn.spin b{font-size:11px;font-weight:700;color:var(--muted);
+                  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .iconbtn.spin b[hidden]{display:none}
+  .iconbtn.spin.locked{opacity:.5}
+  .iconbtn.spin.locked .wheelicon{filter:grayscale(.85)}
+  /* ready: a gold version of the tutorial's pulse, so "there is something for
+     you here" always looks the same in this game */
+  @keyframes spinpulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(255,201,60,.55), 0 0 12px 1px rgba(255,170,40,.35) }
+    50%    { box-shadow:0 0 0 6px rgba(255,201,60,0), 0 0 18px 4px rgba(255,170,40,.55) }
+  }
+  .iconbtn.spin.ready{border-color:#7a6320;animation:spinpulse 1.7s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){ .iconbtn.spin.ready{animation:none;
+    box-shadow:0 0 0 2px rgba(255,201,60,.45)} }
+
+  /* the panel is a reference, so it is allowed to be long - it scrolls
+     inside the card rather than growing the card past the board */
+  .info{margin:2px 0 14px;text-align:left}
+  .info h4{margin:14px 0 7px;font-size:12px;font-weight:800;letter-spacing:.07em;
+           text-transform:uppercase;color:var(--accent);opacity:.9}
+  .info h4:first-child{margin-top:2px}
+  .info p{margin:0 0 7px;font-size:12.5px;line-height:1.5;color:#c3cbee}
+  .iline{display:flex;gap:9px;align-items:flex-start;margin:0 0 8px}
+  .iline .sw{margin-top:3px}
+  .iline b{display:block;font-size:12.5px;font-weight:700;color:var(--ink)}
+  .iline span.d{display:block;font-size:12px;line-height:1.45;color:var(--muted)}
+  /* what is on the board you are looking at right now, called out */
+  .iline.here b:after{content:' • on this level';font-size:10.5px;font-weight:700;
+                      color:var(--accent);letter-spacing:.02em}
+  #btn-info{font-weight:800;font-size:14px}
+  .wheelwrap{position:relative;width:212px;height:212px;margin:4px auto 14px}
+  #wheel{display:block;width:212px;height:212px;
+         transform:rotate(0deg);will-change:transform;
+         filter:drop-shadow(0 6px 18px rgba(0,0,0,.55))}
+  /* the pointer and the hub do NOT rotate - they sit over the wheel */
+  .wheelptr{position:absolute;top:-3px;left:50%;transform:translateX(-50%);
+            width:0;height:0;border-left:9px solid transparent;
+            border-right:9px solid transparent;border-top:16px solid #ffd479;
+            filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+  .wheelhub{position:absolute;top:50%;left:50%;width:34px;height:34px;
+            margin:-17px 0 0 -17px;border-radius:50%;
+            background:radial-gradient(circle at 36% 32%,#fff,#ffc451);
+            box-shadow:0 0 12px rgba(255,201,60,.7), 0 2px 6px rgba(0,0,0,.5)}
+  #spin-sub b{color:#ffd479;font-weight:800}
+  .chips .counter{padding:4px 8px;font-size:12px}
+  .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
+           border:1px solid var(--edge);border-radius:999px;
+           box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
+           width:27px;height:27px;padding:0;font-size:12.5px;line-height:1;display:grid;place-items:center}
+  .iconbtn.off{opacity:.45}
+  /* stars: filled ones glow, unearned ones stay as faint outlines */
+  .stars{display:flex;justify-content:center;gap:7px;font-size:27px;line-height:1;margin:2px 0 10px}
+  .stars i{font-style:normal;color:#2b3560}
+  .stars i.on{color:var(--accent);
+              text-shadow:0 0 6px rgba(255,201,60,.9), 0 0 18px rgba(255,170,40,.55)}
+  .starnote{color:var(--muted);font-size:12px;margin:-6px 0 12px}
+  .grid button{position:relative;padding-bottom:15px}
+  .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--accent)}
+
+  /* Step 2 of the tutorial: the button asks for the tap itself, so there is
+     no need for a sentence explaining where to find it. */
+  @keyframes tutpulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(120,175,255,.55), 0 0 14px 2px rgba(90,150,255,.35) }
+    50%    { box-shadow:0 0 0 7px rgba(120,175,255,0),  0 0 20px 5px rgba(90,150,255,.55) }
+  }
+  .tut-pulse{ animation:tutpulse 1.5s ease-in-out infinite }
+  @media (prefers-reduced-motion:reduce){ .tut-pulse{ animation:none;
+    box-shadow:0 0 0 3px rgba(120,175,255,.45) } }
+
+  /* Skip: deliberately quiet, in the board's corner, and only present while
+     the tutorial is. It costs no layout space when it is gone. */
+  .tut-skip{position:absolute;top:8px;right:9px;z-index:2;
+            background:rgba(13,16,34,.72);border:1px solid #39416e;border-radius:999px;
+            color:var(--muted);font-size:11.5px;font-weight:600;
+            padding:4px 11px;flex:none;line-height:1;cursor:pointer}
+  .tut-skip:hover:not(:disabled){filter:brightness(1.4)}
+  .tut-skip[hidden]{display:none}
+
+  /* Miss/stuck feedback. Sits in the flow ABOVE the board, never over it, and
+     always occupies its line even when empty - the board must not shift when
+     it appears. visibility (not display) is what keeps that space reserved. */
+  .flash{flex:none;display:block;align-self:center;max-width:100%;
+         /* one line, exactly, always: 22 - 2*1 padding - 2*1 border = 18 = the
+            line box. It can neither wrap nor grow, so the board cannot move.
+            The negative margin eats part of the .app gap back, since the pill
+            is the only thing this row ever holds. */
+         height:22px;line-height:18px;padding:1px 12px;margin-bottom:-5px;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+         font-size:12.5px;font-weight:650;text-align:center;
+         color:#ffd9a0;background:rgba(255,150,60,.10);
+         border:1px solid rgba(255,170,80,.28);border-radius:999px;
+         opacity:0;visibility:hidden;
+         transition:opacity .38s ease, visibility 0s linear .38s}
+  .flash.on{opacity:1;visibility:visible;transition:opacity .16s ease, visibility 0s}
+
+  /* The stage owns the board's 3:5 ratio, so its border hugs the canvas
+     exactly and no reflow can leave the board sitting off to one side. */
+  .stage{position:relative;border-radius:14px;overflow:hidden;
+         border:1px solid #313a6e;
+         box-shadow:0 18px 48px rgba(0,0,0,.6),
+                    0 0 0 1px rgba(120,160,255,.06),
+                    0 0 34px -6px rgba(70,110,255,.22);
+         flex:1 1 auto;min-height:0;align-self:center;
+         /* content-box so the 1px border does not skew the board's ratio */
+         box-sizing:content-box;aspect-ratio:3 / 5;width:auto;max-width:calc(100% - 2px)}
+  canvas{display:block;width:100%;height:100%;
+         touch-action:none;cursor:crosshair}
+
+  /* Viewport-level, not board-level. Anchored to .stage these were cropped
+     to a 190px-wide box on a short window. They also carry the safe area
+     themselves, since they sit outside the padded body. */
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+           background:rgba(8,10,22,.74);backdrop-filter:blur(4px);
+           padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+                   calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+  /* One stacking order, stated once. The wheel must open ON TOP of the
+     out-of-balls screen, because it is a way out of it. */
+  #select{z-index:50} #overlay{z-index:55} #noballs{z-index:60}
+  #spinpanel{z-index:70} #infopanel{z-index:80}
+  /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
+  .overlay[hidden]{display:none}
+  /* A column: heading and buttons pinned, the long middle scrolls. Without
+     this a tall card simply grew past the screen and lost both ends. */
+  .card{background:linear-gradient(180deg,#1d2342,#141830);
+        border:1px solid #3a4374;border-radius:18px;
+        padding:18px;text-align:center;width:100%;max-width:290px;
+        max-height:100%;display:flex;flex-direction:column;overflow:hidden;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.09),
+                   0 20px 54px rgba(0,0,0,.62)}
+  .card > *{flex:none}
+  /* the one scrolling region per card */
+  .card .scroll{flex:1 1 auto;min-height:0;overflow-y:auto;
+                -webkit-overflow-scrolling:touch;margin:0 -6px;padding:0 6px;
+                /* fade the last line out instead of guillotining it, so
+                   "there is more below" is visible rather than inferred */
+                -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);
+                mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
+  .card .scroll::-webkit-scrollbar{width:6px}
+  .card .scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:3px}
+  .card .scroll::-webkit-scrollbar-track{background:transparent}
+  .card .big{font-family:var(--font-display);font-size:25px;font-weight:800;
+             letter-spacing:-.015em;margin-bottom:4px}
+  .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .card .row{display:flex;gap:8px}
+  .card .row + .row{margin-top:8px}
+  /* Card variants live HERE, directly after .card. They are the same
+     specificity as it, so declared any earlier the base rule wins and the
+     override silently does nothing - which is exactly what happened to the
+     info panel's width and left-alignment, and to the wheel's width. */
+  .spincard{max-width:270px}
+  .infocard{max-width:340px;text-align:left}
+  .infocard .big{text-align:center}
+  /* The ad may look like the recommended action, but declining it must be
+     just as easy to hit: same box, same type, same reach. */
+  #btn-nb-close{flex:1}
+  .win .big{color:#7dffb4;text-shadow:0 0 22px rgba(47,217,122,.55)}
+  .lose .big{color:#ff8792;text-shadow:0 0 22px rgba(255,77,94,.45)}
+
+  button{font:inherit;font-weight:650;color:var(--ink);
+         background:linear-gradient(180deg,#2a3157,#1c2140);
+         border:1px solid #39416e;border-radius:12px;padding:11px 12px;cursor:pointer;
+         flex:1;letter-spacing:.005em;
+         box-shadow:inset 0 1px 0 var(--sheen), 0 2px 6px rgba(0,0,0,.35);
+         transition:filter .12s, transform .07s ease, box-shadow .12s}
+  button:hover:not(:disabled){filter:brightness(1.16)}
+  /* a real press: the button gets smaller and its shadow collapses under it,
+     so the finger feels like it moved something */
+  button:active:not(:disabled){transform:scale(.968);
+         box-shadow:inset 0 2px 5px rgba(0,0,0,.4)}
+  button:disabled{opacity:.34;cursor:not-allowed;box-shadow:none}
+  button[hidden]{display:none}
+  .primary{background:linear-gradient(180deg,#5d9bff 0%,#3d76ec 52%,#2a5cd4 100%);
+           border-color:#7cb0ff;color:#fff;font-weight:750;
+           box-shadow:inset 0 1px 0 rgba(255,255,255,.28),
+                      0 3px 10px rgba(0,0,0,.4),
+                      0 0 20px -3px rgba(90,150,255,.65)}
+  .primary:active:not(:disabled){box-shadow:inset 0 2px 6px rgba(0,20,60,.45),
+                      0 0 14px -4px rgba(90,150,255,.6)}
+  @media (prefers-reduced-motion:reduce){ button:active:not(:disabled){transform:none} }
+  .controls{display:flex;gap:8px}
+  .controls .primary{flex:1.6}
+
+  /* swatches, shared by the info panel's entries */
+  .sw{width:15px;height:15px;flex:none;display:block}
+  .sw.ob{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ff8a94,#e0303f);
+         box-shadow:0 0 9px rgba(255,77,94,.6)}
+  .sw.tg{border-radius:50%;background:radial-gradient(circle,rgba(47,217,122,.45),rgba(47,217,122,.08));
+         border:2px solid var(--target);box-shadow:0 0 9px rgba(47,217,122,.55)}
+  .sw.rp{height:6px;width:18px;border-radius:3px;background:var(--ramp);
+         transform:rotate(-20deg);box-shadow:0 0 9px var(--glow-ramp)}
+  .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
+  .sw.bl{border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#ffd98a);
+         box-shadow:0 0 9px rgba(255,201,60,.7)}
+  .sw.bs{border-radius:50%;background:radial-gradient(circle,rgba(90,255,215,.5),rgba(40,190,160,.15));
+         border:2px dashed #5affd7;box-shadow:0 0 9px rgba(90,255,215,.55)}
+  .sw.bk{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffd7a8,#a8551c);
+         box-shadow:0 0 9px rgba(255,168,96,.55)}
+  .sw.wd{height:11px;border-radius:3px;
+         background:linear-gradient(90deg,rgba(150,200,255,.12),rgba(150,200,255,.5));
+         border:1px solid rgba(160,205,255,.5)}
+  .sw.sl{height:11px;border-radius:3px;background:rgba(190,235,255,.3);
+         border:1px solid rgba(200,240,255,.6)}
+  .sw.pt{border-radius:50%;background:radial-gradient(circle,hsla(285,100%,80%,.6),hsla(285,80%,45%,.15));
+         border:2px dashed hsl(285,100%,80%);box-shadow:0 0 9px hsla(285,100%,70%,.6)}
+  .sw.st{background:#ffc451;box-shadow:0 0 9px rgba(255,201,60,.7);
+         clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
+  /* the text swaps between one and two lines as you play; reserving the tall
+     state keeps the stage - and therefore the board - perfectly still */
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0;
+        flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
+  .controls{flex:none}
+  /* a phone has no height to spare - drop the reference text, keep the controls */
+  /* The legend now lists only what is on the current board, so it is short
+     enough to survive further down the height range than the old fixed list.
+     Below this it goes, and the first-sight tips carry the teaching instead. */
+  /* the board takes the height on a short window; the info panel carries the
+     reference material at every size */
+  @media (max-height:620px){ .hint{display:none} }
+
+  button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
+               box-shadow:none;cursor:pointer;font-size:15.5px;font-weight:800;color:var(--ink)}
+  button.title:active:not(:disabled){transform:none;box-shadow:none;filter:brightness(1.3)}
+  button.title:after{content:' \25BE';color:var(--muted);font-size:12px}
+  .selcard{max-width:330px}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;
+        align-content:start}
+  .grid button{flex:none;padding:10px 0;font-size:13px;font-variant-numeric:tabular-nums}
+  .grid button.done{border-color:#2fd97a;color:#8dffbe}
+  .grid button.cur{background:linear-gradient(180deg,#5d9bff,#2f6ae0);border-color:#7cb0ff;
+                   box-shadow:0 0 16px -3px rgba(90,150,255,.7)}
+  .grid button.done{box-shadow:inset 0 0 12px -4px rgba(47,217,122,.5)}
+  .grid button:disabled{opacity:.3}
+
+  /* ============================================================
+     REACT MOUNT POINT
+
+     React inserts #root between <body> and .app. The layout is
+     height-driven - .app is height:100%, and the stage derives
+     its WIDTH from the height left over - so a #root with auto
+     height breaks the chain: the percentage resolves against
+     nothing, .app grows to fit its content instead, and the
+     board takes the full width and pushes the hint off screen.
+
+     #root therefore has to be transparent to layout: same
+     flexbox role as body, and a definite height to inherit.
+     ============================================================ */
+  #root{width:100%;height:100%;display:flex;
+        justify-content:center;align-items:flex-start}

@@ -1,16 +1,31 @@
 {
   "name": "guide-the-ball",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node tools/serve.mjs",
-    "test": "node tests/mechanics.mjs && node tests/play.test.mjs",
-    "mech": "node tests/mechanics.mjs",
-    "gen": "node tools/genlevels.mjs"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node tests/run-all.mjs",
+    "test:parity": "node tests/parity.test.mjs",
+    "gen": "node tools/genlevels.mjs",
+    "test:mech": "node tests/mechanics.mjs",
+    "test:ui": "node tests/play.test.mjs",
+    "test:smoke": "node tests/smoke.test.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.62.1"
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.62.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
   },
-  "description": "Hyper-casual web game. The whole game is index.html - self-contained, no build step. npm is only for the Playwright tests."
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "description": "Hyper-casual web game. React + TypeScript + Vite, with a hand-written deterministic physics engine (see README: Physics)."
 }

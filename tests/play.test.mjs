@@ -13,7 +13,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const GAME = pathToFileURL(path.join(root, '..', 'index.html')).href;
+/* The app is a Vite build now, so it is served rather than opened off disk.
+   Point GTB_URL at `npm run dev` or `npm run preview`. */
+const GAME = process.env.GTB_URL || 'http://localhost:4173/';
 const SHOTS = path.join(root, 'screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -30,7 +32,8 @@ const context = await browser.newContext({
 const page = await context.newPage();
 page.on('pageerror', e => bad('uncaught page error', e.message));
 await page.goto(GAME);
-await page.waitForFunction(() => !!window.__gtb);
+await page.waitForSelector('canvas#board');
+await page.waitForFunction(() => !!(window.__gtb && window.__gtb.state));
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
 /* Sections 1-12 predate the balls economy and between them drop far more
    than a tank holds. They are not testing the economy - section 13 is - so
@@ -775,28 +778,37 @@ await page.evaluate(() => document.getElementById('btn-info-close').click());
 check(await page.locator('#infopanel').isHidden(), 'Close closes it');
 
 /* the "on this level" flags must track every board exactly - this is the
-   check the old per-level legend used to carry */
-const agree = await page.evaluate(() => {
-  const g = window.__gtb, bad = [];
-  const WANT = [['obstacles','Obstacle'], ['breakables','Breakable block'],
-                ['boosters','Booster'],   ['portals','Portal'],
-                ['wind','Wind'],          ['slippery','Ice'], ['stars','Gold star']];
-  for (let i = 0; i < g.LEVELS.length; i++){
-    g.setLevel(i);
-    document.getElementById('btn-info').click();
-    const here = [...document.querySelectorAll('.iline.here b')]
-      .map(e => e.textContent.replace(' • on this level', '').trim());
-    document.getElementById('btn-info-close').click();
-    const lv = g.LEVELS[i];
-    for (const [key, name] of WANT)
-      if (here.includes(name) !== (lv[key].length > 0)) bad.push(`L${lv.id} ${key}`);
-    if (here.includes('Wall') !== (lv.walls.length > 0)) bad.push(`L${lv.id} wall`);
-  }
-  g.setLevel(0);
-  return bad;
-});
+   check the old per-level legend used to carry.
+
+   React renders on its own schedule, so each level has to be stepped with an
+   await rather than clicked through synchronously the way the imperative
+   build allowed. */
+const WANT = [['obstacles','Obstacle'], ['breakables','Breakable block'],
+              ['boosters','Booster'],   ['portals','Portal'],
+              ['wind','Wind'],          ['slippery','Ice'], ['stars','Gold star']];
+const levelCount = await page.evaluate(() => window.__gtb.LEVELS.length);
+const agree = [];
+for (let i = 0; i < levelCount; i++){
+  await page.evaluate(ix => window.__gtb.setLevel(ix), i);
+  await page.click('#btn-info');
+  await page.waitForSelector('#infopanel .iline');
+  const here = await page.$$eval('.iline.here b',
+    els => els.map(e => e.textContent.replace(' • on this level', '').trim()));
+  await page.click('#btn-info-close');
+  await page.waitForSelector('#infopanel', { state: 'detached' });
+  const lv = await page.evaluate(ix => {
+    const l = window.__gtb.LEVELS[ix];
+    return { id: l.id, obstacles: l.obstacles.length, breakables: l.breakables.length,
+             boosters: l.boosters.length, portals: l.portals.length, wind: l.wind.length,
+             slippery: l.slippery.length, stars: l.stars.length, walls: l.walls.length };
+  }, i);
+  for (const [key, name] of WANT)
+    if (here.includes(name) !== (lv[key] > 0)) agree.push(`L${lv.id} ${key}`);
+  if (here.includes('Wall') !== (lv.walls > 0)) agree.push(`L${lv.id} wall`);
+}
+await page.evaluate(() => window.__gtb.setLevel(0));
 check(agree.length === 0, 'the panel flags exactly what each level actually has',
-  agree.slice(0, 3).join(', ') || `all ${await page.evaluate(() => window.__gtb.LEVELS.length)} levels agree`);
+  agree.slice(0, 3).join(', ') || `all ${levelCount} levels agree`);
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
 await topUp();
 
@@ -1516,7 +1528,17 @@ check((await page.evaluate(() => window.__gtb.balls())) === beforeJoint - 1,
    CrazyGames side, so they are asserted rather than eyeballed. */
 section('15. CrazyGames compliance');
 
-const src = fs.readFileSync(path.join(root, '..', 'index.html'), 'utf8');
+/* Source-level assertions now read the SOURCES rather than one inline file:
+   the game is a Vite app, so its code lives under src/ and its CSS in
+   src/styles. Concatenated, this is the same surface the old single-file
+   build exposed as index.html. */
+const readAll = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+  const full = path.join(dir, e.name);
+  return e.isDirectory() ? readAll(full)
+       : /\.(ts|tsx|css|html)$/.test(e.name) ? [fs.readFileSync(full, 'utf8')] : [];
+});
+const src = [fs.readFileSync(path.join(root, '..', 'index.html'), 'utf8'),
+             ...readAll(path.join(root, '..', 'src'))].join('\n');
 
 /* --- safe-area insets on all four sides --- */
 const bodyRule = src.slice(src.indexOf('  body{'), src.indexOf('.app{'));
@@ -1892,13 +1914,13 @@ check(/onstatechange/.test(src),
 check(/audioSession/.test(src),
   "the iOS 'playback' audio session is requested, so the ring/silent switch does not mute the game");
 
-/* mix headroom - nothing should be able to clip the master bus */
-const mix = await aPage.evaluate(() => {
-  const s = document.documentElement.outerHTML;
-  const g = re => { const m = s.match(re); return m ? parseFloat(m[1]) : null; };
-  return { music: g(/music\.gain\.value = ([\d.]+)/), sfx: g(/sfx\.gain\.value   = ([\d.]+)/),
-           wet: g(/wet\.gain\.value = ([\d.]+)/), fb: g(/fb\.gain\.value = ([\d.]+)/) };
-});
+/* Mix headroom - nothing should be able to clip the master bus.
+
+   This reads the LIVE audio graph rather than grepping the page source for
+   `gain.value = 0.32`, which only ever worked while the whole game was one
+   inline file. Asserting on the real nodes is what the check was always
+   trying to approximate. */
+const mix = await aPage.evaluate(() => window.__gtb.audioMix());
 console.log(`  bus gains: music ${mix.music}, sfx ${mix.sfx}, delay wet ${mix.wet}, feedback ${mix.fb}`);
 check(mix.fb < 1, 'the delay feedback is below unity, so it decays instead of running away',
   `${mix.fb}`);

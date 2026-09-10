@@ -1,23 +1,16 @@
 /**
  * Physics tuning rig.  node tests/tune.mjs [terminal velocity ...]
  *
- * Builds a variant of index.html per TERMINAL_VY value, runs the headless
+ * Builds a physics bundle per TERMINAL_VY value, runs the headless
  * solver sweep against each, and prints the level-health numbers side by side
  * so a constant can be chosen from data instead of vibes. GRAVITY is derived
  * from TERMINAL_VY, so the time-to-terminal stays fixed as the cap moves.
  */
 import { chromium } from 'playwright';
-import { pathToFileURL, fileURLToPath } from 'node:url';
-import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
+import { attachHarness } from '../tools/harness.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const SPEEDS = process.argv.slice(2).map(Number).filter(n => n > 0);
 const LIST = SPEEDS.length ? SPEEDS : [6.0, 7.5, 9.0, 10.5, 12.0];
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gtb-tune-'));
-
 const SWEEP = () => {
   const { simulate } = window.__gtb;
   const seeds = [1,2,3,4,5,6,7,8];
@@ -60,17 +53,13 @@ const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
 const rows = [];
 for (const sp of LIST) {
-  const html = SRC.replace(/const TERMINAL_VY = [\d.]+;/, `const TERMINAL_VY = ${sp};`);
-  if (!html.includes(`const TERMINAL_VY = ${sp};`)) throw new Error('TERMINAL_VY substitution failed');
-  const f = path.join(tmp, `v${String(sp).replace('.','_')}.html`);
-  fs.writeFileSync(f, html);
-  await page.goto(pathToFileURL(f).href);
-  await page.waitForFunction(() => !!window.__gtb);
+  /* GRAVITY and SUBSTEPS are derived from TERMINAL_VY, so overriding the one
+     constant in source lets the rest recompute - which is the whole point. */
+  await attachHarness(page, { TERMINAL_VY: sp });
   const grav = await page.evaluate(() => window.__gtb.CONSTS.GRAVITY);
   rows.push({ sp, grav, ...await page.evaluate(SWEEP) });
 }
 await browser.close();
-fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log('\n termVy  px/s   grav   noRamp  bestRamp  good%   careless%  avgBounces  winDrop');
 console.log(' ' + '-'.repeat(78));

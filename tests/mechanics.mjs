@@ -1,8 +1,6 @@
 /* Isolation tests for each new mechanic, on hand-made single-purpose boards. */
 import { chromium } from 'playwright';
-import { pathToFileURL, fileURLToPath } from 'node:url';
-import path from 'node:path';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
+import { attachHarness } from '../tools/harness.mjs';
 let fails=0;
 const ok=(n,x='')=>console.log(`  ✓ ${n}${x?'  '+x:''}`);
 const bad=(n,x='')=>{fails++;console.log(`  ✗ ${n}${x?'  '+x:''}`);};
@@ -11,8 +9,7 @@ const chk=(c,n,x='')=>c?ok(n,x):bad(n,x);
 const b=await chromium.launch();
 const p=await (await b.newContext()).newPage();
 p.on('pageerror',e=>bad('page error',e.message));
-await p.goto(pathToFileURL(path.join(root,'index.html')).href);
-await p.waitForFunction(()=>!!window.__gtb);
+await attachHarness(p);
 const MECH=await p.evaluate(()=>window.__gtb.MECH);
 const base={id:999,name:'scratch',maxBlocks:1,targetType:'OPEN',
   spawn:{x:240,y:40},obstacles:[],target:{x:240,y:770,r:20}};

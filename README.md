@@ -3,16 +3,40 @@
 A hyper-casual puzzle game. Place a limited number of ramps, then drop the ball
 and watch whether your plan lands it in the target. Plan-first, not reflex-based.
 
-**The entire game is [`index.html`](index.html)** — inline CSS and JS, zero
-dependencies, no build step. Open it in a browser and it runs. Zip it and it's
+**React + TypeScript, built with Vite.** The simulation is a hand-written
+deterministic engine — deliberately *not* a physics library; see
+[Physics](#physics) for why. `npm run build` emits a static bundle in `dist/`,
 ready for CrazyGames / Poki / Softgames.
 
 ## Run
 
+    npm install
     npm run dev        # http://localhost:5173
-    npm test           # Playwright suite + solver sweep
+    npm run build      # static bundle in dist/
+    npm test           # every suite: parity, mechanics, UI, smoke
+    npm run typecheck
 
-`npm` is only needed for the tests; the game itself has no toolchain.
+### Architecture
+
+The game state lives in plain classes, not in React. React renders the chrome
+and owns the panels; the board is a canvas driven by a fixed-timestep loop at
+60Hz. Putting the ball's position in React state would re-render the tree sixty
+times a second, so components subscribe to a version counter that only bumps
+when something they actually show has changed.
+
+    core/EventBus.ts      typed observer bus - managers publish, nothing calls back
+    core/events.ts        the whole event vocabulary in one file
+    physics/              the simulator: pure, silent, deterministic
+    entities/             one class per thing on a board + the factory
+    managers/             LevelManager, RewardManager, GameController, storage
+    render/               canvas painting, backdrop, tweens, particles, trail
+    ui/                   React components
+    levels/               level data + the walls derived from it
+
+Managers **emit** facts (`level:cleared`, `drop:ended`) and never name their
+listeners. Entities are built by `EntityFactory` from a registry, so adding a
+mechanic means writing one entity class and registering it — the render path
+does not change.
 
 ## Worlds and mechanics
 
@@ -106,10 +130,10 @@ taken effect at all.
 ### Generating a world
 
     node tools/genlevels.mjs 2            # dry run, report only
-    node tools/genlevels.mjs 2 --write    # splice into index.html
+    node tools/genlevels.mjs 2 --write    # splice into src/levels/levels.data.ts
 
 Levels 21+ are semi-procedural: a per-world template produces candidates from
-a seeded RNG, and **nothing reaches `index.html` until it has passed the same
+a seeded RNG, and **nothing reaches the level data until it has passed the same
 solver sweep the original twenty were held to**, extended for the new
 mechanics. A candidate must be winnable on all seven obstacle seeds, not
 winnable by blind guessing, inside that slot's difficulty band, and *fair* -
@@ -133,7 +157,8 @@ working, not a defect.
 
 ## Levels
 
-`LEVELS[]` in [index.html](index.html) holds all 20: `id`, `name`, `maxBlocks`,
+`RAW_LEVELS[]` in [src/levels/levels.data.ts](src/levels/levels.data.ts) holds
+them: `id`, `name`, `maxBlocks`,
 `spawn`, `obstacles`, `target {x,y,r}` and `targetType`.
 
 **Target types.** Wall segments are generated from `targetType` by `buildWalls()`
@@ -216,7 +241,7 @@ back a timed refill (removed when spending moved to per-drop; it is a
 self-contained addition).
 
 **The "Watch Ad" button is a placeholder** that grants the balls outright.
-It is marked `TODO` in `index.html` and must be wired to the portal's rewarded
+It is marked `TODO` in `src/ui/NoBallsPanel.tsx` and must be wired to the portal's rewarded
 video (`CrazyGames.SDK.ad.requestAd('rewarded')` / `PokiSDK.rewardedBreak()`)
 before submission — and the balls must only be granted if the player actually
 watched.
@@ -257,11 +282,18 @@ asked to draw the wheel as well.
 
 ## Layout
 
-    index.html         the game — everything
-    tools/serve.mjs    zero-dep static server for `npm run dev`
-    tests/play.test.mjs  Playwright suite: UI, physics invariants, solver sweep
-    tests/tune.mjs     physics tuning rig — compares SPEED values on level health
-    tests/levels.mjs   per-level design harness — winnability, precision, triviality
+    index.html              Vite entry — a mount point, nothing else
+    src/                    the game (see Architecture above)
+    legacy/original-game.html   the pre-rewrite single-file build, kept as the
+                                reference the parity test measures against
+    tools/genlevels.mjs     semi-procedural generator + solver verification
+    tools/harness.mjs       bundles the physics into a blank page, no server needed
+    tests/parity.test.mjs   the port vs the original engine, trajectory by trajectory
+    tests/mechanics.mjs     per-mechanic isolation tests
+    tests/play.test.mjs     UI, physics invariants, economy, portal compliance
+    tests/smoke.test.mjs    end-to-end: boots, draws, drags a ramp, drops a ball
+    tests/tune.mjs          physics tuning rig
+    tests/levels.mjs        per-level design harness
 
 ## Portal compliance (CrazyGames)
 
@@ -350,24 +382,31 @@ switch muting the game.
 
 ## Physics
 
-The ball's **speed is constant for the entire drop** — only direction changes.
-Gravity applies a downward nudge to the direction, and the velocity vector is
-re-normalised back to `SPEED` every frame and after every collision. This is
-deliberate: you commit to ramp placement before watching, so unpredictable
-acceleration would make the ball's path impossible to reason about.
+**Do not replace this with a physics library.** The engine is a custom
+deterministic arcade simulator, and its feel comes from rules that are
+deliberately not physical:
 
-`CURVE` is set to **0**: the ball travels in perfectly straight lines and only
-changes direction when it hits something. A ramp sets an angle and the ball
-holds that angle. Raising `CURVE` bends the path into a downward arc instead
-(0.00756 gives a hard 227°/sec curve, which erases the ramp angle in a quarter
-of a second). `GRAV_BIAS` is derived as `CURVE × SPEED²`, so trajectory shape
-stays fixed when only the speed changes.
+- terminal velocity is clamped (`vy <= 9`) and `MAX_VX` matches it
+- a global `SPEED_CAP` of `hypot(9, 9)` ≈ 12.73 scales the whole velocity
+  vector down, so nothing can ever compound into runaway speed
+- `MIN_BOUNCE = 1.6` *adds* energy on a glancing hit, so the ball can never
+  die on a ramp
+- obstacle bounces mirror off the circle then scatter by up to `OB_JITTER`,
+  clamped to an outward cone so the ball never re-enters what it hit
+- a fixed 9 substeps per frame, sized so the ball never advances more than
+  ~1.5px and cannot tunnel through a thin ramp
 
-The cost of `CURVE = 0` is that a ball knocked horizontal can bounce between the
-walls forever; those runs end on the 14s timeout (~8% of careless layouts).
+Everything is driven by a seeded PRNG (`mulberry32`), so a drop replayed with
+the same seed is byte-identical. That determinism is load-bearing: the
+generator proves each level winnable by *running the real simulator*, and all
+30 shipped levels carry that proof.
 
-Obstacle hits mirror off the circle like a real bounce, then scatter by up to
-`OB_JITTER`, clamped to an outward cone so the ball never re-enters what it hit.
+`stepBall()` is pure — no sound, no particles, no events. It only **records**
+what it touched (`ball.hit`, `ball.justBroke`, the counters) and
+`GameController` reads those records to fire juice. That is what lets the
+solver sweep run thousands of drops headlessly and silently.
 
-Re-run `npm test` after touching any physics constant — the solver sweep checks
-the level stays winnable with a sensible ramp but not winnable by accident.
+`tests/parity.test.mjs` asserts the TypeScript engine is trajectory-identical
+to the pre-rewrite build across 600 runs. Re-run `npm test` after touching any
+physics constant — a change there invalidates the winnability proof for every
+level, and the sweep is what catches it.
