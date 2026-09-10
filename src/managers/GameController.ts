@@ -428,7 +428,7 @@ export class GameController {
     const lv = this.levels.level;
     return {
       level: lv,
-      world: this.levels.world,
+      country: this.levels.country,
       entities: this.levels.entities,
       ramps: this.levels.rampSegments,
       draft: this.draft,

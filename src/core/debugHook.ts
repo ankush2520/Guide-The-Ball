@@ -11,7 +11,7 @@
    needs no game running, so a headless sweep never has to boot
    React. The GAME half is attached once the managers exist.
    ============================================================ */
-import { LEVELS, WORLDS, worldOf, initLevel, buildWalls } from '../levels';
+import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
 import { Ball } from '../physics/Ball';
 import { stepBall, simulate } from '../physics/simulate';
@@ -34,8 +34,10 @@ const scratchIx: number[] = [];
 
 const physics = {
   LEVELS,
-  WORLDS,
-  worldOf,
+  COUNTRIES,
+  countryOf,
+  cityOf,
+  cityIndex,
   buildWalls,
   CONSTS: {
     W: C.W, H: C.H, BALL_R: C.BALL_R,

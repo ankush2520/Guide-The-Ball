@@ -36,7 +36,7 @@ export function Hud({ onOpenLevels, onOpenInfo, onOpenSpin }: Props) {
   return (
     <div className="hud">
       <button className="title" id="level-title" title="Choose a level" onClick={onOpenLevels}>
-        Level {lv.id} <span>&mdash; {lv.name}</span>
+        Level {lv.id} <span>&mdash; {levels.cityName}</span>
       </button>
       <div className="chips">
         <div className={'counter balls' + (rewards.balls <= 0 ? ' empty' : '')} title="Balls left">

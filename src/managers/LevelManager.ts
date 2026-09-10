@@ -12,8 +12,8 @@
    ============================================================ */
 import type { GameBus } from '../core/events';
 import type { Level, Segment } from '../levels/types';
-import { LEVELS, worldOf } from '../levels';
-import type { World } from '../levels/types';
+import { LEVELS, countryOf, cityOf } from '../levels';
+import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
@@ -51,7 +51,9 @@ export class LevelManager {
 
   get levelIndex(): number { return this.index; }
   get level(): Level { return LEVELS[this.index]; }
-  get world(): World { return worldOf(this.level.id); }
+  get country(): Country { return countryOf(this.level.id); }
+  /** What the player sees this level called - see cityOf(). */
+  get cityName(): string { return cityOf(this.level); }
   get entities(): readonly Entity[] { return this.cachedEntities; }
   get count(): number { return LEVELS.length; }
   get isLast(): boolean { return this.index >= LEVELS.length - 1; }

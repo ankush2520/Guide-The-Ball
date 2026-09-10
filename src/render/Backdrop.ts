@@ -8,7 +8,7 @@
    expensive full-board gradient fill if it were done live.
    ============================================================ */
 import { W, H } from '../physics/constants';
-import type { World } from '../levels/types';
+import type { Country } from '../levels/types';
 
 export class Backdrop {
   private canvas = document.createElement('canvas');
@@ -16,32 +16,32 @@ export class Backdrop {
 
   get image(): HTMLCanvasElement { return this.canvas; }
 
-  /** Repaint for a world at a given device scale. */
-  build(world: World, width: number, height: number, scale: number): void {
+  /** Repaint for a country at a given device scale. */
+  build(country: Country, width: number, height: number, scale: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
     const c = this.ctx;
     c.setTransform(scale, 0, 0, scale, 0, 0);
 
     const g = c.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0,    world.sky[0]);
-    g.addColorStop(0.55, world.sky[1]);
-    g.addColorStop(1,    world.sky[2]);
+    g.addColorStop(0,    country.sky[0]);
+    g.addColorStop(0.55, country.sky[1]);
+    g.addColorStop(1,    country.sky[2]);
     c.fillStyle = g;
     c.fillRect(0, 0, W, H);
 
     /* a cool wash spilling in from above the ceiling - the ball falls out of
        the light and into the dark, which is what sells the board as deep */
     const top = c.createRadialGradient(W * 0.5, -H * 0.10, 0, W * 0.5, -H * 0.10, H * 0.75);
-    top.addColorStop(0, `rgba(${world.wash},.22)`);
-    top.addColorStop(1, `rgba(${world.wash},0)`);
+    top.addColorStop(0, `rgba(${country.wash},.22)`);
+    top.addColorStop(1, `rgba(${country.wash},0)`);
     c.fillStyle = top;
     c.fillRect(0, 0, W, H);
 
     // the grid fades out toward the floor rather than ruling the whole board
     c.lineWidth = 1;
     for (let y = 50; y < H; y += 50) {
-      c.strokeStyle = `rgba(${world.wash},${(0.010 + 0.050 * (1 - y / H)).toFixed(4)})`;
+      c.strokeStyle = `rgba(${country.wash},${(0.010 + 0.050 * (1 - y / H)).toFixed(4)})`;
       c.beginPath(); c.moveTo(0, y + 0.5); c.lineTo(W, y + 0.5); c.stroke();
     }
 

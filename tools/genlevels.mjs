@@ -34,7 +34,8 @@ const rng  = (r, lo, hi) => lo + r() * (hi - lo);
 const rint = (r, lo, hi) => Math.round(rng(r, lo, hi));
 
 /* ---------------------------------------------------------------- */
-/* World specs. `make` builds a candidate; `gate` is what it must clear. */
+/* Country specs. `make` builds a candidate; `gate` is what it must clear.
+   Keyed by country id - country 2 is Solmesa, levels 21-30. */
 /* ---------------------------------------------------------------- */
 
 /** Distance from a point to every existing circle, for overlap rejection. */
@@ -44,7 +45,7 @@ function clear(pt, rad, list, pad = 12){
 
 const SPECS = {
   2: {
-    name: 'Boost Ridge',
+    name: 'Solmesa',
     /* Boost Ridge teaches one idea: a booster is a promise. The ball goes in,
        and it leaves on exactly the heading the chevron draws, every time.
        So the boards are deliberately uncluttered - the booster must be the
@@ -273,7 +274,7 @@ async function verify(lv, i){
   }, [lv, gate]);
 }
 
-console.log(`\n  Generating world ${WORLD} - ${spec.name}  (levels ${FROM}-${TO})\n`);
+console.log(`\n  Generating country ${WORLD} - ${spec.name}  (levels ${FROM}-${TO})\n`);
 const accepted = [];
 let totalTries = 0;
 for (let i = 0; i < 10; i++){
@@ -364,8 +365,8 @@ if (WRITE){
     const id = +blk.match(/id:(\d+)/)[1];
     const w = Math.floor((id - 21) / 10) + 2;
     if (w !== lastWorld){
-      const nm = (SPECS[w] && SPECS[w].name) || ('World ' + w);
-      body += (lastWorld === null ? '' : ',\n') + '\n  /* ---- World ' + w + ': ' + nm + ' ---- */\n';
+      const nm = (SPECS[w] && SPECS[w].name) || ('Country ' + w);
+      body += (lastWorld === null ? '' : ',\n') + '\n  /* ---- Country ' + w + ': ' + nm + ' ---- */\n';
       lastWorld = w;
       body += blk;
     } else {

@@ -27,7 +27,7 @@ import {
     be cancelled by a wall it is pushing you into is unreadable.
 
     With no zones, no portals, no boosters, no breakables and no stars, every
-    added branch is skipped and this reduces to exactly the world 1 loop. */
+    added branch is skipped and this reduces to exactly the Verdholm loop. */
 export function stepBall(b: Ball, lv: Level, ramps: Segment[]): void {
   const c = lv.target, walls = lv.walls;
   for (let i = 0; i < SUBSTEPS; i++) {

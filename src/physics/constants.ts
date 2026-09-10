@@ -46,11 +46,11 @@ export const MAX_STEPS = 60 * 14;    // 14s of bouncing, then it's a loss
 export const REST_STEPS = 30, REST_PX = 4;
 export const MIN_RAMP = 28, MAX_RAMP = 160;
 
-/* ---- mechanic constants (worlds 2+) ---- */
+/* ---- mechanic constants (countries 2+) ---- */
 
 /* The universal speed clamp. Set at exactly the speed the base game can
    already reach - hypot(MAX_VX, TERMINAL_VY) - which makes it a PROVABLE
-   no-op for world 1: a bounce is lossy, so nothing there ever exceeds it.
+   no-op for Verdholm: a bounce is lossy, so nothing there ever exceeds it.
    Boosters and wind can stack, and without this they would compound into
    speeds that both tunnel through thin ramps and destroy the constant-feel
    trajectory model the whole game is built on. */

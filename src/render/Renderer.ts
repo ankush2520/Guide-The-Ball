@@ -21,7 +21,7 @@ import { Trail } from './Trail';
 import { ParticleSystem } from './Particles';
 import { drawSeg, roundRect } from './primitives';
 import type { Phase } from '../core/events';
-import type { World, Segment } from '../levels/types';
+import type { Country, Segment } from '../levels/types';
 
 export const MAX_SCALE = 2;
 
@@ -36,7 +36,7 @@ export interface CaptureState { t: number; bx: number; by: number; cx: number; c
 
 export interface RenderState {
   level: Level;
-  world: World;
+  country: Country;
   entities: readonly Entity[];
   ramps: readonly Segment[];
   draft: Segment | null;
@@ -63,7 +63,7 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private backdrop = new Backdrop();
   private scale = 1;
-  private builtFor: World | null = null;
+  private builtFor: Country | null = null;
 
   readonly trail = new Trail();
   readonly particles = new ParticleSystem(STEP_MS_DEFAULT);
@@ -84,7 +84,7 @@ export class Renderer {
      roughly fifteen times what the screen can show - through shadowBlur on
      every frame, which is exactly what made drawing a ramp stutter. Size the
      surface to what is actually on screen instead, capped at 2x. */
-  resize(world: World): void {
+  resize(country: Country): void {
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, MAX_SCALE));
     const cssW = this.canvas.getBoundingClientRect().width || W;
     const px = Math.round(Math.min(Math.max(cssW * dpr, cssW), W * MAX_SCALE));
@@ -95,18 +95,18 @@ export class Renderer {
       this.ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
       this.builtFor = null;
     }
-    if (this.builtFor !== world) {
-      this.backdrop.build(world, this.canvas.width, this.canvas.height, this.scale);
-      this.builtFor = world;
+    if (this.builtFor !== country) {
+      this.backdrop.build(country, this.canvas.width, this.canvas.height, this.scale);
+      this.builtFor = country;
     }
   }
 
-  /** Force a backdrop repaint - call when the world changes. */
+  /** Force a backdrop repaint - call when the country changes. */
   invalidateBackdrop(): void { this.builtFor = null; }
 
   render(s: RenderState): void {
     const ctx = this.ctx;
-    this.resize(s.world);
+    this.resize(s.country);
 
     ctx.drawImage(this.backdrop.image, 0, 0, W, H);
     drawStarfield(ctx, s.clock);

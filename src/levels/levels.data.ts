@@ -6,18 +6,20 @@
    load time and are REAL collidable geometry - see initLevel()
    and resolveCollisions(). They are never stored here.
 
-   Worlds 2+ are machine-generated and solver-verified: every one
+   Countries 2+ are machine-generated and solver-verified: every one
    was proved winnable by the same sweep the original twenty were
    held to, before it was allowed in. Do not hand-edit inside the
    markers - change the template and re-run the generator, or the
    next run will overwrite you:
 
-     node tools/genlevels.mjs <world> --write
+     node tools/genlevels.mjs <country> --write
    ============================================================ */
 import type { RawLevel } from './types';
 
 export const RAW_LEVELS: RawLevel[] = [
-{ id:1, name:"First Drop", maxBlocks:1, targetType:'OPEN',
+
+  /* ---- Country 1: Verdholm (hand-designed, frozen) ---- */
+  { id:1, name:"First Drop", maxBlocks:1, targetType:'OPEN',
     spawn:{x:140,y:40},
     obstacles:[],
     target:{x:330,y:686,r:46} },
@@ -99,16 +101,16 @@ export const RAW_LEVELS: RawLevel[] = [
     target:{x:356,y:646,r:32} },
 
   /* ============================================================
-     GENERATED LEVELS - worlds 2 and up.
+     GENERATED LEVELS - countries 2 and up.
      Written by tools/genlevels.mjs. Every level between these markers was
-     built from a world template and then PROVED winnable, non-trivial and
+     built from a country template and then PROVED winnable, non-trivial and
      fair by the same solver sweep the original twenty were held to, before
      it was allowed in here. Do not hand-edit: change the template and
      re-run the generator, or the next run will overwrite you.
      ============================================================ */
 /* GEN:START */
 
-  /* ---- World 2: Boost Ridge ---- */
+  /* ---- Country 2: Solmesa ---- */
   { id:21, name:"Ricochet", maxBlocks:2, targetType:'OPEN',
     spawn:{x:144,y:40},
     obstacles:[{x:263,y:444,r:30}],

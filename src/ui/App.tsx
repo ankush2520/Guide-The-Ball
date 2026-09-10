@@ -41,10 +41,10 @@ function Game() {
      Drop with an empty tank has to lead somewhere. */
   useEffect(() => bus.on('balls:empty', () => open('noballs')), [bus]);
 
-  /* A world recolours the chrome accent. The entity palette never changes. */
+  /* A country recolours the chrome accent. The entity palette never changes. */
   useEffect(() => {
     const apply = () => document.documentElement.style
-      .setProperty('--accent', levels.world.accent);
+      .setProperty('--accent', levels.country.accent);
     apply();
     return bus.on('level:changed', apply);
   }, [bus, levels]);

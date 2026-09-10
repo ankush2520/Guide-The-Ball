@@ -31,24 +31,66 @@ when something they actually show has changed.
     managers/             LevelManager, RewardManager, GameController, storage
     render/               canvas painting, backdrop, tweens, particles, trail
     ui/                   React components
-    levels/               level data + the walls derived from it
+    levels/               level data, countries/cities, derived walls
 
 Managers **emit** facts (`level:cleared`, `drop:ended`) and never name their
 listeners. Entities are built by `EntityFactory` from a registry, so adding a
 mechanic means writing one entity class and registering it — the render path
 does not change.
 
-## Worlds and mechanics
+## Countries and cities
 
-The game is planned as 14 worlds of levels 1-150. **World 1 (levels 1-20) is
-hand-designed and frozen** - the mechanics below are written so that a level
-with none of them runs the identical code path, and the harness output for
-world 1 is byte-for-byte what it was before they existed.
+The game is planned as **14 countries** spanning levels 1-150. Each country
+owns a run of levels, one mechanic and one palette. Every level inside a
+country is a **city**.
 
-`WORLDS[]` gives each world a level range, a name and a theme. A theme
+**Verdholm (levels 1-20) is hand-designed and frozen** - the mechanics below
+are written so that a level with none of them runs the identical code path,
+and the harness output for Verdholm is byte-for-byte what it was before they
+existed. Its palette is frozen too: it is what the game's contrast was
+originally tuned against.
+
+`COUNTRIES[]` in [src/levels/countries.data.ts](src/levels/countries.data.ts)
+gives each country a level range, a name, a mechanic and a palette. A country
 recolours the **backdrop and the chrome accent only**. The entity palette -
 red obstacle, green target, blue ramp - is the game's vocabulary and never
-changes: a player who learned that red hurts must not relearn it in world 6.
+changes: a player who learned that red hurts must not relearn it in Neonaka.
+
+The names are invented, inspired by real regions rather than naming any actual
+place.
+
+| # | Country | Levels | Mechanic | Backdrop |
+|---|---|---|---|---|
+| 1 | Verdholm | 1-20 | ramps only | the original navy — frozen |
+| 2 | Solmesa | 21-30 | boosters | deep maroon into burnt orange |
+| 3 | Windemere | 31-40 | wind zones | muted sage-teal |
+| 4 | Frostvale | 41-50 | slippery zones | navy into ice-blue, whiter glow |
+| 5 | Zunmara Ruins | 51-60 | portals | violet into gold |
+| 6 | Emberkeep | 61-70 | breakable blocks | black into fiery red |
+| 7 | Nocturne Sands | 71-80 | collectible stars | deep indigo-black |
+| 8 | Neonaka | 81-90 | two mechanics combined | magenta-cyan, the most saturated |
+| 9 | Coralis Deep | 91-100 | three mechanics combined | teal-turquoise |
+| 10 | Needlecrest | 101-110 | precision spike | white-blue-grey, the cleanest |
+| 11 | Cascadia Falls | 111-120 | long chained boards | deep green-blue |
+| 12 | Ironvale | 121-130 | high density, fewer ramps | steel-grey, orange spark |
+| 13 | Aerith Heights | 131-140 | master combos | soft lavender-gold |
+| 14 | The Zenith | 141-150 | finale | cosmic black-gold-white |
+
+Every entity clears a 3:1 contrast ratio against every country's backdrop; the
+tightest is the red obstacle on Needlecrest at 3.68:1, which is the price of
+that country being deliberately the lightest in the set.
+
+### City names are derived, not written
+
+A city's name is **country name + its position in that country**, in Roman
+numerals - level 21 is `Solmesa I`, level 30 is `Solmesa X`. Nothing is
+hardcoded per level, so all 150 cities are named without a naming pass.
+
+Flavour names layer in later as a pure data change: set `city` on a level and
+`cityOf()` returns it instead. Nothing else has to change.
+
+    cityOf({ id: 23 })            // "Solmesa III"
+    cityOf({ id: 23, city: 'Ashfall Reach' })   // "Ashfall Reach"
 
 | Entity | Behaviour |
 |---|---|
@@ -61,7 +103,7 @@ changes: a player who learned that red hurts must not relearn it in world 6.
 
 **`SPEED_CAP` is the universal clamp**, set at exactly `hypot(MAX_VX,
 TERMINAL_VY)` - the fastest the base game can already go. That makes it a
-*provable* no-op for world 1 (a bounce is lossy, so nothing there reaches it)
+*provable* no-op for Verdholm (a bounce is lossy, so nothing there reaches it)
 while stopping boosters and wind from compounding into speeds that tunnel
 through ramps and destroy the constant-feel trajectory model.
 
@@ -77,7 +119,7 @@ cancelled by the wall it is pushing you into is unreadable.
 Two surfaces, because either one alone has a hole:
 
 - **The legend is built per level** from what is actually on that board. A
-  fixed list went stale the moment world 2 added a booster to the game, and it
+  fixed list went stale the moment Solmesa added a booster to the game, and it
   was long enough that it was the first thing dropped when the window got
   short — so the one surface that could explain a booster was also the one
   most likely to be missing. Being per-level makes it shorter, so it now
@@ -127,23 +169,23 @@ rule silently wins — which is how the info panel shipped centre-aligned and
 50px too narrow on its first run, and why the wheel card's width had never
 taken effect at all.
 
-### Generating a world
+### Generating a country
 
     node tools/genlevels.mjs 2            # dry run, report only
     node tools/genlevels.mjs 2 --write    # splice into src/levels/levels.data.ts
 
-Levels 21+ are semi-procedural: a per-world template produces candidates from
+Levels 21+ are semi-procedural: a per-country template produces candidates from
 a seeded RNG, and **nothing reaches the level data until it has passed the same
 solver sweep the original twenty were held to**, extended for the new
 mechanics. A candidate must be winnable on all seven obstacle seeds, not
 winnable by blind guessing, inside that slot's difficulty band, and *fair* -
 the winning line may not depend on random obstacle bounces, which is the
-level-20 lesson encoded as a gate. Only the boss level of each world is
+level-20 lesson encoded as a gate. Only the boss level of each country is
 shaped by hand (via its own branch in the template).
 
 Because the solver must find ramps a booster or portal throws the ball
 towards, it sweeps the whole board, not just the spawn column. `tests/levels.mjs`
-still only sweeps the spawn column, so from world 2 on its "1-ramp band"
+still only sweeps the spawn column, so from Solmesa on its "1-ramp band"
 column often reads `none` for a level that is perfectly solvable - the
 generator is the authoritative gate.
 
@@ -232,7 +274,7 @@ past the early Acts is a net drain.
 
 The opening grant of 75 is what absorbs that. At three or four attempts a
 level it covers roughly the first twenty levels on its own, so a new player
-meets the whole of world 1 before the economy ever asks them for anything.
+meets the whole of Verdholm before the economy ever asks them for anything.
 After that the drain resumes and the wheel and the ad carry it.
 
 That may be exactly the intent — it is what drives ad views. If it is not, the

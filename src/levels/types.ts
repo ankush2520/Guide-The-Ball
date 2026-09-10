@@ -26,7 +26,7 @@ export type StarDef = Vec;
 export type TargetType = 'OPEN' | 'SIDE_WALL' | 'POCKET' | 'NARROW_GAP' | 'ENCLOSED';
 export type WallSide = 'left' | 'right';
 
-/** A level exactly as authored. Optional entity lists are absent on world 1. */
+/** A level exactly as authored. Optional entity lists are absent in Verdholm. */
 export interface RawLevel {
   id: number;
   name: string;
@@ -36,6 +36,10 @@ export interface RawLevel {
   wallH?: number;
   gapW?: number;
   gapX?: number;
+  /** Overrides the derived city name (country + ordinal). Left unset for
+      now, so every city is named from its position - see cityOf(). Flavour
+      names layer in later as a pure data change, one field at a time. */
+  city?: string;
   spawn: Vec;
   obstacles?: Circle[];
   boosters?: BoosterDef[];
@@ -48,7 +52,7 @@ export interface RawLevel {
 }
 
 /** A level after normalisation: every list present, walls built. The
-    simulation loops over each list with no guard, and world 1 simply loops
+    simulation loops over each list with no guard, and Verdholm simply loops
     over nothing. */
 export interface Level extends RawLevel {
   obstacles: Circle[];
@@ -61,12 +65,21 @@ export interface Level extends RawLevel {
   walls: Segment[];
 }
 
-export interface World {
+/** A COUNTRY is a run of levels sharing a mechanic and a palette. It
+    recolours the BACKDROP and the chrome accent only - the entity palette
+    (red obstacle, green target, blue ramp) is the game's vocabulary and never
+    changes: a player who has learned that red hurts must not have to relearn
+    it in Neonaka. */
+export interface Country {
   id: number;
   name: string;
   from: number;
   to: number;
+  /** Backdrop gradient, top to bottom. */
   sky: [string, string, string];
+  /** "r,g,b" for the overhead wash and the grid - alpha is applied per use. */
   wash: string;
   accent: string;
+  /** What this country teaches. Documentation only; nothing reads it. */
+  mechanic: string;
 }

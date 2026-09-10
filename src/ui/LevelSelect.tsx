@@ -1,7 +1,7 @@
 /* The level picker. Cleared levels stay unlocked; everything past the
    player's high-water mark is locked. */
 import { useGame } from '../core/GameContext';
-import { LEVELS } from '../levels';
+import { LEVELS, cityOf } from '../levels';
 
 export function LevelSelect({ onClose }: { onClose: () => void }) {
   const { controller, levels, rewards } = useGame();
@@ -20,7 +20,7 @@ export function LevelSelect({ onClose }: { onClose: () => void }) {
             const cls = i === levels.levelIndex ? 'cur' : i < rewards.highest ? 'done' : '';
             return (
               <button key={lv.id} className={cls} disabled={locked}
-                      title={locked ? 'Locked' : lv.name}
+                      title={locked ? 'Locked' : cityOf(lv)}
                       onClick={() => { controller.setLevel(i); onClose(); }}>
                 {lv.id}
                 {got > 0 && <span className="gstars">{'\u2605'.repeat(got)}</span>}

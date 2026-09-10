@@ -4,7 +4,7 @@ import type { Circle } from '../levels/types';
 /* A sphere, lit from the upper left. Every round thing on this board agrees
    about where the light is, which is most of what stops a canvas game looking
    like flat cut-out shapes. Red is the game's word for "this hurts" and never
-   changes meaning between worlds. */
+   changes meaning between countries. */
 export class Obstacle extends Entity<Circle> {
   readonly kind: EntityKind = 'obstacle';
 

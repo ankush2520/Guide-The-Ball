@@ -1,8 +1,8 @@
 /* Normalise every level to the full entity set, so the simulation can loop
-   over each list without a guard and world 1 simply loops over nothing. */
-import type { Level, RawLevel, World } from './types';
+   over each list without a guard and Verdholm simply loops over nothing. */
+import type { Level, RawLevel, Country } from './types';
 import { RAW_LEVELS } from './levels.data';
-import { WORLDS } from './worlds.data';
+import { COUNTRIES } from './countries.data';
 import { buildWalls } from './walls';
 import { WIND_CAP } from '../physics/constants';
 import { clamp } from '../physics/math';
@@ -30,14 +30,41 @@ export function initLevel(raw: RawLevel): Level {
 
 export const LEVELS: Level[] = RAW_LEVELS.map(initLevel);
 
-/* A world recolours the BACKDROP and the chrome accent only. The entity
-   palette - red obstacle, green target, blue ramp - is the game's vocabulary
-   and never changes: a player who has learned that red hurts must not have to
-   relearn it in world 6. */
-export function worldOf(id: number): World {
-  for (const w of WORLDS) if (id >= w.from && id <= w.to) return w;
-  return WORLDS[0];
+/* Which country a level belongs to. Every level id in the game falls inside
+   exactly one country's range; the fallback is defensive only. */
+export function countryOf(id: number): Country {
+  for (const c of COUNTRIES) if (id >= c.from && id <= c.to) return c;
+  return COUNTRIES[0];
 }
 
-export { WORLDS, buildWalls };
-export type { Level, RawLevel, World };
+/** Where a level sits within its country, 1-based. Level 23 is Solmesa's
+    third city. */
+export function cityIndex(id: number): number {
+  return id - countryOf(id).from + 1;
+}
+
+const ROMAN: [number, string][] = [
+  [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+];
+
+/** Roman numerals for the city ordinal. Countries run to twenty cities, so
+    this only ever has to reach XX. */
+export function roman(n: number): string {
+  let out = '';
+  for (const [v, sym] of ROMAN) while (n >= v) { out += sym; n -= v; }
+  return out;
+}
+
+/* Each level is a CITY within its country, and its name is DERIVED - country
+   name plus position - rather than written per level. That keeps every city
+   named without a naming pass, and means flavour names can be layered in
+   later one at a time: set `city` on the level and this returns it instead.
+   Nothing else has to change when they are. */
+export function cityOf(lv: Pick<Level, 'id' | 'city'>): string {
+  if (lv.city) return lv.city;
+  const c = countryOf(lv.id);
+  return `${c.name} ${roman(lv.id - c.from + 1)}`;
+}
+
+export { COUNTRIES, buildWalls };
+export type { Level, RawLevel, Country };

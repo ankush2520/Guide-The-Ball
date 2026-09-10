@@ -83,7 +83,10 @@ async function touchDrag(cdp, b, from, to){
 section('1. Boot');
 check(await page.locator('#board').isVisible(), 'board renders');
 check(await page.locator('#overlay').isHidden(), 'no overlay on a fresh board');
-check((await page.locator('#level-title').textContent()).includes('First Drop'), 'level 1 title shown');
+/* The title names the CITY, which is derived from the country plus the
+   level's position within it - level 1 is Verdholm's first city. */
+check((await page.locator('#level-title').textContent()).includes('Verdholm I'),
+  'level 1 title shows its city name', await page.locator('#level-title').textContent());
 check(await page.locator('#btn-info').isVisible(),
   'the info button is on the HUD, since there is no legend under the board');
 check(await page.locator('.legend').count() === 0,
@@ -118,18 +121,18 @@ const lvinfo = await page.evaluate(() => {
     (l.target.x > l.spawn.x) ? right++ : left++;
     ys.push(l.target.y);
     // 30px apart on a 480x800 board is a visibly different board position
-    // variety is a within-world property: two levels twenty apart, in
-    // different worlds with different mechanics, may sit in the same place
-    const w = window.__gtb.worldOf(l.id).id;
+    // variety is a within-COUNTRY property: two levels twenty apart, in
+    // different countries with different mechanics, may sit in the same place
+    const w = window.__gtb.countryOf(l.id).id;
     seen.forEach(q => { if (q.w === w && Math.hypot(q.x-l.target.x, q.y-l.target.y) < 30) tooClose++; });
     seen.push({x:l.target.x, y:l.target.y, w:w});
   });
-  // World 1 is pinned exactly; later worlds are generated and only have to
-  // obey the structural rules, not a hand-written plan
+  // Verdholm (country 1) is pinned exactly; later countries are generated and
+  // only have to obey the structural rules, not a hand-written plan
   const W1 = LEVELS.slice(0, 20);
   return { n: LEVELS.length, badId, badType, outOfBoard, overlap,
-           worlds: window.__gtb.WORLDS.map(w => `${w.id}:${w.from}-${w.to}`).join(' '),
-           worldSpan: window.__gtb.WORLDS[window.__gtb.WORLDS.length-1].to,
+           countries: window.__gtb.COUNTRIES.map(c => `${c.id}:${c.from}-${c.to}`).join(' '),
+           countrySpan: window.__gtb.COUNTRIES[window.__gtb.COUNTRIES.length-1].to,
            blocks: W1.map(l=>l.maxBlocks).join(','),
            obst:   W1.map(l=>l.obstacles.length).join(','),
            types:  W1.map(l=>l.targetType).join(','),
@@ -144,10 +147,63 @@ const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
                     'SIDE_WALL,POCKET,NARROW_GAP,NARROW_GAP,ENCLOSED,OPEN,SIDE_WALL,NARROW_GAP,POCKET,ENCLOSED';
 console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
             `target y spread ${lvinfo.ySpread}px`);
-console.log(`  worlds: ${lvinfo.worlds}`);
+console.log(`  countries: ${lvinfo.countries}`);
 check(lvinfo.n >= 20, 'the original twenty are still all there', `${lvinfo.n} levels total`);
-check(lvinfo.n <= lvinfo.worldSpan,
-  'no level exists outside the declared world ranges', `${lvinfo.n} of ${lvinfo.worldSpan} planned`);
+check(lvinfo.n <= lvinfo.countrySpan,
+  'no level exists outside the declared country ranges',
+  `${lvinfo.n} of ${lvinfo.countrySpan} planned`);
+/* --- countries and cities: the structure the level ids hang off --- */
+const geo = await page.evaluate(() => {
+  const g = window.__gtb, C = g.COUNTRIES;
+  const gaps = [];
+  for (let i = 0; i < C.length; i++) {
+    if (C[i].from > C[i].to) gaps.push(`${C[i].name} range inverted`);
+    if (i && C[i].from !== C[i - 1].to + 1)
+      gaps.push(`${C[i - 1].name}->${C[i].name} not contiguous`);
+  }
+  const sizes = C.map(c => c.to - c.from + 1);
+  const palettes = new Set(C.map(c => c.sky.join('|') + c.wash + c.accent));
+  const names = new Set(C.map(c => c.name));
+  // every shipped level resolves to a country, and to a city name inside it
+  const cities = g.LEVELS.map(l => g.cityOf(l));
+  const orphan = g.LEVELS.filter(l => {
+    const c = g.countryOf(l.id);
+    return l.id < c.from || l.id > c.to;
+  }).length;
+  return {
+    n: C.length, first: C[0].from, last: C[C.length - 1].to,
+    gaps, sizes, uniquePalettes: palettes.size, uniqueNames: names.size,
+    orphan, uniqueCities: new Set(cities).size, nCities: cities.length,
+    sample: [g.cityOf(g.LEVELS[0]), g.cityOf(g.LEVELS[19]),
+             g.cityOf(g.LEVELS[20]), g.cityOf(g.LEVELS[29])],
+    verdholmFrozen: C[0].name === 'Verdholm' &&
+                    C[0].sky.join(',') === '#1a2048,#101433,#06081a' &&
+                    C[0].accent === '#ffc93c',
+  };
+});
+console.log(`  cities: ${geo.sample.join(', ')}`);
+check(geo.n === 14, 'fourteen countries are declared', `${geo.n}`);
+check(geo.gaps.length === 0, 'their level ranges are contiguous with no gaps',
+  geo.gaps.join('; ') || `${geo.first}-${geo.last}`);
+check(geo.first === 1 && geo.last === 150, 'and they span levels 1-150',
+  `${geo.first}-${geo.last}`);
+check(geo.sizes[0] === 20 && geo.sizes.slice(1).every(n => n === 10),
+  'the first country holds twenty cities and the rest ten', geo.sizes.join(','));
+check(geo.uniqueNames === geo.n, 'every country name is distinct');
+check(geo.uniquePalettes === geo.n, 'every country has its own palette',
+  `${geo.uniquePalettes} of ${geo.n}`);
+check(geo.verdholmFrozen, 'Verdholm keeps the original palette untouched');
+check(geo.orphan === 0, 'every level falls inside its country range');
+check(geo.uniqueCities === geo.nCities, 'every city name is unique',
+  `${geo.uniqueCities} of ${geo.nCities}`);
+/* The four sampled cities are levels 1, 20, 21 and 30 - the two ends of
+   Verdholm and the two ends of Solmesa, so the ordinal is checked where it
+   starts, where it reaches XX, and where it rolls over into the next country. */
+check(geo.sample[0] === 'Verdholm I' && geo.sample[1] === 'Verdholm XX' &&
+      geo.sample[2] === 'Solmesa I'  && geo.sample[3] === 'Solmesa X',
+  'city names are derived from country + position, and roll over at a border',
+  geo.sample.join(', '));
+
 check(lvinfo.badId === 0, 'level ids are sequential from 1');
 check(lvinfo.badType === 0, 'every targetType is one of the five');
 check(lvinfo.outOfBoard === 0, 'spawns, targets and obstacles are inside the board');
@@ -614,7 +670,8 @@ await page.locator('#btn-next').click();
 let st = await page.evaluate(() => window.__gtb.state());
 check(st.levelId === 2 && st.phase === 'plan', 'Next advances to level 2', `now level ${st.levelId}`);
 check(st.ramps.length === 0, 'ramps cleared on the new level');
-check((await page.locator('#level-title').textContent()).includes('Long Reach'), 'level 2 title shown');
+check((await page.locator('#level-title').textContent()).includes('Verdholm II'),
+  'level 2 title shows its city name', await page.locator('#level-title').textContent());
 const stored = await page.evaluate(() => localStorage.getItem('gtb.progress.v1'));
 check(stored && JSON.parse(stored).highest >= 1, 'progress persisted to localStorage', stored);
 await page.reload();

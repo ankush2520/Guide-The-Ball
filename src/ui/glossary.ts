@@ -3,7 +3,7 @@
 
    The single description of every thing that can be on a board.
    It replaced a hand-written list under the board, which is what
-   let world 2 ship a booster the game never explained anywhere.
+   let Solmesa ship a booster the game never explained anywhere.
 
    The panel marks whatever is on the CURRENT board, so the list
    is always complete but never generic.

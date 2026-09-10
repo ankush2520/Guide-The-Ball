@@ -39,7 +39,7 @@ export class Ball {
   hit: Hit = { n: 0, x: 0, y: 0, nx: 0, ny: 0, kind: '', speed: 0 };
   bounces: BounceRecord[] = [];
 
-  /* ---- world 2+ mechanics ---- */
+  /* ---- mechanics from Solmesa (country 2) on ---- */
   boostIn: boolean[];              // boosters the ball is inside RIGHT NOW, so
                                    // one only fires as you ENTER it
   portalCd = 0;                    // substeps before any portal may fire
@@ -67,7 +67,7 @@ export class Ball {
     this.rng = mulberry32(seed >>> 0);
   }
 
-  /** The universal magnitude clamp. Never binds in world 1 - see SPEED_CAP. */
+  /** The universal magnitude clamp. Never binds in Verdholm - see SPEED_CAP. */
   clampSpeed(): void {
     const m = Math.hypot(this.vx, this.vy);
     if (m > SPEED_CAP) { const k = SPEED_CAP / m; this.vx *= k; this.vy *= k; }

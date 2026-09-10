@@ -5,7 +5,7 @@
    drawable entities, and the only place that knows which class
    goes with which kind.
 
-   It is registry-driven rather than a switch: adding world 15's
+   It is registry-driven rather than a switch: adding a new country's
    new mechanic means writing the entity class and registering
    it here, and nothing else in the render path changes. The
    original had to touch render() in three places to add one.
