@@ -351,3 +351,24 @@
      ============================================================ */
   #root{width:100%;height:100%;display:flex;
         justify-content:center;align-items:flex-start}
+
+  /* ============================================================
+     ENGINE PICKER (info panel)
+
+     Two full-width cards rather than a toggle: the choice changes
+     how the whole game behaves, so each option states what it is
+     instead of relying on a label the player has to decode.
+     ============================================================ */
+  .engines{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px}
+  .enginebtn{display:block;width:100%;text-align:left;
+             padding:10px 12px;border-radius:10px;
+             background:linear-gradient(180deg,#1b2140,#141833);
+             border:1px solid var(--edge);color:var(--ink);
+             font:inherit;cursor:pointer}
+  .enginebtn:hover{border-color:#4a568f}
+  .enginebtn.on{border-color:var(--accent);
+                box-shadow:0 0 0 1px var(--accent) inset,
+                           0 0 18px -6px var(--glow-accent)}
+  .enginebtn b{display:block;font-size:13.5px;font-weight:700;margin-bottom:3px}
+  .enginebtn.on b{color:var(--accent)}
+  .enginebtn .d{display:block;color:var(--muted);font-size:12px;line-height:1.4}

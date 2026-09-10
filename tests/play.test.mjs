@@ -235,10 +235,26 @@ const wall = await page.evaluate(() => {
   // APPROACH A - straight down the middle, no ramps at all (spawn moved over
   // the target). This is the "drop it into the cup" approach.
   // APPROACH B - deflected in from the left at a shallow angle by one ramp.
+  /* The side ramp is SEARCHED for, not derived. A single analytically-placed
+     ramp only ever scored under one particular simulator, which made this
+     baseline an engine assumption rather than a control. Any shallow ramp
+     that scores on the open board serves the purpose: the point of the
+     section is that a wall then BLOCKS it. */
   const shallowRy = 560;
   const phi = Math.atan2(tc.y - shallowRy, tc.x - origSpawn) * D;
-  const sideCfg = [ramp(origSpawn, shallowRy, (phi + 90) / 2)];
-  const sideDeg = Math.abs(Math.atan2(tc.x - origSpawn, tc.y - shallowRy) * D);
+  let sideCfg = [ramp(origSpawn, shallowRy, (phi + 90) / 2)];
+  let sideRy = shallowRy;
+  search:
+  for (const ry of [560, 540, 520, 500, 580, 600]) {
+    const base = Math.atan2(tc.y - ry, tc.x - origSpawn) * D;
+    for (let d = 0; d <= 40; d += 2)
+      for (const th of [(base + 90) / 2 + d, (base + 90) / 2 - d]) {
+        const cfg = [ramp(origSpawn, ry, th)];
+        lv.spawn.x = origSpawn;
+        if (simulate(cfg, 1, 0).result === 'win') { sideCfg = cfg; sideRy = ry; break search; }
+      }
+  }
+  const sideDeg = Math.abs(Math.atan2(tc.x - origSpawn, tc.y - sideRy) * D);
 
   const probe = () => {
     lv.spawn.x = tc.x;

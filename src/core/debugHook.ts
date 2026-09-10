@@ -15,6 +15,8 @@ import { LEVELS, WORLDS, worldOf, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
 import { Ball } from '../physics/Ball';
 import { stepBall, simulate } from '../physics/simulate';
+import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
+import type { EngineId } from '../physics/PhysicsEngine';
 import * as C from '../physics/constants';
 import { CAPTURE_MS } from '../render/constants';
 import type { GameServices } from './GameContext';
@@ -63,6 +65,19 @@ const physics = {
     return simulate(LEVELS[levelIdx], ramps, seed, broken);
   },
 
+  /** Run a drop through a NAMED engine, for the engine comparison harness. */
+  simulateWith(engineId: EngineId, ramps: Segment[], seed: number,
+               levelIdx = 0, broken?: boolean[] | null) {
+    return createEngine(engineId).simulate(LEVELS[levelIdx], ramps, seed, broken);
+  },
+
+  /** Matter with every guard removed - see MATTER_PURE. */
+  simulatePureMatter(ramps: Segment[], seed: number, levelIdx = 0) {
+    return new MatterEngine(MATTER_PURE).simulate(LEVELS[levelIdx], ramps, seed, null);
+  },
+
+  MATTER: { tuned: MATTER_TUNED, pure: MATTER_PURE },
+
   /** A scratch slot at the end of LEVELS. */
   scratch(lv: RawLevel, slot = 0): number {
     const norm = initLevel(lv);
@@ -101,9 +116,16 @@ export function installGameHook(s: GameServices): void {
   w.__gtb = {
     ...physics,
 
-    /* With a game running, an omitted level index means the one on screen. */
+    /* With a game running, `simulate` means "what will THIS game do" - so it
+       runs the ACTIVE engine, not the arcade one. A solution found here has to
+       be a solution the live drop will reproduce, or every headless probe in
+       the suite is answering a different question from the one on screen.
+
+       The physics-only hook (used by the generator and the mechanic tests)
+       keeps the arcade simulator, which is what those verify against. */
     simulate(ramps: Segment[], seed: number, levelIdx?: number, broken?: boolean[] | null) {
-      return physics.simulate(ramps, seed, levelIdx ?? levels.levelIndex, broken);
+      return createEngine(c.engineId)
+        .simulate(LEVELS[levelIdx ?? levels.levelIndex], ramps, seed, broken);
     },
 
     state() {
@@ -150,6 +172,9 @@ export function installGameHook(s: GameServices): void {
       c.renderer.particles.burst(x, y, nx, ny, color, n, speed, spread, lifeMs),
 
     audioMix: () => Sound.debugMix(),
+
+    engine: () => c.engineId,
+    setEngine: (id: EngineId) => c.setEngine(id),
 
     balls: () => rewards.balls,
     setBalls: (n: number) => rewards.setBallsForTest(n),

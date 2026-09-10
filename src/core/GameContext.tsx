@@ -23,6 +23,7 @@ import { RewardManager } from '../managers/RewardManager';
 import { GameController } from '../managers/GameController';
 import { Renderer } from '../render/Renderer';
 import { LEVELS } from '../levels';
+import { createEngine, preferredEngineId } from '../physics/engines';
 import { installGameHook } from './debugHook';
 
 export interface GameServices {
@@ -47,7 +48,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     canvas.setAttribute('aria-label', 'Game board');
 
     const renderer = new Renderer(canvas);
-    const controller = new GameController(bus, levels, rewards, renderer);
+    /* Which simulator runs the game. ?engine=… wins, then the last choice,
+       then the default - see src/physics/engines.ts. */
+    const controller = new GameController(bus, levels, rewards, renderer,
+                                          createEngine(preferredEngineId()));
     // resume where the player left off, exactly as the original did
     controller.setLevel(rewards.highest);
 

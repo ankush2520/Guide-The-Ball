@@ -13,9 +13,11 @@
     "gen": "node tools/genlevels.mjs",
     "test:mech": "node tests/mechanics.mjs",
     "test:ui": "node tests/play.test.mjs",
-    "test:smoke": "node tests/smoke.test.mjs"
+    "test:smoke": "node tests/smoke.test.mjs",
+    "test:engines": "node tests/engines.test.mjs"
   },
   "devDependencies": {
+    "@types/matter-js": "^0.20.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
@@ -24,6 +26,7 @@
     "vite": "^6.0.5"
   },
   "dependencies": {
+    "matter-js": "^0.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

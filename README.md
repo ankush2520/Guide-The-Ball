@@ -3,9 +3,9 @@
 A hyper-casual puzzle game. Place a limited number of ramps, then drop the ball
 and watch whether your plan lands it in the target. Plan-first, not reflex-based.
 
-**React + TypeScript, built with Vite.** The simulation is a hand-written
-deterministic engine — deliberately *not* a physics library; see
-[Physics](#physics) for why. `npm run build` emits a static bundle in `dist/`,
+**React + TypeScript, built with Vite.** Two interchangeable physics engines
+ship with it — **Matter.js** (the default) and the original hand-written
+deterministic simulator. Either can run the game; see [Physics](#physics). `npm run build` emits a static bundle in `dist/`,
 ready for CrazyGames / Poki / Softgames.
 
 ## Run
@@ -13,7 +13,7 @@ ready for CrazyGames / Poki / Softgames.
     npm install
     npm run dev        # http://localhost:5173
     npm run build      # static bundle in dist/
-    npm test           # every suite: parity, mechanics, UI, smoke
+    npm test           # every suite: parity, mechanics, engines, UI, smoke
     npm run typecheck
 
 ### Architecture
@@ -26,7 +26,7 @@ when something they actually show has changed.
 
     core/EventBus.ts      typed observer bus - managers publish, nothing calls back
     core/events.ts        the whole event vocabulary in one file
-    physics/              the simulator: pure, silent, deterministic
+    physics/              two engines behind one interface; pure and silent
     entities/             one class per thing on a board + the factory
     managers/             LevelManager, RewardManager, GameController, storage
     render/               canvas painting, backdrop, tweens, particles, trail
@@ -290,6 +290,7 @@ asked to draw the wheel as well.
     tools/harness.mjs       bundles the physics into a blank page, no server needed
     tests/parity.test.mjs   the port vs the original engine, trajectory by trajectory
     tests/mechanics.mjs     per-mechanic isolation tests
+    tests/engines.test.mjs  arcade vs Matter.js over all 30 boards
     tests/play.test.mjs     UI, physics invariants, economy, portal compliance
     tests/smoke.test.mjs    end-to-end: boots, draws, drags a ramp, drops a ball
     tests/tune.mjs          physics tuning rig
@@ -382,31 +383,67 @@ switch muting the game.
 
 ## Physics
 
-**Do not replace this with a physics library.** The engine is a custom
-deterministic arcade simulator, and its feel comes from rules that are
-deliberately not physical:
+The game runs on one of **two interchangeable engines**, chosen at boot and
+switchable at runtime from the info panel or with `?engine=arcade` /
+`?engine=matter` in the URL. Everything outside `src/physics/` talks to the
+`PhysicsEngine` interface and never names a concrete simulator.
 
-- terminal velocity is clamped (`vy <= 9`) and `MAX_VX` matches it
-- a global `SPEED_CAP` of `hypot(9, 9)` ≈ 12.73 scales the whole velocity
-  vector down, so nothing can ever compound into runaway speed
-- `MIN_BOUNCE = 1.6` *adds* energy on a glancing hit, so the ball can never
-  die on a ramp
-- obstacle bounces mirror off the circle then scatter by up to `OB_JITTER`,
-  clamped to an outward cone so the ball never re-enters what it hit
-- a fixed 9 substeps per frame, sized so the ball never advances more than
-  ~1.5px and cannot tunnel through a thin ramp
+    src/physics/PhysicsEngine.ts        the seam
+    src/physics/arcade/ArcadeEngine.ts  the original hand-written simulator
+    src/physics/matter/MatterEngine.ts  Matter.js
+    src/physics/engines.ts              registry + which one is the default
 
-Everything is driven by a seeded PRNG (`mulberry32`), so a drop replayed with
-the same seed is byte-identical. That determinism is load-bearing: the
-generator proves each level winnable by *running the real simulator*, and all
-30 shipped levels carry that proof.
+### Matter.js (default)
 
-`stepBall()` is pure — no sound, no particles, no events. It only **records**
-what it touched (`ball.hit`, `ball.justBroke`, the counters) and
-`GameController` reads those records to fire juice. That is what lets the
-solver sweep run thousands of drops headlessly and silently.
+Matter owns collision detection, contact resolution and integration. Gravity is
+**calibrated, not guessed**: Matter's per-step acceleration is
+`gravity.y × gravity.scale × delta²`, so at a 1/60s delta a scale of `0.00135`
+reproduces the arcade `GRAVITY` of 0.375 px/step² exactly.
 
-`tests/parity.test.mjs` asserts the TypeScript engine is trajectory-identical
-to the pre-rewrite build across 600 runs. Re-run `npm test` after touching any
-physics constant — a change there invalidates the winnability proof for every
-level, and the sweep is what catches it.
+Matter has no terminal velocity, no speed cap, no minimum bounce and **no
+continuous collision detection**. Left raw, the ball accelerates without limit
+and, past ~13.5px of travel per frame, passes straight *through* a 9px ramp —
+there is no contact to resolve. So a few guards sit on top and default on
+(`MATTER_TUNED`); set them all to `null` (`MATTER_PURE`) for unguarded Matter
+and expect tunnelling. The measured tunnelling risk is in `npm run test:engines`.
+
+Two rules are layered on deliberately, because they are **game mechanics rather
+than physics**: the obstacle scatter (the glossary promises "a mirror
+reflection plus bounded scatter", and the player plans around it), and the
+graze rule — Matter reports a contact for as long as shapes overlap, so a ball
+already travelling *away* from a surface keeps generating pairs. Those are not
+impacts, and treating them as such aimed bounces back into the obstacle they
+had just left.
+
+### Arcade (the original)
+
+A custom deterministic simulator whose feel comes from rules that are
+deliberately not physical: a clamped terminal velocity, a global `SPEED_CAP`
+that scales the whole velocity vector down, a `MIN_BOUNCE` that *adds* energy
+on a glancing hit, and a fixed 9 substeps sized so nothing can tunnel.
+
+It is the **reference implementation**: all 30 levels were proved winnable
+against it by the solver sweep, `tools/genlevels.mjs` still verifies against
+it, and `tests/parity.test.mjs` holds it trajectory-identical to the
+pre-rewrite single-file build across 600 runs.
+
+### Do the engines agree?
+
+`npm run test:engines` answers this over all 30 boards, and it is a gate:
+**no level may be solvable under one engine but not the other.**
+
+Both are deterministic — everything is driven by a seeded PRNG (`mulberry32`),
+so a drop replayed with the same seed is byte-identical. What differs is the
+exact path: the same layout lands a few tens of px apart. **Solvability is
+preserved; specific solutions shift.**
+
+### The rule that matters
+
+`step()` is pure — no sound, no particles, no events. It only **records** what
+it touched (`ball.hit`, `ball.justBroke`, the counters) and `GameController`
+reads those records to fire juice. That is what lets the solver sweep run
+thousands of drops headlessly and silently.
+
+Re-run `npm test` after touching any physics constant — a change there
+invalidates the winnability proof for every level, and the sweep is what
+catches it.

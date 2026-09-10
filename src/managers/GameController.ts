@@ -15,8 +15,8 @@
 import type { GameBus, Phase } from '../core/events';
 import { LevelManager } from './LevelManager';
 import { RewardManager } from './RewardManager';
-import { Ball } from '../physics/Ball';
-import { stepBall } from '../physics/simulate';
+import type { BallState, PhysicsEngine, EngineId } from '../physics/PhysicsEngine';
+import { createEngine, rememberEngineId } from '../physics/engines';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
 import { CAPTURE_MS, STEP_MS_DEFAULT } from '../render/constants';
@@ -62,7 +62,9 @@ export interface WinCard {
 export class GameController {
   phase: Phase = 'plan';
   tries = 0;
-  ball: Ball | null = null;
+  /* Whatever the ACTIVE engine produced. The controller never names a
+     concrete ball class - see PhysicsEngine. */
+  ball: BallState | null = null;
   capture: CaptureState | null = null;
   draft: Segment | null = null;
   selected = -1;
@@ -99,7 +101,33 @@ export class GameController {
     readonly levels: LevelManager,
     readonly rewards: RewardManager,
     readonly renderer: Renderer,
+    private engine: PhysicsEngine,
   ) {}
+
+  get engineId(): EngineId { return this.engine.id; }
+  get engineLabel(): string { return this.engine.label; }
+  get engineBlurb(): string { return this.engine.blurb; }
+
+  /** Swap the simulator. Any drop in flight is abandoned - a run cannot be
+      half-solved by one engine and half by another - and the board goes back
+      to planning with the ramps untouched. */
+  setEngine(id: EngineId): void {
+    if (id === this.engine.id) return;
+    this.releaseBall();
+    this.engine = createEngine(id);
+    rememberEngineId(id);
+    this.capture = null; this.winCard = null;
+    this.renderer.particles.clear(); this.renderer.trail.clear();
+    this.squash.amt = 0;
+    this.setPhase('plan');
+    this.showFlash(`Physics: ${this.engine.label}`);
+  }
+
+  /** Matter builds a world per drop; let the engine tear it down. */
+  private releaseBall(): void {
+    if (this.ball) this.engine.dispose?.(this.ball);
+    this.ball = null;
+  }
 
   /* ---------------- UI subscription (useSyncExternalStore) ---------------- */
 
@@ -142,7 +170,7 @@ export class GameController {
         this.acc -= STEP_MS;
         const b = this.ball;
         b.px = b.x; b.py = b.y;
-        stepBall(b, this.levels.level, this.levels.rampSegments as Segment[]);
+        this.engine.step(b, this.levels.level, this.levels.rampSegments);
         this.reactToStep(b);
         if (b.result) { this.land(b.result); break; }
       }
@@ -154,7 +182,7 @@ export class GameController {
 
   /* Everything the physics RECORDED, turned into things you can see and hear.
      Driven from here, never from stepBall. */
-  private reactToStep(b: Ball): void {
+  private reactToStep(b: BallState): void {
     const lv = this.levels.level;
 
     // a block that shattered this step throws its pieces
@@ -211,7 +239,8 @@ export class GameController {
     this.hideFlash();
     const seed = this.seedOverride !== null
       ? this.seedOverride : (Math.random() * 0x7fffffff) | 0;
-    this.ball = new Ball(this.levels.level, seed, this.levels.sessionBroken);
+    this.releaseBall();
+    this.ball = this.engine.createBall(this.levels.level, seed, this.levels.sessionBroken);
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.acc = 0;
@@ -249,7 +278,8 @@ export class GameController {
      rebuild. No overlay, no button to dismiss. */
   private missed(result: DropResult): void {
     this.lastResult = result;
-    this.ball = null; this.capture = null; this.draft = null;
+    this.releaseBall();
+    this.capture = null; this.draft = null;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.squash.amt = 0; this.seenHit = 0; this.seenBroke = 0;
     this.setPhase('plan');
@@ -289,7 +319,8 @@ export class GameController {
 
   setLevel(i: number): void {
     this.levels.setLevel(i);
-    this.ball = null; this.capture = null; this.draft = null;
+    this.releaseBall();
+    this.capture = null; this.draft = null;
     this.selected = -1; this.dragging = null; this.lastResult = null;
     this.winCard = null;
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
@@ -310,7 +341,7 @@ export class GameController {
 
   /** Replay repeats this layout; adjust hands the board back for editing. */
   retry(): void { this.setPhase('plan'); this.winCard = null; this.drop(); }
-  adjust(): void { this.ball = null; this.winCard = null; this.setPhase('plan'); }
+  adjust(): void { this.releaseBall(); this.winCard = null; this.setPhase('plan'); }
 
   private setPhase(p: Phase): void {
     this.phase = p;

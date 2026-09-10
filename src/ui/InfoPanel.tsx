@@ -1,12 +1,16 @@
 /* Everything, always available, with whatever is on the board you are
    currently looking at called out. */
-import { useGame } from '../core/GameContext';
+import { useGame, useGameVersion } from '../core/GameContext';
 import { GLOSSARY } from './glossary';
+import { ENGINES } from '../physics/engines';
+import type { EngineId } from '../physics/PhysicsEngine';
 import { STARTING_BALLS, CLEAR_BONUS, AD_REWARD } from '../managers/RewardManager';
 
 export function InfoPanel({ onClose }: { onClose: () => void }) {
-  const { levels } = useGame();
+  const { levels, controller } = useGame();
+  useGameVersion();
   const lv = levels.level;
+  const current = controller.engineId;
 
   return (
     <div className="overlay" id="infopanel">
@@ -39,6 +43,31 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              (+{CLEAR_BONUS[0]} early, up to +{CLEAR_BONUS[CLEAR_BONUS.length - 1]} late),
              the daily wheel pays 1-5, and the ad button on the out-of-balls screen
              pays +{AD_REWARD}.</p>
+
+          <h4>Physics engine</h4>
+          <p>Two simulators ship with the game and either can run it. They
+             agree on which levels are solvable, but not on the exact path the
+             ball takes - so a solution you have memorised will need adjusting
+             after a switch.</p>
+          <div className="engines">
+            {(Object.keys(ENGINES) as EngineId[]).map(id => {
+              const label = id === 'matter' ? 'Matter.js' : 'Arcade (original)';
+              const blurb = id === 'matter'
+                ? 'A real rigid-body engine. Matter owns collision detection, ' +
+                  'contact resolution and integration; gravity is calibrated to ' +
+                  'match the original fall exactly.'
+                : 'The hand-written deterministic simulator the levels were ' +
+                  'designed and verified against. Tuned for readability, not realism.';
+              return (
+                <button key={id}
+                        className={'enginebtn' + (id === current ? ' on' : '')}
+                        onClick={() => controller.setEngine(id)}>
+                  <b>{label}{id === current ? ' · running' : ''}</b>
+                  <span className="d">{blurb}</span>
+                </button>
+              );
+            })}
+          </div>
 
           <h4>Level rating</h4>
           <p>Separate from the gold star pickups. Clearing a level earns one to
