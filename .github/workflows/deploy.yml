@@ -1,0 +1,64 @@
+# ============================================================
+# Deploy to GitHub Pages
+#
+# The repo root holds the Vite ENTRY (index.html -> /src/main.tsx),
+# which is a development file: the browser cannot execute .tsx, and
+# the absolute /src path resolves off the project sub-path anyway.
+# Serving the repo root therefore 404s.
+#
+# What has to be published is `dist/`, which Vite builds with
+# relative asset paths so it works under /Guide-The-Ball/.
+# ============================================================
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # so a deploy can be re-run by hand
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; the newest push wins.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Playwright is a devDependency for the test suite only. Without this
+      # its install script pulls ~500MB of browsers that the build never uses.
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+      - name: Build
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

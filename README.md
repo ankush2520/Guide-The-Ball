@@ -16,6 +16,27 @@ ready for CrazyGames / Poki / Softgames.
     npm test           # every suite: parity, mechanics, engines, UI, smoke
     npm run typecheck
 
+## Deploying
+
+The repo root `index.html` is the Vite **entry**, not the game: it points at
+`/src/main.tsx`, which a browser cannot execute and which resolves off the
+project sub-path anyway. Serving the repo root is a 404 — what gets published
+is **`dist/`**.
+
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml) builds and
+publishes it on every push to `main`. It needs the repository's Pages source
+set to **GitHub Actions**:
+
+    Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+
+`vite.config.ts` sets `base: './'`, so assets resolve relative to wherever the
+page is served from — the build works unchanged at
+`https://<user>.github.io/<repo>/`, at a domain root, or from a portal's own
+sub-path. Nothing needs to know the repo name.
+
+`dist/` stays out of git deliberately: a committed build goes stale silently,
+and the workflow rebuilds it from source every time.
+
 ### Architecture
 
 The game state lives in plain classes, not in React. React renders the chrome
