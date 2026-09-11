@@ -4,6 +4,10 @@
    The shell: chrome above the board, the board, the controls
    below it, and the modals.
 
+   The flash is the one piece of chrome that lives INSIDE the
+   stage: it is feedback about the board, and out of flow it
+   costs the board no height - see .flashrow.
+
    The modals are VIEWPORT-level, not children of the stage.
    They used to live inside .stage, which is sized to the board's
    3:5 aspect - so on a short window the stage was barely 190px
@@ -22,15 +26,19 @@ import { LevelSelect } from './LevelSelect';
 import { NoBallsPanel } from './NoBallsPanel';
 import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
+import { SettingsPanel } from './SettingsPanel';
+import { ShopPanel } from './ShopPanel';
 import { Sound } from '../audio/Sound';
 
-type Panel = 'levels' | 'info' | 'spin' | 'noballs';
+type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop';
 
 function Game() {
   const { bus, levels } = useGame();
   /* A STACK, not a single panel. The wheel has to open ON TOP of the
      out-of-balls screen - it is one of the two ways out of it - and closing
      the wheel has to hand that screen back rather than dismissing both. The
+     settings panel needs the same thing twice over: both the wheel and the
+     info panel open FROM it, and closing either has to land back on it. The
      z-index order the stylesheet states is what keeps them layered. */
   const [stack, setStack] = useState<Panel[]>([]);
   const open = (p: Panel) => setStack(s => (s.includes(p) ? s : [...s, p]));
@@ -78,16 +86,20 @@ function Game() {
     <>
       <div className="app">
         <Hud onOpenLevels={() => open('levels')}
-             onOpenInfo={() => open('info')}
-             onOpenSpin={() => open('spin')} />
-        <Flash />
-        <GameCanvas />
+             onOpenSettings={() => open('settings')} />
+        <GameCanvas><Flash /></GameCanvas>
         <Controls />
       </div>
 
       <WinOverlay />
-      {has('noballs') && <NoBallsPanel onClose={close} onSpin={() => open('spin')} />}
+      {has('noballs') && <NoBallsPanel onClose={close} onSpin={() => open('spin')}
+                                       onShop={() => open('shop')} />}
       {has('levels')  && <LevelSelect  onClose={close} />}
+      {has('settings') && <SettingsPanel onClose={close}
+                                         onOpenInfo={() => open('info')}
+                                         onOpenShop={() => open('shop')}
+                                         onOpenSpin={() => open('spin')} />}
+      {has('shop')    && <ShopPanel    onClose={close} />}
       {has('spin')    && <SpinPanel    onClose={close} />}
       {has('info')    && <InfoPanel    onClose={close} />}
     </>

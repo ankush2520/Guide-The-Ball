@@ -1,4 +1,11 @@
-/* The action row and the hint line under the board. */
+/* ============================================================
+   THE ACTION ROW
+
+   One decision lives here - drop the ball - and two repairs.
+   Drop therefore gets the width, the height and the colour;
+   Undo and Clear shrink to their own labels and sit at the end
+   of the row, where a misfire costs a tap rather than a ball.
+   ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
 
 export function Controls() {
@@ -17,10 +24,10 @@ export function Controls() {
                 className={'primary' + (controller.tutorialStep() === 2 ? ' tut-pulse' : '')}
                 disabled={!planning}
                 onClick={() => controller.drop()}>Drop Ball</button>
-        <button id="btn-undo" disabled={!planning || none}
+        <button id="btn-undo" className="mini" disabled={!planning || none}
                 onClick={() => { levels.undoRamp(); controller.selected = -1;
                                  controller.notifyRampsChanged(); }}>Undo</button>
-        <button id="btn-clear" disabled={!planning || none}
+        <button id="btn-clear" className="mini" disabled={!planning || none}
                 onClick={() => { levels.clearRamps(); controller.selected = -1;
                                  controller.notifyRampsChanged(); }}>Clear</button>
       </div>

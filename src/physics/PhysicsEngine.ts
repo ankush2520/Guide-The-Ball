@@ -2,12 +2,11 @@
    PHYSICS ENGINE - the seam between the game and its simulator.
 
    The game reads a BallState and calls step() once per 1/60s.
-   It does not care what is behind that: the original hand-written
-   arcade simulator, or Matter.js.
+   It does not care what is behind that; today that is Matter.js.
 
    Everything outside this folder - the controller, the renderer,
    the solver sweep - talks to this interface only, which is what
-   makes the two engines interchangeable at runtime.
+   keeps the simulation swappable and, more importantly, pure.
    ============================================================ */
 import type { Level, Segment } from '../levels/types';
 import type { DropResult, Hit, SimulationResult } from './types';
@@ -40,15 +39,7 @@ export interface BallState {
   toResult(): SimulationResult;
 }
 
-export type EngineId = 'arcade' | 'matter';
-
 export interface PhysicsEngine {
-  readonly id: EngineId;
-  /** Shown in the engine picker. */
-  readonly label: string;
-  /** One line on what this engine is, for the info panel. */
-  readonly blurb: string;
-
   createBall(lv: Level, seed: number, broken?: boolean[] | null): BallState;
 
   /** Advance one 1/60s step. Sets ball.result when the run ends. */
@@ -59,7 +50,6 @@ export interface PhysicsEngine {
            broken?: boolean[] | null): SimulationResult;
 
   /** Release anything the engine holds for a finished run. Matter builds a
-      world per drop; the arcade engine holds nothing and does not implement
-      this. */
+      world per drop and tears it down here. */
   dispose?(ball: BallState): void;
 }

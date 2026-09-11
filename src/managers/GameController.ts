@@ -15,8 +15,7 @@
 import type { GameBus, Phase } from '../core/events';
 import { LevelManager } from './LevelManager';
 import { RewardManager } from './RewardManager';
-import type { BallState, PhysicsEngine, EngineId } from '../physics/PhysicsEngine';
-import { createEngine, rememberEngineId } from '../physics/engines';
+import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
 import { CAPTURE_MS, STEP_MS_DEFAULT } from '../render/constants';
@@ -56,14 +55,15 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
 
 /** What a finished level shows on the win card. */
 export interface WinCard {
-  stars: number; note: string; bonus: number; isLast: boolean; nextId: number | null;
+  stars: number; note: string; bonus: number; coins: number;
+  isLast: boolean; nextId: number | null;
 }
 
 export class GameController {
   phase: Phase = 'plan';
   tries = 0;
-  /* Whatever the ACTIVE engine produced. The controller never names a
-     concrete ball class - see PhysicsEngine. */
+  /* Whatever the engine produced. The controller never names a concrete
+     ball class - see PhysicsEngine. */
   ball: BallState | null = null;
   capture: CaptureState | null = null;
   draft: Segment | null = null;
@@ -101,26 +101,29 @@ export class GameController {
     readonly levels: LevelManager,
     readonly rewards: RewardManager,
     readonly renderer: Renderer,
-    private engine: PhysicsEngine,
-  ) {}
+    private readonly engine: PhysicsEngine,
+  ) {
+    /* The wallet can change without the GAME changing - a purchase in the
+       shop, a wheel settling, a spare ramp spent - and every one of those is
+       on screen somewhere. The counters are React reading this version
+       number, so anything that moves a balance has to bump it, or the HUD
+       and the shop go stale until something else happens to redraw them. */
+    for (const e of ['balls:changed', 'coins:changed', 'ramps:changed'] as const)
+      bus.on(e, () => this.changed());
+  }
 
-  get engineId(): EngineId { return this.engine.id; }
-  get engineLabel(): string { return this.engine.label; }
-  get engineBlurb(): string { return this.engine.blurb; }
-
-  /** Swap the simulator. Any drop in flight is abandoned - a run cannot be
-      half-solved by one engine and half by another - and the board goes back
-      to planning with the ramps untouched. */
-  setEngine(id: EngineId): void {
-    if (id === this.engine.id) return;
-    this.releaseBall();
-    this.engine = createEngine(id);
-    rememberEngineId(id);
-    this.capture = null; this.winCard = null;
-    this.renderer.particles.clear(); this.renderer.trail.clear();
-    this.squash.amt = 0;
-    this.setPhase('plan');
-    this.showFlash(`Physics: ${this.engine.label}`);
+  /** Take one spare ramp from the drawer and add it to THIS level's budget.
+      The two halves belong to different managers - the drawer is the player's
+      and the budget is the board's - so joining them is the controller's job,
+      as it is for every other spend. */
+  useExtraRamp(): boolean {
+    if (this.phase !== 'plan') return false;
+    if (!this.rewards.spendExtraRamp()) return false;
+    this.levels.extraBudget++;
+    const left = this.rewards.extraRamps;
+    this.showFlash(`Extra ramp added - ${left} left in your drawer.`);
+    this.changed();
+    return true;
   }
 
   /** Matter builds a world per drop; let the engine tear it down. */
@@ -294,12 +297,14 @@ export class GameController {
   private finish(result: DropResult): void {
     this.lastResult = result;
     const lv = this.levels.level;
-    const { stars, bonus, note, firstClear } = this.rewards.recordClear(
+    /* Judged against the level's OWN budget, not the one in force: a spare
+       ramp bought from the drawer must not be able to buy a star with it. */
+    const { stars, bonus, coins, note, firstClear } = this.rewards.recordClear(
       this.levels.levelIndex, lv.id, this.levels.isLast,
-      this.tries, this.levels.rampsUsed, lv.maxBlocks);
+      this.tries, this.levels.rampsUsed, this.levels.levelBudget);
 
     this.winCard = {
-      stars, note, bonus, isLast: this.levels.isLast,
+      stars, note, bonus, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
     };
     this.capture = null;
@@ -451,13 +456,14 @@ export class GameController {
 
   /** The hint line under the board - a read-only view of state. */
   get hint(): string {
-    const lv = this.levels.level;
     if (this.tutorialStep() === 2) return 'Tap Drop Ball when ready.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay repeats this layout. Adjust lets you edit it.';
     if (this.selected >= 0) return 'Drag an end to reshape, the middle to move, × to delete.';
-    if (this.levels.rampsUsed >= lv.maxBlocks)
-      return 'No ramps left — tap one to edit or delete it, or drop the ball.';
+    if (this.levels.rampsLeft <= 0)
+      return this.rewards.extraRamps > 0
+        ? 'No ramps left — tap Ramps to spend a spare, or drop the ball.'
+        : 'No ramps left — tap one to edit or delete it, or drop the ball.';
     return 'Drag on the board to draw a ramp. Tap a ramp to edit it.';
   }
 }

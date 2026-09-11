@@ -42,6 +42,22 @@ await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(
 const topUp = () => page.evaluate(() => window.__gtb.setBalls(999));
 await topUp();
 
+/* The wheel, the info panel and the mute sit behind the gear now, so anything
+   that used to click them straight off the HUD opens settings first. Both
+   helpers are idempotent: the panels are a STACK, and settings stays open
+   underneath whatever it opened. */
+const settingsOpen = () => page.evaluate(() => !!document.getElementById('settingspanel'));
+const openSettings = async () => {
+  if (!(await settingsOpen())) await page.click('#btn-settings');
+  await page.waitForSelector('#settingspanel');
+};
+const closeSettings = async () => {
+  if (await settingsOpen()) {
+    await page.click('#btn-settings-close');
+    await page.waitForSelector('#settingspanel', { state: 'detached' });
+  }
+};
+
 const C = await page.evaluate(() => window.__gtb.CONSTS);
 
 /* board-space -> screen-space drag helpers */
@@ -87,8 +103,12 @@ check(await page.locator('#overlay').isHidden(), 'no overlay on a fresh board');
    level's position within it - level 1 is Verdholm's first city. */
 check((await page.locator('#level-title').textContent()).includes('Verdholm I'),
   'level 1 title shows its city name', await page.locator('#level-title').textContent());
-check(await page.locator('#btn-info').isVisible(),
-  'the info button is on the HUD, since there is no legend under the board');
+check(await page.locator('#btn-settings').isVisible(),
+  'the settings gear is on the HUD, and is the only icon on it');
+check(await page.locator('.hud .iconbtn').count() === 1,
+  'the wheel, the info panel and the mute are behind it rather than beside it');
+check(await page.locator('#try-count').count() === 0,
+  'and the Try counter is gone - it is on the win card, where it changes the rating');
 check(await page.locator('.legend').count() === 0,
   'and the old bottom legend is gone - it duplicated the panel');
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'level-01.png') });
@@ -815,8 +835,11 @@ await topUp();
 section('8c. Info panel');
 await page.evaluate(() => window.__gtb.setLevel(20));      // a board with a booster
 check(await page.locator('#infopanel').isHidden(), 'the info panel starts closed');
+await openSettings();
 await page.locator('#btn-info').click();
-check(await page.locator('#infopanel').isVisible(), 'the ? button opens it');
+check(await page.locator('#infopanel').isVisible(), 'the How to play row opens it');
+check(await settingsOpen(),
+  'and it opens ON TOP of settings, so closing it lands back there');
 const panelInfo = await page.evaluate(() => {
   const body = document.getElementById('info-body');
   const lines = [...body.querySelectorAll('.iline')].map(e => ({
@@ -861,6 +884,7 @@ const WANT = [['obstacles','Obstacle'], ['breakables','Breakable block'],
               ['wind','Wind'],          ['slippery','Ice'], ['stars','Gold star']];
 const levelCount = await page.evaluate(() => window.__gtb.LEVELS.length);
 const agree = [];
+await openSettings();
 for (let i = 0; i < levelCount; i++){
   await page.evaluate(ix => window.__gtb.setLevel(ix), i);
   await page.click('#btn-info');
@@ -879,6 +903,7 @@ for (let i = 0; i < levelCount; i++){
     if (here.includes(name) !== (lv[key] > 0)) agree.push(`L${lv.id} ${key}`);
   if (here.includes('Wall') !== (lv.walls > 0)) agree.push(`L${lv.id} wall`);
 }
+await closeSettings();
 await page.evaluate(() => window.__gtb.setLevel(0));
 check(agree.length === 0, 'the panel flags exactly what each level actually has',
   agree.slice(0, 3).join(', ') || `all ${levelCount} levels agree`);
@@ -1376,10 +1401,29 @@ await page.evaluate(() => { window.__gtb.setLevel(0);
 await page.locator('#btn-drop').click();
 await page.waitForTimeout(200);
 info = await page.evaluate(() => window.__gtb.ballInfo());
+check(await page.locator('#btn-buy').isVisible(), 'the Buy Balls button is on screen');
+/* It buys with COINS, so what it offers depends on the wallet. Both states
+   are checked, because "you cannot afford one" is the one a stranded player
+   actually meets and it must still say why. */
+await page.evaluate(() => window.__gtb.setWallet(0, 0));
+info = await page.evaluate(() => window.__gtb.ballInfo());
 check(info.buyDisabled && await page.locator('#btn-buy').isDisabled(),
-  'the Buy Balls button is visible but disabled');
-check(await page.locator('#btn-buy').isVisible(), 'and really is on screen, not hidden');
-check(/coming soon/i.test(info.buyText), 'and is labelled Coming Soon', info.buyText.trim());
+  'broke, it is disabled rather than failing when pressed');
+check(/need \d+ coins/i.test(info.buyText),
+  'and says what a ball costs instead of just refusing', info.buyText.trim());
+await page.evaluate(() => window.__gtb.setWallet(40, 0));
+info = await page.evaluate(() => window.__gtb.ballInfo());
+check(!info.buyDisabled && /buys 20/.test(info.buyText),
+  'with coins, it says how many balls they buy', info.buyText.trim());
+await page.locator('#btn-buy').click();
+check(await page.locator('#shoppanel').isVisible(), 'and it opens the shop');
+await page.locator('#btn-buy-balls-10').click();
+const shopBought = await page.evaluate(() => [window.__gtb.coins(), window.__gtb.balls()]);
+check(shopBought[0] === 20 && shopBought[1] === 10,
+  'buying 10 balls costs 20 coins and delivers 10 balls',
+  `${shopBought[0]} coins, ${shopBought[1]} balls`);
+await page.locator('#btn-shop-close').click();
+await page.evaluate(() => { window.__gtb.setBalls(0); window.__gtb.setWallet(0, 0); });
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'balls-empty.png') });
 ok('screenshot: balls-empty.png');
 
@@ -1409,6 +1453,7 @@ check(!(await page.locator('#btn-drop').isDisabled()), 'and hands the board back
 section('14. Daily spin wheel');
 
 const SPIN = await page.evaluate(() => window.__gtb.SPIN);
+const WALLET = await page.evaluate(() => window.__gtb.WALLET);
 const SEG = 360 / SPIN.prizes.length;
 console.log(`  ${SPIN.prizes.length} wedges [${SPIN.prizes.map(p=>p.balls).join(' ')}], ` +
             `cooldown ${SPIN.cooldownMs/3600000}h, spin ${SPIN.animMs}ms`);
@@ -1428,16 +1473,109 @@ async function seedSpin(agoMs){
   await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setBalls(0); });
 }
 
+/* ---------------------------------------------------------------- */
+section('13b. Coins, the shop and spare ramps');
+
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+let w = await page.evaluate(() => ({ coins: window.__gtb.coins(),
+  balls: window.__gtb.balls(), ramps: window.__gtb.spareRamps() }));
+check(w.coins === WALLET.startCoins && w.balls === BALLS.start && w.ramps === 0,
+  'a new player starts with the stated wallet',
+  `${w.coins} coins, ${w.balls} balls, ${w.ramps} spare ramps`);
+
+/* --- the prices are the prices --- */
+await page.evaluate(() => window.__gtb.setWallet(100, 0));
+check(await page.evaluate(() => window.__gtb.buyBalls(10)), 'ten balls can be bought');
+w = await page.evaluate(() => ({ coins: window.__gtb.coins(), balls: window.__gtb.balls() }));
+check(w.coins === 100 - 10 * WALLET.ballPrice,
+  `a ball costs ${WALLET.ballPrice} coins, exactly`, `100 -> ${w.coins}`);
+check(await page.evaluate(() => window.__gtb.buyRamps(3)), 'three spare ramps can be bought');
+w = await page.evaluate(() => ({ coins: window.__gtb.coins(), ramps: window.__gtb.spareRamps() }));
+check(w.coins === 100 - 20 - 3 * WALLET.rampPrice,
+  `a spare ramp costs ${WALLET.rampPrice} coins, exactly`, `${w.coins} left`);
+check(w.ramps === 3, 'and lands in the drawer', `${w.ramps} spare ramps`);
+
+/* An order that cannot be paid for must be refused WHOLE. A shop that fills
+   part of it has spent coins the player never agreed to spend. */
+const broke = await page.evaluate(() => {
+  window.__gtb.setWallet(10, 0);
+  const ok = window.__gtb.buyBalls(50);
+  return { ok, coins: window.__gtb.coins(), balls: window.__gtb.balls() };
+});
+check(!broke.ok && broke.coins === 10,
+  'an order you cannot afford is refused whole, not part-filled',
+  `${broke.coins} coins still there`);
+
+/* --- clearing pays coins, and a replay pays less --- */
+const pay = await page.evaluate(() => ({
+  firstLow:  window.__gtb.coinsFor(1, 1, true),
+  firstHigh: window.__gtb.coinsFor(1, 3, true),
+  lateHigh:  window.__gtb.coinsFor(30, 3, true),
+  replay:    window.__gtb.coinsFor(1, 3, false),
+}));
+console.log(`  level 1: ${pay.firstLow} coins at 1 star, ${pay.firstHigh} at 3` +
+            `; level 30 at 3 stars: ${pay.lateHigh}; replaying level 1: ${pay.replay}`);
+check(pay.firstHigh > pay.firstLow, 'playing well pays more than scraping through',
+  `${pay.firstHigh} vs ${pay.firstLow}`);
+check(pay.lateHigh > pay.firstHigh, 'and a late level pays more than an early one',
+  `${pay.lateHigh} vs ${pay.firstHigh}`);
+check(pay.replay > 0 && pay.replay < pay.firstHigh / 2,
+  'a replay pays something, but far too little to farm', `${pay.replay} coins`);
+
+/* --- a spare ramp raises THIS level's budget, and only this level's --- */
+await page.evaluate(() => { window.__gtb.setWallet(0, 2); window.__gtb.setLevel(0); });
+let bud = await page.evaluate(() => window.__gtb.budget());
+const designed = bud.level;
+check(bud.inForce === designed && bud.extra === 0,
+  'a level starts on its own budget alone', `${bud.inForce} ramps`);
+check(await page.evaluate(() => window.__gtb.useExtraRamp()), 'a spare can be spent');
+bud = await page.evaluate(() => window.__gtb.budget());
+check(bud.inForce === designed + 1 && bud.left === designed + 1,
+  'and it raises the budget in force by one', `${designed} -> ${bud.inForce}`);
+check(bud.level === designed,
+  'without touching the level\'s DESIGNED budget - which is what the stars ' +
+  'are measured against, so a spare can never buy a third star',
+  `still ${bud.level}`);
+check(await page.evaluate(() => window.__gtb.spareRamps()) === 1,
+  'the drawer is one lighter', '1 spare ramp left');
+
+await page.evaluate(() => window.__gtb.setLevel(1));
+bud = await page.evaluate(() => window.__gtb.budget());
+check(bud.extra === 0,
+  'and a spare does not follow you to the next level - it is bought into a board');
+check(await page.evaluate(() => window.__gtb.spareRamps()) === 1,
+  'while the drawer itself is untouched by moving around', '1 spare ramp');
+
+const noSpare = await page.evaluate(() => {
+  window.__gtb.setWallet(0, 0);
+  return window.__gtb.useExtraRamp();
+});
+check(!noSpare, 'an empty drawer has nothing to spend');
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(0); });
+await topUp();
+
+/* ---------------------------------------------------------------- */
 /* --- the prize table is weighted the way the design says --- */
-const weights = SPIN.prizes.reduce((m, p) => (m[p.balls] = (m[p.balls]||0) + p.w, m), {});
+/* The wheel pays coins, balls OR ramps, so wedges can only be compared in
+   coins: a ball is WALLET.ballPrice and a ramp is WALLET.rampPrice. */
+const coinValue = p => p.kind === 'coins' ? p.n
+                     : p.kind === 'balls' ? p.n * WALLET.ballPrice
+                     : p.n * WALLET.rampPrice;
 const wTotal = SPIN.prizes.reduce((n, p) => n + p.w, 0);
-const smallShare = ((weights[1]||0) + (weights[2]||0) + (weights[3]||0)) / wTotal;
-const jackpotShare = (weights[5]||0) / wTotal;
-check(smallShare > 0.9, 'the wheel is weighted toward small/medium ball rewards',
-  `${(smallShare*100).toFixed(0)}% is 1-3 balls`);
-check(jackpotShare > 0 && jackpotShare < 0.08, 'the 5-ball jackpot is a genuine rarity',
-  `${(jackpotShare*100).toFixed(1)}%`);
-check(SPIN.prizes.every(p => p.balls > 0), 'every wedge pays something - no blanks');
+check(wTotal === 100, 'the weights total 100, so each reads as its own percentage', `${wTotal}`);
+check(SPIN.prizes.every(p => p.n > 0), 'every wedge pays something - no blanks');
+check(new Set(SPIN.prizes.map(p => p.kind)).size === 3,
+  'and all three currencies are on the wheel',
+  [...new Set(SPIN.prizes.map(p => p.kind))].join(','));
+const jackpotShare = SPIN.prizes.filter(p => coinValue(p) >= 60)
+                                .reduce((n, p) => n + p.w, 0) / wTotal;
+check(jackpotShare > 0 && jackpotShare < 0.12, 'the jackpots are a genuine rarity',
+  `${(jackpotShare*100).toFixed(1)}% is worth 60+ coins`);
+const ev = SPIN.prizes.reduce((n, p) => n + coinValue(p) * p.w / wTotal, 0);
+console.log(`  expected value: ${ev.toFixed(1)} coins a day` +
+            ` (${(ev / WALLET.ballPrice).toFixed(0)} balls, or ${(ev / WALLET.rampPrice).toFixed(1)} ramps)`);
+check(ev > 15 && ev < 60, 'worth coming back for, not worth more than playing',
+  `${ev.toFixed(1)} coins`);
 
 /* the sampler must actually follow those weights */
 const sample = await page.evaluate(() => {
@@ -1481,55 +1619,84 @@ await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
 await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setBalls(0); });
 let sp = await page.evaluate(() => window.__gtb.spinInfo());
+/* The gear wears the wheel's state now: behind a panel, a waiting spin needs
+   a LOUDER signal from the board than it did as its own button, not a
+   quieter one, so the gear both pulses and carries a badge. */
 check(sp.ready && sp.btnReady && !sp.btnLocked, 'a new player has a spin ready');
-check(sp.cdText === '', 'no countdown on the button while it is ready');
+check(sp.badge, 'and the gear carries a badge saying so from the board itself');
 check(await page.locator('#spinpanel').isHidden(), 'the wheel panel starts closed');
+await openSettings();
+check(await page.locator('#spin-cd').textContent() === 'Ready',
+  'the settings row says Ready rather than counting down');
 await page.locator('#btn-spin').click();
 sp = await page.evaluate(() => window.__gtb.spinInfo());
-check(sp.panelOpen && await page.locator('#spinpanel').isVisible(), 'the topbar button opens the wheel');
+check(sp.panelOpen && await page.locator('#spinpanel').isVisible(),
+  'and the row opens the wheel, on top of settings');
 check(!sp.goDisabled, 'Spin is enabled while the wheel is ready');
 
 /* --- the spin: result first, animation aimed at it --- */
-let ballsBefore = await page.evaluate(() => window.__gtb.balls());
+/* A wedge can pay any of the three currencies, so the whole wallet is
+   sampled either side and the payout is read off whichever one moved. */
+const wallet = () => page.evaluate(() => ({ coins: window.__gtb.coins(),
+  balls: window.__gtb.balls(), ramps: window.__gtb.spareRamps() }));
+const wBefore = await wallet();
 await page.locator('#btn-spin-go').click();
 sp = await page.evaluate(() => window.__gtb.spinInfo());
 check(sp.spinning, 'the wheel is turning');
 check(sp.goDisabled, 'Spin is disabled mid-spin - no double spin');
 const committed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)),  SPIN.key);
-check(committed.pending > 0,
+check(committed.pending && committed.pending.n > 0 && committed.pending.kind,
   'the prize is committed to storage BEFORE the wheel stops - no re-roll by reload',
-  `pending ${committed.pending}`);
+  `pending ${JSON.stringify(committed.pending)}`);
 
 await page.waitForFunction(() => !window.__gtb.spinInfo().spinning, null, { timeout: 20000 });
 sp = await page.evaluate(() => window.__gtb.spinInfo());
-const ballsAfter = await page.evaluate(() => window.__gtb.balls());
-const granted = ballsAfter - ballsBefore;
+const wAfter = await wallet();
+const moved = ['coins','balls','ramps'].filter(k => wAfter[k] !== wBefore[k]);
 const landed = wedgeUnderPointer(sp.deg);
-console.log(`  landed on wedge ${landed} (${SPIN.prizes[landed].balls} balls), granted ${granted}`);
-check(granted === committed.pending, 'the balls granted are the ones committed up front',
-  `${granted} vs ${committed.pending}`);
-check(SPIN.prizes[landed].balls === granted,
-  'the wheel visually STOPS on the prize it actually paid out', 
-  `wedge ${landed} = ${SPIN.prizes[landed].balls}, paid ${granted}`);
-check(sp.shown === granted && /won/i.test(sp.sub), 'the result is announced', sp.sub);
-check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)), SPIN.key)).pending === 0,
+const prize = SPIN.prizes[landed];
+const granted = wAfter[prize.kind] - wBefore[prize.kind];
+console.log(`  landed on wedge ${landed} (${prize.n} ${prize.kind}), granted ${granted}`);
+check(moved.length === 1 && moved[0] === prize.kind,
+  'exactly one currency moves, and it is the one the wedge names',
+  `moved ${moved.join(',') || 'nothing'}, wedge pays ${prize.kind}`);
+check(granted === committed.pending.n && prize.kind === committed.pending.kind,
+  'what is paid is what was committed up front',
+  `${granted} ${prize.kind} vs ${JSON.stringify(committed.pending)}`);
+check(prize.n === granted,
+  'the wheel visually STOPS on the prize it actually paid out',
+  `wedge ${landed} = ${prize.n} ${prize.kind}, paid ${granted}`);
+check(sp.shown === granted && sp.shownKind === prize.kind && /won/i.test(sp.sub),
+  'the result is announced, in the right currency', sp.sub);
+check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)), SPIN.key)).pending === null,
   'the committed debt is cleared once paid');
 
 /* --- and it is locked for a day --- */
+/* the gear is driven by a once-a-second tick as well as the game's own
+   version counter, so the lock is waited for rather than sampled */
+await page.waitForFunction(() => !window.__gtb.spinInfo().btnReady, null, { timeout: 5000 });
+sp = await page.evaluate(() => window.__gtb.spinInfo());
 check(!sp.ready && sp.btnLocked && !sp.btnReady, 'the wheel locks immediately after use');
+check(!sp.badge, 'and the gear drops its badge');
 check(sp.goDisabled && await page.locator('#btn-spin-go').isDisabled(), 'Spin is disabled while locked');
-check(/^\d+[hms]$/.test(sp.cdText), 'the topbar button carries a countdown', sp.cdText);
+/* the row's countdown ticks on its own once-a-second timer, so it is waited
+   for rather than sampled the instant the wheel stops */
+await page.waitForFunction(() => /^(\d+h \d{2}m|\d+m|\d+s)$/
+  .test(document.getElementById('spin-cd')?.textContent ?? ''), null, { timeout: 5000 });
+sp = await page.evaluate(() => window.__gtb.spinInfo());
+check(/^(\d+h \d{2}m|\d+m|\d+s)$/.test(sp.cdText),
+  'and the settings row carries a countdown instead', sp.cdText);
 check(sp.nextMs > SPIN.cooldownMs - 60000 && sp.nextMs <= SPIN.cooldownMs,
   'a full cooldown is on the clock', `${Math.round(sp.nextMs/3600000)}h`);
 await page.locator('.app').screenshot({ path: path.join(SHOTS, 'wheel-result.png') });
 ok('screenshot: wheel-result.png');
 
 /* pressing the disabled Spin must not sneak a second one through */
-ballsBefore = await page.evaluate(() => window.__gtb.balls());
+const lockedWallet = JSON.stringify(await wallet());
 await page.evaluate(() => document.getElementById('btn-spin-go').click());
 await page.waitForTimeout(200);
-check((await page.evaluate(() => window.__gtb.balls())) === ballsBefore,
-  'a forced Spin while locked pays nothing');
+check(JSON.stringify(await wallet()) === lockedWallet,
+  'a forced Spin while locked pays nothing, in any currency', lockedWallet);
 
 /* --- the cooldown boundary, simulated by backdating the stored stamp --- */
 await seedSpin(SPIN.cooldownMs - 60 * 60 * 1000);        // an hour short of a day
@@ -1539,25 +1706,41 @@ check(!sp.ready && sp.btnLocked, 'an hour short of 24h the wheel is still locked
 await seedSpin(SPIN.cooldownMs + 60 * 1000);             // just over a day
 sp = await page.evaluate(() => window.__gtb.spinInfo());
 check(sp.ready && sp.btnReady, 'past 24h the wheel is available again');
-check(await page.evaluate(() => document.getElementById('btn-spin').classList.contains('ready')),
-  'and the button pulses to say so');
+check(await page.evaluate(() => document.getElementById('btn-settings').classList.contains('ready')),
+  'and the gear pulses to say so');
 
 /* --- a spin abandoned mid-animation still pays out on the next load --- */
-await page.evaluate(([key, n]) => {
-  localStorage.setItem(key, JSON.stringify({ last: Date.now(), pending: n }));
-}, [SPIN.key, 4]);
-await page.reload();
-await page.waitForFunction(() => !!window.__gtb);
-await page.evaluate(() => window.__gtb.skipTutorial());
-check((await page.evaluate(() => window.__gtb.balls())) >= 4,
-  'a spin abandoned mid-animation is still paid on the next load',
-  `${await page.evaluate(() => window.__gtb.balls())} balls`);
-check((await page.evaluate(key => JSON.parse(localStorage.getItem(key)), SPIN.key)).pending === 0,
-  'and it is only paid once');
+const owe = async (pending, read) => {
+  await page.evaluate(([key, p]) => {
+    localStorage.setItem(key, JSON.stringify({ last: Date.now(), pending: p }));
+  }, [SPIN.key, pending]);
+  await page.reload();
+  await page.waitForFunction(() => !!window.__gtb);
+  await page.evaluate(() => window.__gtb.skipTutorial());
+  return { got: await page.evaluate(read),
+           left: (await page.evaluate(k => JSON.parse(localStorage.getItem(k)), SPIN.key)).pending };
+};
+
+let owed = await owe({ kind: 'coins', n: 40 }, () => window.__gtb.coins());
+check(owed.got >= 40, 'a spin abandoned mid-animation is still paid on the next load',
+  `${owed.got} coins`);
+check(owed.left === null, 'and it is only paid once');
+
+owed = await owe({ kind: 'ramps', n: 2 }, () => window.__gtb.spareRamps());
+check(owed.got >= 2, 'a ramp prize is owed and paid the same way', `${owed.got} spare ramps`);
+
+/* A bare number is how the wheel recorded a debt before it paid anything but
+   balls. A save from then must still be honoured rather than silently voided. */
+const beforeLegacy = await page.evaluate(() => window.__gtb.balls());
+owed = await owe(4, () => window.__gtb.balls());
+check(owed.got === beforeLegacy + 4,
+  'and a debt written by the old balls-only wheel is still honoured',
+  `${beforeLegacy} -> ${owed.got} balls`);
+check(owed.left === null, 'then cleared like any other');
 
 /* --- a clock wound backwards must not lock the wheel forever --- */
 await page.evaluate(key => {
-  localStorage.setItem(key, JSON.stringify({ last: Date.now() + 30 * 864e5, pending: 0 }));
+  localStorage.setItem(key, JSON.stringify({ last: Date.now() + 30 * 864e5, pending: null }));
 }, SPIN.key);
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
@@ -1586,8 +1769,17 @@ check(await page.locator('#spinpanel').isVisible(),
 await page.locator('#btn-spin-go').click();
 await page.waitForFunction(() => !window.__gtb.spinInfo().spinning, null, { timeout: 20000 });
 await page.locator('#btn-spin-close').click();
+/* The wedge may have paid coins or ramps rather than balls, so what is
+   asserted is that the wheel is a way OUT of the stop screen - the wallet is
+   worth more than it was, and that value can be turned into balls. */
+const wonWallet = await page.evaluate(() => ({ coins: window.__gtb.coins(),
+  balls: window.__gtb.balls(), ramps: window.__gtb.spareRamps() }));
+const asBalls = wonWallet.balls + Math.floor(wonWallet.coins / WALLET.ballPrice);
+check(asBalls > 0, 'the wheel pays something a ball can be got out of',
+  `${wonWallet.balls} balls + ${wonWallet.coins} coins`);
+if (wonWallet.balls === 0) await page.evaluate(() => window.__gtb.buyBalls(1));
 joint = await page.evaluate(() => window.__gtb.ballInfo());
-check(joint.balls > 0, 'the wheel pays into the ball tank', `${joint.balls} balls`);
+check(joint.balls > 0, 'and the ball tank can be refilled from it', `${joint.balls} balls`);
 await page.evaluate(() => document.getElementById('btn-nb-close').click());
 const beforeJoint = await page.evaluate(() => window.__gtb.balls());
 await page.locator('#btn-drop').click();

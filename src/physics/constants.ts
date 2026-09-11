@@ -8,8 +8,52 @@
    followed by a regeneration.
    ============================================================ */
 
-export const W = 480, H = 800;       // logical board size (portrait, 3:5)
+/* The DESIGN BOX. Every level in the game is authored in these coordinates,
+   and the solver sweep proved all 30 winnable inside them - so this pair is
+   frozen even when the board around it is not. See BOARD below. */
+export const W = 480, H = 800;
 export const BALL_R = 9;
+
+/* ============================================================
+   THE BOARD
+
+   The design box is 480x800 (3:5), which is a phone. A tablet
+   or a desktop is not, and on one the board was a narrow strip
+   down the middle of the window.
+
+   So the board may be WIDER than the box it is designed in. The
+   level content stays exactly where it was authored - nothing
+   is scaled or moved - and the board simply extends `pad` px
+   past the box on each side, giving x the range [x0, x1]. At
+   pad 60 that is 600x800, a 3:4 tablet.
+
+   This cannot unmake a solved level. There are no side walls:
+   leaving the board sideways is a LOSS (see isOutOfBounds), so
+   a wider board is strictly more forgiving than a narrow one -
+   every winning shot still wins, and the margins are new room
+   to draw ramps in rather than new ways to fail.
+
+   The pad is set once at boot by GameContext, from the viewport.
+   It defaults to 0, which is what keeps the headless harness -
+   the solver sweep and the mechanic tests - authoring and
+   proving levels in the design box regardless of what window
+   the browser happens to give them.
+   ============================================================ */
+export const PAD_TABLET = 60;        // 600x800 = 3:4
+
+export const BOARD = {
+  pad: 0,
+  /** Full board width, design box plus both margins. */
+  get w(): number { return W + this.pad * 2; },
+  /** Left edge, at or left of the design box's 0. */
+  get x0(): number { return -this.pad; },
+  /** Right edge, at or right of the design box's W. */
+  get x1(): number { return W + this.pad; },
+};
+
+/** Widen (or un-widen) the board. Everything that paints or hit-tests reads
+    BOARD live, so this is the only thing a profile change has to set. */
+export function setBoardPad(pad: number): void { BOARD.pad = Math.max(0, pad); }
 
 // Downward terminal velocity. 9 px/step = 540 px/s, which is what the board
 // was tuned around back when the ball travelled at one fixed speed.

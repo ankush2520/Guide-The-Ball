@@ -3,17 +3,16 @@
 A hyper-casual puzzle game. Place a limited number of ramps, then drop the ball
 and watch whether your plan lands it in the target. Plan-first, not reflex-based.
 
-**React + TypeScript, built with Vite.** Two interchangeable physics engines
-ship with it — **Matter.js** (the default) and the original hand-written
-deterministic simulator. Either can run the game; see [Physics](#physics). `npm run build` emits a static bundle in `dist/`,
-ready for CrazyGames / Poki / Softgames.
+**React + TypeScript, built with Vite.** Physics is **Matter.js**, behind a
+pure simulation seam; see [Physics](#physics). `npm run build` emits a static
+bundle in `dist/`, ready for CrazyGames / Poki / Softgames.
 
 ## Run
 
     npm install
     npm run dev        # http://localhost:5173
     npm run build      # static bundle in dist/
-    npm test           # every suite: parity, mechanics, engines, UI, smoke
+    npm test           # every suite: mechanics, board, UI, smoke
     npm run typecheck
 
 ## Deploying
@@ -47,7 +46,7 @@ when something they actually show has changed.
 
     core/EventBus.ts      typed observer bus - managers publish, nothing calls back
     core/events.ts        the whole event vocabulary in one file
-    physics/              two engines behind one interface; pure and silent
+    physics/              Matter.js behind one interface; pure and silent
     entities/             one class per thing on a board + the factory
     managers/             LevelManager, RewardManager, GameController, storage
     render/               canvas painting, backdrop, tweens, particles, trail
@@ -145,7 +144,7 @@ Two surfaces, because either one alone has a hole:
   short — so the one surface that could explain a booster was also the one
   most likely to be missing. Being per-level makes it shorter, so it now
   survives down to 620px of height instead of 700px.
-- **The info panel** (`?` in the HUD) is the reference: every entity with a
+- **The info panel** (*How to play*, behind the gear) is the reference: every entity with a
   full explanation, plus the controls, the balls economy and the level rating.
   Whatever is on the board you are currently looking at is flagged *on this
   level*. It replaced the legend that used to sit under the board — that
@@ -178,17 +177,26 @@ info panel lost its heading and its Close button entirely.
 `flex:none` and the one long region per card carries `.scroll`. So a tall card
 scrolls its middle instead of growing off the screen, at any window size.
 
-Stacking is declared once, by id: picker 50, win 55, out-of-balls 60, wheel 70,
-info 80. The wheel sitting above the out-of-balls screen is deliberate — it is
-a way to get balls. Note that a viewport-level modal also covers the HUD, so
-the out-of-balls screen now offers the wheel on the card itself rather than
-relying on the topbar button being reachable behind it.
+Stacking is declared once, by id: picker 50, win 55, out-of-balls 60, settings
+65, wheel 70, info 80. The wheel sitting above the out-of-balls screen is
+deliberate — it is a way to get balls. Settings sits *below* the wheel and the
+info panel for the same reason in reverse: it opens both, so closing either has
+to land back on it rather than dismissing the pair. Note that a viewport-level
+modal also covers the HUD, so the out-of-balls screen offers the wheel on the
+card itself rather than relying on a topbar button being reachable behind it.
 
-Card variants (`.infocard`, `.spincard`) must be declared **after** `.card` in
+Card variants (`.infocard`, `.spincard`, `.setcard`) must be declared **after** `.card` in
 the stylesheet. They are the same specificity, so declared earlier the base
 rule silently wins — which is how the info panel shipped centre-aligned and
 50px too narrow on its first run, and why the wheel card's width had never
 taken effect at all.
+
+The same trap caught the **size media queries**, which is why they are now the
+last thing in the stylesheet. `@media (max-height:520px)` sat near the top,
+above the `.hud`, `.hint`, `.iconbtn` and `button` rules it overrides; being no
+more specific, almost everything it declared was dead. The block meant to
+shrink the chrome on a landscape phone had never shrunk any of it. Anything
+added there has to stay below the last base rule in the file.
 
 ### Generating a country
 
@@ -271,8 +279,9 @@ just cannot throw a ball.
 |---|---|
 | First open, ever | 75 |
 | First clear of a level (once, ever) | +1 / +2 / +2 / +3 by Act |
-| Daily wheel | 1–5 |
+| Daily wheel | 5 or 10, on two of eight wedges |
 | Rewarded ad | +3 |
+| The shop | 2 coins each, unlimited |
 
 The first-clear bonus is keyed off a `cleared` map in `gtb.progress.v1`, not
 off `highest`. Two reasons: `highest` stops at the last level index so it can
@@ -282,7 +291,7 @@ for balls — grinding one now strictly *drains* the tank, since the drop costs
 and the bonus does not come again. Saves from before it existed are migrated on
 load: reaching level N proves every level below it was cleared.
 
-### Balance note — this economy is structurally draining
+### Balance note — coins now absorb the drain
 
 Worth knowing before launch. With one ball per drop, a level only pays for
 itself if it is cleared in **as many drops as its bonus**: first try in Act 1,
@@ -298,10 +307,13 @@ level it covers roughly the first twenty levels on its own, so a new player
 meets the whole of Verdholm before the economy ever asks them for anything.
 After that the drain resumes and the wheel and the ad carry it.
 
-That may be exactly the intent — it is what drives ad views. If it is not, the
-levers, cheapest first: raise `STARTING_BALLS`, raise `CLEAR_BONUS`, or bring
-back a timed refill (removed when spending moved to per-drop; it is a
-self-contained addition).
+**Coins are what closes that gap.** Every clear pays them — including replays,
+at a quarter rate — and at 2 coins a ball a single three-star clear in Act 1
+pays for ten drops. The drain is still real, but it is now a drain against an
+income rather than against a fixed opening grant.
+
+If it needs tuning, the levers, cheapest first: `COIN_CLEAR`, `BALL_PRICE`,
+`STARTING_COINS`, then `STARTING_BALLS` / `CLEAR_BONUS`.
 
 **The "Watch Ad" button is a placeholder** that grants the balls outright.
 It is marked `TODO` in `src/ui/NoBallsPanel.tsx` and must be wired to the portal's rewarded
@@ -309,17 +321,73 @@ video (`CrazyGames.SDK.ad.requestAd('rewarded')` / `PokiSDK.rewardedBreak()`)
 before submission — and the balls must only be granted if the player actually
 watched.
 
-**"Buy Balls" is deliberately inert** — visible, disabled, "Coming Soon", with
-no payment logic behind it. Web portals have no built-in purchase system the
-way app stores do; real money would need a separate payment processor *and* a
-player account system, neither of which exist here. Check what CrazyGames and
-Poki actually permit before building either.
+**"Buy Balls" spends COINS, not money.** There is still no real-money purchase
+path and no payment processor: web portals have no built-in purchase system the
+way app stores do, and real money would need a processor *and* a player account
+system, neither of which exist here. Check what CrazyGames and Poki actually
+permit before building either.
+
+## Coins, the shop and spare ramps
+
+Coins are the hub currency, and the flow is **one-way**: clearing a level and
+the wheel pay coins, coins buy balls and spare ramps, and nothing converts
+back. That is what keeps the wallet legible — a coin is always worth exactly
+what the shop says, and there is no arbitrage loop to balance.
+`gtb.wallet.v1` holds `{coins, ramps}`, its own key rather than a field on the
+progress blob for the same reason the ball tank has one: it is written
+constantly, and a purchase must not have to rewrite the whole save.
+
+| | |
+|---|---|
+| First open, ever | 100 coins |
+| Ball | 2 coins |
+| Spare ramp | 15 coins |
+
+**What a clear pays** (`COIN_CLEAR`), by Act and by stars — playing well is
+worth about double a scrape, and later Acts pay more because they cost more to
+reach:
+
+|  | 1★ | 2★ | 3★ |
+|---|---|---|---|
+| Act 1 | 10 | 14 | 20 |
+| Act 2 | 14 | 18 | 24 |
+| Act 3 | 18 | 22 | 28 |
+| Act 4 | 22 | 26 | 32 |
+
+Unlike the ball bonus, coins are paid on **every** clear. A replay of an
+already-cleared level pays a quarter (minimum 2), which keeps a board you
+enjoy worth returning to while leaving farming level 1 far worse than playing
+on — 5 coins for a drop that cost a ball worth 2.
+
+### Spare ramps
+
+A level's own ramp budget is fixed and is **not** what a spare changes. The
+budget in force is `level.maxBlocks + extraBudget`, where `extraBudget` is what
+the player has spent on *this board*; `setLevel` resets it, because a spare is
+bought into a board, not into the save.
+
+The star for coming in under budget is judged against `levelBudget` — the
+level's designed number — deliberately. If spares inflated that, fifteen coins
+would buy a third star.
+
+Spending is **explicit**: the Ramps chip in the HUD becomes a button when the
+drawer has something in it, and one tap moves one ramp from drawer to board.
+It is spent at the tap, not at the drop. The alternative — silently consuming
+inventory as you draw past the budget — moves a balance the player did not ask
+to move.
 
 ## Daily spin
 
-One free spin every 24 hours, paying straight into the ball tank — which is
-what makes the two features worth having together rather than separately.
-`gtb.spin.v1` holds `{last, pending}`.
+One free spin every 24 hours. It pays **coins, balls or ramps** — the wedges
+are, in order: 20 coins, 10 balls, 3 ramps, 150 coins, 5 balls, 1 ramp, 100
+coins, 50 coins. `gtb.spin.v1` holds `{last, pending}`, where `pending` is now
+`{kind, n}`; a bare number there is a debt recorded by the old balls-only
+wheel and is still honoured on load (`tests/play.test.mjs` asserts it).
+
+Weights total 100, so each reads as its own percentage. Wedges are only
+comparable in coins (a ball is 2, a ramp is 15), which puts the wheel at about
+**31 coins a day** — a level's takings. The two gilded jackpots, 150 and 100
+coins, are 8% between them.
 
 `SPIN_PRIZES` is the wedge layout *and* the weighting: ~97% of the weight is
 1–3 balls and the 5-ball jackpot is ~3%, for an expected value just under two
@@ -347,13 +415,12 @@ asked to draw the wheel as well.
 
     index.html              Vite entry — a mount point, nothing else
     src/                    the game (see Architecture above)
-    legacy/original-game.html   the pre-rewrite single-file build, kept as the
-                                reference the parity test measures against
+    legacy/original-game.html   the pre-rewrite single-file build, kept for
+                                reference
     tools/genlevels.mjs     semi-procedural generator + solver verification
     tools/harness.mjs       bundles the physics into a blank page, no server needed
-    tests/parity.test.mjs   the port vs the original engine, trajectory by trajectory
     tests/mechanics.mjs     per-mechanic isolation tests
-    tests/engines.test.mjs  arcade vs Matter.js over all 30 boards
+    tests/board.test.mjs    phone vs tablet board, over every level
     tests/play.test.mjs     UI, physics invariants, economy, portal compliance
     tests/smoke.test.mjs    end-to-end: boots, draws, drags a ramp, drops a ball
     tests/tune.mjs          physics tuning rig
@@ -392,7 +459,7 @@ added, keep them peers.
 - *No keyboard controls exist.* The game is pointer/touch only, which is
   allowed, and "control bindings should adapt to keyboard layout" is therefore
   moot. If keys are ever added, that requirement wakes up.
-- *The legend and hint are hidden below 700px tall*, so a landscape phone gets
+- *The hint is hidden below 620px tall*, so a landscape phone gets
   no reference text. The board is meant to carry itself there (green ring =
   goal, red = danger) and the onboarding mime still runs, but it is a
   deliberate trade worth re-checking if the art changes.
@@ -406,10 +473,15 @@ the portal's side rather than matters of taste.
   fullscreen, and in landscape the cutout is on a *side*. Needs
   `viewport-fit=cover`, which the meta tag sets.
 - **800x450 to 1920x1080** — checked at both ends plus three sizes between:
-  no overflow, nothing clipped, nothing under 11px. `.app` is capped at
-  `max(430px, 52vh)` rather than a flat 430px, because a 3:5 board is always
-  height-driven — the flat cap left a 1080p desktop showing a 428px board with
-  1490px of empty screen. Under ~900px tall the cap never binds anyway.
+  no overflow, nothing clipped, nothing under 11px. The board is 3:5 and the
+  column is height-driven, so the board's *width* is a result — leftover height
+  times 0.6 — and sizing `.app` off the viewport instead only ever guesses at
+  it. It guessed high, and the Drop row overhung the board it belonged to. So
+  the chrome now matches a **measured** board: `GameCanvas` publishes the
+  stage's resolved width as `--board-w`, and `.hud` / `.controls` / `.hint`
+  take it. The dependency runs one way, so there is no layout loop. Below
+  ~520px of height the board is narrower than three legible buttons, and there
+  the chrome is allowed a 300px floor instead.
 - **High refresh rates** — the loop is a fixed-timestep accumulator, so frame
   rate cannot reach the physics. Verified rather than assumed: `rAF` is
   replaced with a queue the test pumps by hand, and ball position, velocity
@@ -446,29 +518,28 @@ switch muting the game.
 
 ## Physics
 
-The game runs on one of **two interchangeable engines**, chosen at boot and
-switchable at runtime from the info panel or with `?engine=arcade` /
-`?engine=matter` in the URL. Everything outside `src/physics/` talks to the
-`PhysicsEngine` interface and never names a concrete simulator.
+The game runs on **Matter.js**. Everything outside `src/physics/` talks to the
+`PhysicsEngine` interface and never names a concrete simulator — that seam is
+what keeps `simulate()` pure enough for the headless solver sweep.
 
     src/physics/PhysicsEngine.ts        the seam
-    src/physics/arcade/ArcadeEngine.ts  the original hand-written simulator
     src/physics/matter/MatterEngine.ts  Matter.js
-    src/physics/engines.ts              registry + which one is the default
+    src/physics/engines.ts              the factory
 
-### Matter.js (default)
+### Matter.js
 
 Matter owns collision detection, contact resolution and integration. Gravity is
 **calibrated, not guessed**: Matter's per-step acceleration is
 `gravity.y × gravity.scale × delta²`, so at a 1/60s delta a scale of `0.00135`
-reproduces the arcade `GRAVITY` of 0.375 px/step² exactly.
+gives a fall of 0.375 px/step² exactly.
 
 Matter has no terminal velocity, no speed cap, no minimum bounce and **no
 continuous collision detection**. Left raw, the ball accelerates without limit
 and, past ~13.5px of travel per frame, passes straight *through* a 9px ramp —
 there is no contact to resolve. So a few guards sit on top and default on
 (`MATTER_TUNED`); set them all to `null` (`MATTER_PURE`) for unguarded Matter
-and expect tunnelling. The measured tunnelling risk is in `npm run test:engines`.
+and expect tunnelling. `window.__gtb.simulatePureMatter()` runs a drop that way
+if you want to measure the difference rather than argue about it.
 
 Two rules are layered on deliberately, because they are **game mechanics rather
 than physics**: the obstacle scatter (the glossary promises "a mirror
@@ -478,27 +549,41 @@ already travelling *away* from a surface keeps generating pairs. Those are not
 impacts, and treating them as such aimed bounces back into the obstacle they
 had just left.
 
-### Arcade (the original)
+### Two board shapes
 
-A custom deterministic simulator whose feel comes from rules that are
-deliberately not physical: a clamped terminal velocity, a global `SPEED_CAP`
-that scales the whole velocity vector down, a `MIN_BOUNCE` that *adds* energy
-on a glancing hit, and a fixed 9 substeps sized so nothing can tunnel.
+The design box is **480x800 (3:5)** — a phone — and every level is authored in
+those coordinates. A tablet or a desktop is not a phone, and on one the board
+was a narrow strip down the middle of the window, so there the board is
+**600x800 (3:4)**: the level content stays exactly where it was authored and
+the board extends 60px past the box on each side.
 
-It is the **reference implementation**: all 30 levels were proved winnable
-against it by the solver sweep, `tools/genlevels.mjs` still verifies against
-it, and `tests/parity.test.mjs` holds it trajectory-identical to the
-pre-rewrite single-file build across 600 runs.
+    src/physics/constants.ts   BOARD.pad / .w / .x0 / .x1, and setBoardPad()
+    src/core/GameContext.tsx   TABLET — which profile a viewport gets
+    src/ui/GameCanvas.tsx      sizes the stage from BOARD.w / H
 
-### Do the engines agree?
+The profile is chosen from the viewport's **shorter side** (`min(vw,vh) >=
+640`), which is what makes it survive a rotation: an iPad is over the
+threshold both ways round and a phone is under it both ways round, so neither
+ever changes shape mid-level.
 
-`npm run test:engines` answers this over all 30 boards, and it is a gate:
-**no level may be solvable under one engine but not the other.**
+**This cannot unmake a solved level, and that is a gate rather than a claim.**
+There are no side walls — the board's width reaches the simulation in exactly
+one place, `isOutOfBounds`, where leaving sideways is a loss — so a wider board
+can only postpone that. `npm run test:board` sweeps 245 ramp layouts across all
+30 levels on three seeds under both profiles and asserts that **every layout
+that wins on the phone board still wins on the tablet board, landing on the
+same pixel.** 22,050 runs, 385 of them wins.
 
-Both are deterministic — everything is driven by a seeded PRNG (`mulberry32`),
-so a drop replayed with the same seed is byte-identical. What differs is the
-exact path: the same layout lands a few tens of px apart. **Solvability is
-preserved; specific solutions shift.**
+The margins are new room to draw ramps in, not new puzzle content: obstacles
+and targets stay in the middle 480px until the levels are re-authored for the
+wider board.
+
+### Determinism
+
+Everything random is driven by a seeded PRNG (`mulberry32`), so a drop replayed
+with the same seed is byte-identical. That is what lets `tools/genlevels.mjs`
+prove a level winnable headlessly and have the on-screen drop reproduce it, and
+what `tests/mechanics.mjs` leans on when it asserts a trajectory is unchanged.
 
 ### The rule that matters
 

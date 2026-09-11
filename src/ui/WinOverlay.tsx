@@ -22,6 +22,12 @@ export function WinOverlay() {
           {[0, 1, 2].map(i => <i key={i} className={i < card.stars ? 'on' : ''}>&#9733;</i>)}
         </div>
         <div className="starnote" id="ov-starnote">{card.note}</div>
+        {/* The takings, next to the stars that set them - three stars pays
+            roughly double one, and that is only legible if the two are read
+            together. */}
+        <div className="payout" id="ov-coins">
+          <i className="coin" /><b>+{card.coins}</b> coins
+        </div>
         <div className="sub" id="ov-sub">{sub}</div>
         <div className="row">
           <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>

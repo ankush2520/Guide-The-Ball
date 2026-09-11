@@ -15,6 +15,10 @@
     --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     --font-display:"SF Pro Display",ui-sans-serif,system-ui,-apple-system,
                    "Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
+    /* The one piece of iconography in the game that is not drawn on the
+       canvas or built from a gradient. Inlined as a mask rather than an
+       <img> so it takes currentColor, and so the build stays assetless. */
+    --gear:url("data:image/svg+xml,%3Csvg xmlns='http%3A//www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19.14 12.94a7.4 7.4 0 0 0 0-1.88l2.03-1.58a.48.48 0 0 0 .12-.61l-1.92-3.32a.48.48 0 0 0-.59-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.47.47 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58a7.4 7.4 0 0 0 0 1.88l-2.03 1.58a.48.48 0 0 0-.12.61l1.92 3.32c.12.22.37.3.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z'/%3E%3C/svg%3E");
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overflow:hidden;overscroll-behavior:none}
@@ -48,34 +52,63 @@
     touch-action:manipulation;
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
   }
-  /* The board is 3:5 and the column is height-driven, so the width the app
-     can usefully occupy follows the viewport HEIGHT, not its width. A flat
-     430px cap left a 1920x1080 desktop showing a 428px board with 1490px of
-     empty screen either side of it; below about 900px tall the cap never
-     binds anyway, because the board runs out of height first. */
-  .app{width:min(100%, max(430px, 52vh));height:100%;
-       display:flex;flex-direction:column;gap:9px}
+  /* ============================================================
+     THE CHROME IS AS WIDE AS THE BOARD
 
-  /* Landscape phones and small windows - CrazyGames requires legibility down
-     to 800x450, where the board is squeezed by the chrome above and below it.
-     Give the chrome less room so the board keeps more. */
-  @media (max-height:520px){
-    .app{gap:6px}
-    .hud{min-height:28px}
-    .controls button{padding:8px 10px;font-size:13px}
-    .flash{height:19px;line-height:15px;font-size:12px;margin-bottom:-4px}
-    .iconbtn,.iconbtn.spin{height:27px}
-    .iconbtn{width:27px}
-  }
+     The board is a fixed 3:5 and the column is height-driven,
+     so the board's WIDTH is a result: whatever height is left
+     after the chrome, times 0.6. The column used to be sized
+     off the viewport instead (`max(430px, 52vh)`), which
+     guessed at that number and guessed high - a 1920x1080
+     desktop got a 561px column around a 534px board, and the
+     Drop row visibly overhung the board it belonged to.
+
+     It cannot be done here. Shrink-to-fit does not work: during
+     intrinsic sizing the stage's height is not yet known, so
+     `aspect-ratio` contributes nothing and the column collapses
+     onto the canvas's own 480px attribute width - which then
+     caps the stage through max-width and squashes the board out
+     of 3:5 altogether.
+
+     So .app stays viewport-sized, generously enough that the
+     board is never the thing being clipped (60svh is the board
+     width at zero chrome, so it is always an over-estimate),
+     and GameCanvas publishes the board's MEASURED width as
+     --board-w for the chrome rows to match. The dependency runs
+     one way - the board never reads the chrome's width - so
+     there is no layout loop. 75svh is the 3:4 board's width at
+     zero chrome, so the cap is always an over-estimate and the
+     board is never the thing being clipped.
+
+     The floor is for short landscape windows, where 3:5 in a
+     16:9 frame leaves the board only ~180px wide - narrower
+     than Drop/Undo/Clear can be drawn at a legible size (a
+     CrazyGames gate). There the chrome is allowed to be wider
+     than the board; everywhere with the height to avoid it, it
+     is exactly as wide.
+     ============================================================ */
+  .app{width:min(100%, max(320px, 75svh));height:100%;
+       display:flex;flex-direction:column;gap:8px}
+  .hud,.controls,.hint{
+       width:max(var(--board-w, 100%), min(100%, 300px));margin-inline:auto}
 
   .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;
        flex:none;min-height:34px}
-  .title{font-family:var(--font-display);font-size:15.5px;font-weight:800;
-         letter-spacing:-.005em;min-width:0;
-         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* the level NAME is flavour and the level NUMBER is the functional half, so
-     when the bar is tight the name gives up its size first */
-  .title span{color:var(--muted);font-weight:500;letter-spacing:0;font-size:13px}
+  /* The board is recognised by its CITY, not by its index, so the name
+     carries the type weight and "Level 12" is the eyebrow above it. Two
+     lines, but tight ones: the pair is shorter than the 34px the chips
+     already force the bar to be, so the name costs the board nothing. */
+  /* NOT overflow:hidden. A glyph's ink can sit slightly left of its layout
+     box - letter-spaced uppercase especially - and clipping the button cut
+     the L off the front of "LEVEL 17" on every board in the game. The
+     truncation this was for belongs to .lvname, which does it itself. */
+  .title{display:flex;flex-direction:column;align-items:flex-start;gap:0;
+         min-width:0;line-height:1.12}
+  .title .lvnum{font-size:11px;font-weight:700;letter-spacing:.08em;
+                text-transform:uppercase;color:#a3ace0;line-height:1.35}
+  .title .lvname{font-family:var(--font-display);font-size:16.5px;font-weight:800;
+                 letter-spacing:-.012em;color:var(--ink);max-width:100%;
+                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .counter{background:linear-gradient(180deg,#1e2440,#151931);
            border:1px solid var(--edge);border-radius:999px;
            box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
@@ -87,36 +120,86 @@
   /* the ball chip leads with the thing it counts, drawn the same way the
      board draws the ball, so the HUD and the board agree */
   .counter.balls{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
-  .counter.balls .pip{width:11px;height:11px;border-radius:50%;flex:none;
-       background:radial-gradient(circle at 34% 30%,#fff,#ffc451);
-       box-shadow:0 0 8px rgba(255,201,60,.75)}
+  /* White, because the ball IS white on the board - and because a gold pip
+     next to a gold coin is one shape twice.
+
+     Declared on its own, not under .counter.balls: the same three marks are
+     used by the HUD, the shop and the win card, and a mark that only exists
+     inside one of them comes out invisible in the others - which is exactly
+     what the shop's ball bundles did. */
+  .pip{width:11px;height:11px;border-radius:50%;flex:none;display:inline-block;
+       vertical-align:-1px;
+       background:radial-gradient(circle at 34% 30%,#fff,#e6ecff 78%,#c6d0f0);
+       box-shadow:0 0 8px rgba(255,255,255,.55)}
+  /* ============================================================
+     THE THREE CURRENCIES
+
+     One mark each, used EVERYWHERE that currency appears - the
+     HUD, the shop, the win card and the wheel's wedges - so the
+     player learns three shapes once rather than reading a word
+     every time. A coin has a rim, a ball does not; a ramp is the
+     blue bar it is on the board.
+     ============================================================ */
+  .coin{width:11px;height:11px;border-radius:50%;flex:none;display:inline-block;
+        vertical-align:-1px;
+        background:radial-gradient(circle at 36% 30%,#ffd873,#d99406 72%,#b87a04);
+        box-shadow:0 0 7px rgba(255,180,40,.5), inset 0 0 0 1.4px rgba(90,56,0,.55)}
+  .rampmark{width:16px;height:5px;border-radius:3px;flex:none;display:inline-block;
+            background:var(--ramp);box-shadow:0 0 8px var(--glow-ramp);
+            transform:rotate(-18deg)}
+  .counter.coins{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
+  .counter.coins b{color:#ffd479}
+
+  /* the Ramps chip while it is also the spare-ramp button */
+  .counter.ramps.spend{display:inline-flex;align-items:center;gap:5px;
+                       flex:none;cursor:pointer;border-color:#5a4a20}
+  .counter.ramps.spend .spare{color:#ffd479;font-weight:800;font-size:11px;
+                              background:rgba(255,201,60,.14);
+                              border-radius:999px;padding:1px 5px;letter-spacing:.01em}
+  .counter.ramps.spend:hover:not(:disabled){filter:brightness(1.18)}
+  .counter.ramps.spend:active:not(:disabled){transform:scale(.96)}
+
   .counter.balls.empty{border-color:#6b2a38}
-  .counter.balls.empty .pip{background:#4a3040;box-shadow:none}
+  .counter.balls.empty .pip{background:#3b3550;box-shadow:none}
   .counter.balls.empty b{color:#ff8792;text-shadow:none}
   .big.nb{color:#ffc451;text-shadow:0 0 22px rgba(255,201,60,.45)}
   .big.sp{color:#ffd479;text-shadow:0 0 22px rgba(255,201,60,.45)}
 
-  /* the topbar wheel button. It grows a countdown while it is locked, so it
-     is 32px square when ready and a pill when it is not. */
-  .iconbtn.spin{width:auto;min-width:27px;height:27px;padding:0 6px;gap:4px;
-                display:inline-flex;align-items:center;justify-content:center}
-  .iconbtn.spin .wheelicon{width:14px;height:14px;border-radius:50%;flex:none;
-     background:conic-gradient(#ffc93c 0 25%, #3ec8ff 0 50%, #ffc93c 0 75%, #3ec8ff 0);
-     box-shadow:0 0 0 1.5px rgba(255,255,255,.5) inset}
-  .iconbtn.spin b{font-size:11px;font-weight:700;color:var(--muted);
-                  font-variant-numeric:tabular-nums;letter-spacing:.01em}
-  .iconbtn.spin b[hidden]{display:none}
-  .iconbtn.spin.locked{opacity:.5}
-  .iconbtn.spin.locked .wheelicon{filter:grayscale(.85)}
+  /* ============================================================
+     THE GEAR
+
+     One button where the wheel, the info panel and the mute used
+     to be three. The one thing that genuinely needed to be seen
+     from the board - a daily spin waiting to be taken - is not
+     hidden by the move: the gear inherits the wheel's gold pulse
+     and grows a dot, so the signal got louder rather than
+     quieter for being one level deeper.
+     ============================================================ */
+  .iconbtn.gear{position:relative;width:29px;height:29px}
+  .gearicon{width:15px;height:15px;display:block;
+            background:currentColor;color:#c9d2f5;
+            -webkit-mask:var(--gear) center/contain no-repeat;
+            mask:var(--gear) center/contain no-repeat}
+  .iconbtn.gear.ready .gearicon{color:#ffd479}
+  /* the badge. Drawn the same gold as the ball pip and the counters, so
+     "there is something for you" is one colour across the whole game */
+  .iconbtn.gear .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;
+     border-radius:50%;border:1.5px solid #151931;
+     background:radial-gradient(circle at 34% 30%,#fff,#ffc451)}
   /* ready: a gold version of the tutorial's pulse, so "there is something for
      you here" always looks the same in this game */
   @keyframes spinpulse{
     0%,100%{ box-shadow:0 0 0 0 rgba(255,201,60,.55), 0 0 12px 1px rgba(255,170,40,.35) }
     50%    { box-shadow:0 0 0 6px rgba(255,201,60,0), 0 0 18px 4px rgba(255,170,40,.55) }
   }
-  .iconbtn.spin.ready{border-color:#7a6320;animation:spinpulse 1.7s ease-in-out infinite}
-  @media (prefers-reduced-motion:reduce){ .iconbtn.spin.ready{animation:none;
+  .iconbtn.gear.ready{border-color:#7a6320;animation:spinpulse 1.7s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){ .iconbtn.gear.ready{animation:none;
     box-shadow:0 0 0 2px rgba(255,201,60,.45)} }
+  /* the wheel's own mark, on the settings row that opens it */
+  .wheelicon{width:17px;height:17px;border-radius:50%;flex:none;
+     background:conic-gradient(#ffc93c 0 25%, #3ec8ff 0 50%, #ffc93c 0 75%, #3ec8ff 0);
+     box-shadow:0 0 0 1.5px rgba(255,255,255,.5) inset}
+  .setrow.locked .wheelicon{filter:grayscale(.85)}
 
   /* the panel is a reference, so it is allowed to be long - it scrolls
      inside the card rather than growing the card past the board */
@@ -132,7 +215,6 @@
   /* what is on the board you are looking at right now, called out */
   .iline.here b:after{content:' • on this level';font-size:10.5px;font-weight:700;
                       color:var(--accent);letter-spacing:.02em}
-  #btn-info{font-weight:800;font-size:14px}
   .wheelwrap{position:relative;width:212px;height:212px;margin:4px auto 14px}
   #wheel{display:block;width:212px;height:212px;
          transform:rotate(0deg);will-change:transform;
@@ -174,7 +256,7 @@
 
   /* Skip: deliberately quiet, in the board's corner, and only present while
      the tutorial is. It costs no layout space when it is gone. */
-  .tut-skip{position:absolute;top:8px;right:9px;z-index:2;
+  .tut-skip{position:absolute;top:8px;right:9px;z-index:4;
             background:rgba(13,16,34,.72);border:1px solid #39416e;border-radius:999px;
             color:var(--muted);font-size:11.5px;font-weight:600;
             padding:4px 11px;flex:none;line-height:1;cursor:pointer}
@@ -184,30 +266,66 @@
   /* Miss/stuck feedback. Sits in the flow ABOVE the board, never over it, and
      always occupies its line even when empty - the board must not shift when
      it appears. visibility (not display) is what keeps that space reserved. */
-  .flash{flex:none;display:block;align-self:center;max-width:100%;
+  /* Over the board, not above it. Reserving a line in the column so the
+     board could not shift was costing ~30px of permanent dead space between
+     the HUD and the board - for a pill that is empty almost all of the time.
+     Floating it inside the stage reserves nothing and shifts nothing: it is
+     out of flow entirely, so the board cannot move when it appears. */
+  .flashrow{position:absolute;left:10px;right:10px;top:10px;z-index:3;
+            display:flex;justify-content:center;pointer-events:none}
+  .flash{display:block;max-width:100%;
          /* one line, exactly, always: 22 - 2*1 padding - 2*1 border = 18 = the
             line box. It can neither wrap nor grow, so the board cannot move.
             The negative margin eats part of the .app gap back, since the pill
             is the only thing this row ever holds. */
-         height:22px;line-height:18px;padding:1px 12px;margin-bottom:-5px;
+         height:22px;line-height:18px;padding:1px 12px;
          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
          font-size:12.5px;font-weight:650;text-align:center;
-         color:#ffd9a0;background:rgba(255,150,60,.10);
-         border:1px solid rgba(255,170,80,.28);border-radius:999px;
+         color:#ffdcaa;background:rgba(28,17,10,.90);
+         border:1px solid rgba(255,170,80,.42);border-radius:999px;
+         box-shadow:0 4px 14px rgba(0,0,0,.45);
+         -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
          opacity:0;visibility:hidden;
          transition:opacity .38s ease, visibility 0s linear .38s}
   .flash.on{opacity:1;visibility:visible;transition:opacity .16s ease, visibility 0s}
 
-  /* The stage owns the board's 3:5 ratio, so its border hugs the canvas
-     exactly and no reflow can leave the board sitting off to one side. */
+  /* The stage owns the board's ratio, so its border hugs the canvas exactly
+     and no reflow can leave the board sitting off to one side. */
+  /* ============================================================
+     THE BOARD SLOT
+
+     The stage used to be the flex child itself, with
+     `flex:1 1 auto` and an aspect-ratio. That stretches: flex
+     grow sets the HEIGHT, then max-width caps the width, and
+     nothing pulls the height back - so wherever the board was
+     width-bound (every phone, and a desktop once the column had
+     a cap) the canvas was quietly scaled out of its own ratio.
+     A 3:5 board was rendering at 0.543.
+
+     Writing it the other way round only moves the bug: the
+     transfer max-width -> max-height needs the WIDTH to be the
+     automatic axis, and max-height -> max-width needs the
+     height, so whichever one is pinned, one of the two cases
+     comes out stretched.
+
+     The slot therefore takes the leftover space and GameCanvas
+     computes the box - the smaller of the two fits - from the
+     same BOARD.w / H the renderer draws with. The ratio below
+     is only the pre-measurement fallback for the first frame;
+     the inline size wins the moment the effect runs, which is
+     also why there is no tablet override here. The board's real
+     shape is set in one place, in GameCanvas.
+     ============================================================ */
+  .board-slot{flex:1 1 auto;min-height:0;display:flex;
+              align-items:center;justify-content:center;width:0;min-width:100%}
   .stage{position:relative;border-radius:14px;overflow:hidden;
          border:1px solid #313a6e;
          box-shadow:0 18px 48px rgba(0,0,0,.6),
                     0 0 0 1px rgba(120,160,255,.06),
                     0 0 34px -6px rgba(70,110,255,.22);
-         flex:1 1 auto;min-height:0;align-self:center;
          /* content-box so the 1px border does not skew the board's ratio */
-         box-sizing:content-box;aspect-ratio:3 / 5;width:auto;max-width:calc(100% - 2px)}
+         box-sizing:content-box;aspect-ratio:3 / 5;
+         width:calc(100% - 2px);height:auto;max-height:calc(100% - 2px)}
   canvas{display:block;width:100%;height:100%;
          touch-action:none;cursor:crosshair}
 
@@ -221,6 +339,9 @@
   /* One stacking order, stated once. The wheel must open ON TOP of the
      out-of-balls screen, because it is a way out of it. */
   #select{z-index:50} #overlay{z-index:55} #noballs{z-index:60}
+  /* settings sits UNDER the two panels it opens, so closing either of them
+     lands back on it rather than dismissing both */
+  #settingspanel{z-index:65} #shoppanel{z-index:68}
   #spinpanel{z-index:70} #infopanel{z-index:80}
   /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
   .overlay[hidden]{display:none}
@@ -253,6 +374,33 @@
      override silently does nothing - which is exactly what happened to the
      info panel's width and left-alignment, and to the wheel's width. */
   .spincard{max-width:270px}
+  .setcard{max-width:320px}
+  .shopcard{max-width:330px;text-align:left}
+  .shopcard .big,.shopcard .sub{text-align:center}
+  .shopcard .sub{margin-bottom:10px}
+  .coinamt{color:#ffd479;font-weight:800;white-space:nowrap}
+  .coinamt .coin{margin-right:4px}
+  .shopnote{color:var(--muted);font-size:11.5px;line-height:1.45;margin:0 0 9px}
+  .shopcard h4{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.07em;
+               text-transform:uppercase;color:var(--accent);opacity:.9}
+  .shopcard h4:first-child{margin-top:0}
+  /* Three bundles across, each stating its goods over its price. Equal width
+     so the cheapest is no easier to hit than the dearest. */
+  .buyrow{display:flex;gap:7px;margin:0 0 4px}
+  .buybtn{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;
+          gap:3px;padding:9px 4px;border-radius:11px;
+          background:linear-gradient(180deg,#1b2140,#141833);
+          border:1px solid var(--edge);color:var(--ink);font:inherit;cursor:pointer}
+  .buybtn:hover:not(:disabled){border-color:#4a568f}
+  .buybtn b{display:flex;align-items:center;gap:5px;font-size:14px;font-weight:800}
+  .buybtn .price{display:flex;align-items:center;gap:4px;
+                 color:#ffd479;font-size:11.5px;font-weight:700}
+  .buybtn:disabled{opacity:.34;cursor:not-allowed}
+
+  /* the win card's takings */
+  .payout{display:flex;align-items:center;justify-content:center;gap:6px;
+          margin:-4px 0 12px;font-size:13px;color:#c3cbee}
+  .payout b{color:#ffd479;font-weight:800}
   .infocard{max-width:340px;text-align:left}
   .infocard .big{text-align:center}
   /* The ad may look like the recommended action, but declining it must be
@@ -260,6 +408,34 @@
   #btn-nb-close{flex:1}
   .win .big{color:#7dffb4;text-shadow:0 0 22px rgba(47,217,122,.55)}
   .lose .big{color:#ff8792;text-shadow:0 0 22px rgba(255,77,94,.45)}
+
+  /* ============================================================
+     SETTINGS ROWS
+
+     Full-width cards, not a row of icons: each one is allowed to
+     say what it is and what state it is in. The state sits on
+     the right in its own column, so "Ready", "23h 41m", "On"
+     and "Off" all land in the same place down the stack and can
+     be read without reading the labels again.
+     ============================================================ */
+  .setrows{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px}
+  .setrow{display:flex;width:100%;align-items:center;gap:11px;text-align:left;
+          padding:11px 13px;border-radius:12px;
+          background:linear-gradient(180deg,#1b2140,#141833);
+          border:1px solid var(--edge);color:var(--ink);font:inherit;cursor:pointer}
+  .setrow:hover:not(:disabled){border-color:#4a568f}
+  .setlabel{flex:1 1 auto;min-width:0}
+  .setlabel b{display:block;font-size:13.5px;font-weight:700}
+  .setlabel .d{display:block;color:var(--muted);font-size:11.5px;line-height:1.35}
+  .setrow em{flex:none;font-style:normal;font-size:11.5px;font-weight:700;
+             color:var(--muted);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .seticon{width:17px;height:17px;flex:none;display:grid;place-items:center;
+           font-size:13px;font-weight:800;font-style:normal;color:#c9d2f5}
+  /* the wheel row when a spin is waiting: the same gold the gear is wearing */
+  .setrow.ready{border-color:#7a6320;
+                background:linear-gradient(180deg,#2a2416,#181630)}
+  .setrow.ready em{color:#ffd479}
+  .setrow.off .seticon{opacity:.45}
 
   button{font:inherit;font-weight:650;color:var(--ink);
          background:linear-gradient(180deg,#2a3157,#1c2140);
@@ -282,8 +458,15 @@
   .primary:active:not(:disabled){box-shadow:inset 0 2px 6px rgba(0,20,60,.45),
                       0 0 14px -4px rgba(90,150,255,.6)}
   @media (prefers-reduced-motion:reduce){ button:active:not(:disabled){transform:none} }
-  .controls{display:flex;gap:8px}
-  .controls .primary{flex:1.6}
+  /* One decision, two repairs. Drop takes every pixel the other two do not
+     need, and is tall enough to be the obvious thing to hit; Undo and Clear
+     shrink to their own labels. */
+  .controls{display:flex;gap:7px;align-items:stretch}
+  .controls .primary{flex:1 1 auto;min-width:0;padding:14px 12px;
+                     font-size:16px;font-weight:800;letter-spacing:.01em;
+                     border-radius:13px}
+  .controls .mini{flex:0 0 auto;padding:9px 13px;font-size:12.5px;font-weight:650;
+                  border-radius:11px;color:#c3cbee}
 
   /* swatches, shared by the info panel's entries */
   .sw{width:15px;height:15px;flex:none;display:block}
@@ -325,7 +508,10 @@
   button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
                box-shadow:none;cursor:pointer;font-size:15.5px;font-weight:800;color:var(--ink)}
   button.title:active:not(:disabled){transform:none;box-shadow:none;filter:brightness(1.3)}
-  button.title:after{content:' \25BE';color:var(--muted);font-size:12px}
+  /* the caret marks the NAME as the thing you can tap to change, so it rides
+     the name's line - hung off the button it dropped to a row of its own */
+  button.title .lvname:after{content:' \25BE';color:var(--muted);font-size:12px;
+                             font-weight:600}
   .selcard{max-width:330px}
   .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;
         align-content:start}
@@ -353,22 +539,50 @@
         justify-content:center;align-items:flex-start}
 
   /* ============================================================
-     ENGINE PICKER (info panel)
+     SIZE OVERRIDES - LAST, ON PURPOSE
 
-     Two full-width cards rather than a toggle: the choice changes
-     how the whole game behaves, so each option states what it is
-     instead of relying on a label the player has to decode.
+     These two blocks are no more specific than the base rules
+     they override (`.hud`, `.hint`, `.iconbtn`, `button`), so
+     they only win by coming after them. They used to sit up by
+     the .app rule, above almost everything they name, and most
+     of what they declared was silently dead: the short-window
+     block was meant to shrink the HUD and the buttons and never
+     shrank either, which is a large part of why a 844x390
+     window had so little board left.
+
+     Anything added here has to STAY here, below the last base
+     rule in the file.
      ============================================================ */
-  .engines{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px}
-  .enginebtn{display:block;width:100%;text-align:left;
-             padding:10px 12px;border-radius:10px;
-             background:linear-gradient(180deg,#1b2140,#141833);
-             border:1px solid var(--edge);color:var(--ink);
-             font:inherit;cursor:pointer}
-  .enginebtn:hover{border-color:#4a568f}
-  .enginebtn.on{border-color:var(--accent);
-                box-shadow:0 0 0 1px var(--accent) inset,
-                           0 0 18px -6px var(--glow-accent)}
-  .enginebtn b{display:block;font-size:13.5px;font-weight:700;margin-bottom:3px}
-  .enginebtn.on b{color:var(--accent)}
-  .enginebtn .d{display:block;color:var(--muted);font-size:12px;line-height:1.4}
+  /* A desktop window has height to spare and the board is the only thing in
+     it that can use it: every pixel the chrome gives back becomes 1px of
+     board height and 0.6px of board width. */
+  @media (min-height:720px){
+    .app{gap:7px}
+    .hint{min-height:2.1em}
+  }
+  /* The vertical margin is only worth trimming where it is decoration. On a
+     phone it is the notch-and-corner margin the portal gates on, so this is
+     held to windows that are tall AND wide - a desktop, in other words. The
+     safe-area inset is still added on top of whatever is left. */
+  @media (min-height:720px) and (min-width:700px){
+    body{padding-top:calc(6px + env(safe-area-inset-top));
+         padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+  }
+
+  /* Landscape phones and small windows - CrazyGames requires legibility down
+     to 800x450, where the board is squeezed by the chrome above and below it.
+     Give the chrome less room so the board keeps more. */
+  @media (max-height:520px){
+    .app{gap:6px}
+    .hud{min-height:28px}
+    .controls .primary{padding:8px 10px;font-size:13.5px}
+    .controls .mini{padding:6px 9px;font-size:12px}
+    /* two lines of title is a luxury at this height: the name and its number
+       go back on one line so the bar costs the board nothing */
+    .title{flex-direction:row;align-items:baseline;gap:6px}
+    .title .lvnum{font-size:11px}
+    .title .lvname{font-size:14.5px}
+    .flash{height:19px;line-height:15px;font-size:12px}
+    .flashrow{top:8px}
+    .iconbtn,.iconbtn.gear{width:27px;height:27px}
+  }

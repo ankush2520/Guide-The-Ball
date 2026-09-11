@@ -1,11 +1,11 @@
 /* ============================================================
    MATTER.JS ENGINE
 
-   A real rigid-body simulator behind the same interface as the
-   arcade one. Matter owns collision detection, contact
-   resolution, restitution and integration; this file's job is
-   to build a world from a Level, run it a frame at a time, and
-   layer the game's own mechanics (boosters, portals, wind, ice,
+   The game's simulator, behind the PhysicsEngine interface.
+   Matter owns collision detection, contact resolution,
+   restitution and integration; this file's job is to build a
+   world from a Level, run it a frame at a time, and layer the
+   game's own mechanics (boosters, portals, wind, ice,
    breakables, pickups) on top.
 
    WHAT IS AND IS NOT MATTER
@@ -18,7 +18,7 @@
 
    So a few guards are configurable, and default ON:
 
-     terminalVy  a downward clamp, matching the arcade feel
+     terminalVy  a downward clamp, so the fall stays readable
      speedCap    the tunnelling guard - the real reason it exists
      minBounce   stops a glancing hit killing the ball on a ramp
      jitter      keeps the seeded obstacle scatter, which is a
@@ -39,14 +39,14 @@ import { mulberry32, falses, closestOnSeg } from '../math';
 import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
   SPEED_CAP, PORTAL_CD, STAR_R, MAX_STEPS, REST_STEPS, REST_PX,
-  OB_JITTER, OB_MAX_DEV, W, H,
+  OB_JITTER, OB_MAX_DEV, H, BOARD,
 } from '../constants';
 
 const DELTA = 1000 / 60;
 
 /* Solved empirically, not guessed: Matter's per-step acceleration is
    gravity.y * gravity.scale * delta^2, so at a 1/60s delta this scale
-   reproduces the arcade GRAVITY of 0.375 px/step^2 exactly. */
+   reproduces the tuned GRAVITY of 0.375 px/step^2 exactly. */
 export const MATTER_GRAVITY_SCALE = 0.00135;
 
 export interface MatterConfig {
@@ -74,8 +74,8 @@ export const MATTER_TUNED: MatterConfig = {
   jitter: true,
 };
 
-/** Matter with nothing on top. Kept so the difference can be measured
-    rather than argued about - see tests/engines.test.mjs. */
+/** Matter with nothing on top. Kept so the cost of the guards can be
+    measured rather than argued about - window.__gtb.simulatePureMatter(). */
 export const MATTER_PURE: MatterConfig = {
   gravityScale: MATTER_GRAVITY_SCALE,
   restitution: RESTITUTION,
@@ -146,7 +146,7 @@ export class MatterBall implements BallState {
       Composite.add(this.engine.world, b);
     };
 
-    // level walls - real collidable geometry, exactly as the arcade engine has
+    // level walls - real collidable geometry, not just a bounds check
     lv.walls.forEach((s, i) => add(segmentBody(s, WALL_HT), 'wall', i));
     lv.obstacles.forEach((o, i) => add(circleBody(o, cfg.restitution), 'obstacle', i));
 
@@ -174,8 +174,8 @@ export class MatterBall implements BallState {
            way, so a flipped normal produces bounces that pass every sanity
            check while being nowhere near a true reflection.
 
-           Ball-minus-surface is unambiguous, and it is exactly how the arcade
-           engine derives the same normal. */
+           Ball-minus-surface is unambiguous, so that is what outwardNormal()
+           derives, for every body kind. */
         this.pending.push({ tag, nx: 0, ny: 0 });
       }
     });
@@ -208,8 +208,11 @@ export class MatterBall implements BallState {
     if (this.vy > this.vyMax) this.vyMax = this.vy;
   }
 
+  /* The only place the board's WIDTH reaches the simulation. There are no
+     side walls, so this is what makes leaving sideways a loss - and what
+     makes a wider board a more forgiving one rather than a different game. */
   isOutOfBounds(): boolean {
-    return this.x < -BALL_R || this.x > W + BALL_R ||
+    return this.x < BOARD.x0 - BALL_R || this.x > BOARD.x1 + BALL_R ||
            this.y < -BALL_R || this.y > H + BALL_R;
   }
 
@@ -252,9 +255,8 @@ export class MatterBall implements BallState {
   }
 }
 
-/* A segment becomes a rotated static rectangle of the same thickness the
-   arcade engine gives it, so ramps and walls are physically the same object
-   in both engines. */
+/* A segment becomes a rotated static rectangle of the thickness the renderer
+   draws it at (RAMP_HT / WALL_HT), so what the player sees is what collides. */
 function segmentBody(s: Segment, halfT: number): MBody {
   const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
   const len = Math.hypot(dx, dy) || 1;
@@ -268,13 +270,6 @@ function circleBody(o: Circle, restitution: number): MBody {
 }
 
 export class MatterEngine implements PhysicsEngine {
-  readonly id = 'matter' as const;
-  readonly label = 'Matter.js';
-  readonly blurb =
-    'A real rigid-body engine. Matter owns collision detection, contact ' +
-    'resolution and integration; gravity is calibrated to match the arcade ' +
-    'fall exactly. Trajectories differ, so level solutions differ.';
-
   constructor(readonly cfg: MatterConfig = MATTER_TUNED) {}
 
   createBall(lv: Level, seed: number, broken?: boolean[] | null): MatterBall {
@@ -331,8 +326,8 @@ export class MatterEngine implements PhysicsEngine {
          long as the shapes overlap, so a ball already travelling AWAY from a
          surface - pushed clear on an earlier frame, or resolved out of a deep
          penetration - keeps generating pairs. Those are grazes: no bounce, no
-         scatter, no shatter. The arcade engine draws the same line with its
-         `if (dot < 0)` guard. */
+         scatter, no shatter. Only an approaching contact - dot < 0 against
+         the outward normal - counts as a hit. */
       if (inX * n.x + inY * n.y >= 0) continue;
       if (c.tag.kind === 'wall' || c.tag.kind === 'ramp') {
         b.segHits++;
@@ -432,8 +427,7 @@ function syncRamps(b: MatterBall, ramps: readonly Segment[]): void {
 }
 
 /* The outward surface normal at a contact, from the ball's centre. Circles
-   give it directly; segments give it through the closest point on the line -
-   the same construction segmentBounce() uses in the arcade engine. */
+   give it directly; segments give it through the closest point on the line. */
 function outwardNormal(b: MatterBall, tag: BodyTag, lv: Level,
                        ramps: readonly Segment[]): { x: number; y: number } {
   let cx: number, cy: number;
@@ -474,9 +468,9 @@ function enforceMinBounce(b: MatterBall, nx: number, ny: number, floor: number):
 
    So the outgoing angle is built from the TRUE mirror of the incoming vector
    about the contact normal, jittered by up to OB_JITTER and then clamped to an
-   outward cone so the ball can never be sent back into what it just hit. That
-   is the same construction the arcade engine uses, which keeps the mechanic
-   identical in both engines even though everything around it differs.
+   outward cone so the ball can never be sent back into what it just hit. The
+   mechanic is therefore defined here, in game terms, rather than falling out
+   of whatever the rigid-body solver happened to resolve.
 
    Matter's own resolved velocity is used only for its MAGNITUDE - the engine
    still decides what the collision costs. */

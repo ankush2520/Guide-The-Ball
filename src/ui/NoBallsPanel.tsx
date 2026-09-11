@@ -1,20 +1,22 @@
 /* Running out is a real stop, so unlike a miss this one does get the
    full-screen treatment. */
-import { useGame } from '../core/GameContext';
-import { AD_REWARD } from '../managers/RewardManager';
+import { useGame, useGameVersion } from '../core/GameContext';
+import { AD_REWARD, BALL_PRICE } from '../managers/RewardManager';
 
-interface Props { onClose: () => void; onSpin: () => void; }
+interface Props { onClose: () => void; onSpin: () => void; onShop: () => void; }
 
-export function NoBallsPanel({ onClose, onSpin }: Props) {
+export function NoBallsPanel({ onClose, onSpin, onShop }: Props) {
   const { rewards } = useGame();
+  useGameVersion();          // the offer below is priced off a live wallet
+  const afford = Math.floor(rewards.coins / BALL_PRICE);
 
   return (
     <div className="overlay" id="noballs">
       <div className="card">
         <div className="big nb">Out of balls</div>
         <div className="sub">
-          Every drop costs one ball. Clear a level for the first time to earn
-          more, or spin the daily wheel.
+          Every drop costs one ball. Spend coins on more, clear a level to earn
+          coins, or spin the daily wheel.
         </div>
         {/* TODO: replace with the real rewarded-ad call before submission -
             CrazyGames is window.CrazyGames.SDK.ad.requestAd('rewarded') and
@@ -29,7 +31,14 @@ export function NoBallsPanel({ onClose, onSpin }: Props) {
         {rewards.spinReady() && (
           <div className="row"><button id="btn-nb-spin" onClick={onSpin}>Spin the daily wheel</button></div>
         )}
-        <div className="row"><button id="btn-buy" disabled>Buy Balls &mdash; Coming Soon</button></div>
+        {/* The shop is the FIRST way out now that coins exist, so it is worth
+            saying up front how many balls the player can already afford. */}
+        <div className="row">
+          <button id="btn-buy" disabled={afford < 1} onClick={onShop}>
+            {afford < 1 ? `Buy Balls — need ${BALL_PRICE} coins`
+                        : `Buy Balls — ${rewards.coins} coins buys ${afford}`}
+          </button>
+        </div>
         {/* Full peer of the other two, deliberately. CrazyGames prohibits
             buttons sized to encourage ads, and a glowing ad button over a
             bare text link is exactly that shape. */}

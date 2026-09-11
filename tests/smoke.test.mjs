@@ -65,10 +65,14 @@ const settled = await page.evaluate(() => document.querySelector('.hint').textCo
 chk(!/Watching/.test(settled), 'the run reached an outcome', settled.trim());
 
 /* the panels open */
-await page.click('.iconbtn[aria-label="Info"]');
+await page.click('.iconbtn[aria-label="Settings"]');
+await page.waitForSelector('.setcard');
+chk(await page.isVisible('.setcard'), 'the settings panel opens');
+await page.click('#btn-info');
 await page.waitForSelector('.infocard');
-chk(await page.isVisible('.infocard'), 'the info panel opens');
-await page.click('.infocard button.primary');
+chk(await page.isVisible('.infocard'), 'and the info panel opens from it');
+await page.click('#btn-info-close');
+await page.click('#btn-settings-close');
 
 await page.click('.title');
 await page.waitForSelector('.selcard');

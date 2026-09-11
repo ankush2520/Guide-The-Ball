@@ -10,7 +10,8 @@
    a pre-sorted list and calls draw(), so adding a mechanic never
    touches the render path.
    ============================================================ */
-import { W, H, BALL_R, RAMP_HT, STEP_MS_DEFAULT } from './constants';
+import { H, BALL_R, RAMP_HT, STEP_MS_DEFAULT } from './constants';
+import { BOARD } from '../physics/constants';
 import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
@@ -64,6 +65,9 @@ export class Renderer {
   private backdrop = new Backdrop();
   private scale = 1;
   private builtFor: Country | null = null;
+  /** The board width the current surface was sized for - a profile change
+      has to rebuild even when the pixel width happens to land the same. */
+  private builtPad = -1;
 
   readonly trail = new Trail();
   readonly particles = new ParticleSystem(STEP_MS_DEFAULT);
@@ -74,9 +78,9 @@ export class Renderer {
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
-    // give the element the right 3:5 intrinsic ratio before the first measure,
+    // give the element the right intrinsic ratio before the first measure,
     // otherwise it lays out at the 300x150 canvas default for one frame
-    canvas.width = W; canvas.height = H;
+    canvas.width = BOARD.w; canvas.height = H;
   }
 
   /* The board is only ever ~370 CSS px wide on a phone. Rendering it at
@@ -85,14 +89,19 @@ export class Renderer {
      every frame, which is exactly what made drawing a ramp stutter. Size the
      surface to what is actually on screen instead, capped at 2x. */
   resize(country: Country): void {
+    const bw = BOARD.w;
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, MAX_SCALE));
-    const cssW = this.canvas.getBoundingClientRect().width || W;
-    const px = Math.round(Math.min(Math.max(cssW * dpr, cssW), W * MAX_SCALE));
-    if (px !== this.canvas.width) {
+    const cssW = this.canvas.getBoundingClientRect().width || bw;
+    const px = Math.round(Math.min(Math.max(cssW * dpr, cssW), bw * MAX_SCALE));
+    if (px !== this.canvas.width || BOARD.pad !== this.builtPad) {
       this.canvas.width = px;
-      this.canvas.height = Math.round(px * H / W);
-      this.scale = this.canvas.width / W;
-      this.ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+      this.canvas.height = Math.round(px * H / bw);
+      this.scale = this.canvas.width / bw;
+      /* The translate is what lets everything else keep drawing in DESIGN
+         coordinates: board x0 (which is -pad, not 0) lands on canvas 0, so a
+         level authored at x=140 paints at x=140 on a phone and on a tablet. */
+      this.ctx.setTransform(this.scale, 0, 0, this.scale, this.scale * BOARD.pad, 0);
+      this.builtPad = BOARD.pad;
       this.builtFor = null;
     }
     if (this.builtFor !== country) {
@@ -108,7 +117,7 @@ export class Renderer {
     const ctx = this.ctx;
     this.resize(s.country);
 
-    ctx.drawImage(this.backdrop.image, 0, 0, W, H);
+    ctx.drawImage(this.backdrop.image, BOARD.x0, 0, BOARD.w, H);
     drawStarfield(ctx, s.clock);
 
     const g = { ctx, clock: s.clock, broken: s.broken, got: s.got };

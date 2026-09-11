@@ -9,12 +9,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-all.mjs",
-    "test:parity": "node tests/parity.test.mjs",
     "gen": "node tools/genlevels.mjs",
     "test:mech": "node tests/mechanics.mjs",
+    "test:board": "node tests/board.test.mjs",
     "test:ui": "node tests/play.test.mjs",
-    "test:smoke": "node tests/smoke.test.mjs",
-    "test:engines": "node tests/engines.test.mjs"
+    "test:smoke": "node tests/smoke.test.mjs"
   },
   "devDependencies": {
     "@types/matter-js": "^0.20.2",
@@ -30,5 +29,5 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
-  "description": "Hyper-casual web game. React + TypeScript + Vite, with a hand-written deterministic physics engine (see README: Physics)."
+  "description": "Hyper-casual web game. React + TypeScript + Vite, with Matter.js physics behind a pure, deterministic simulation seam (see README: Physics)."
 }

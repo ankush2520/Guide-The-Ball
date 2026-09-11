@@ -7,13 +7,13 @@
    All hit-testing is done in BOARD coordinates, so a grab radius
    means the same thing whatever size the canvas is displayed at.
    ============================================================ */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
-import { W, H, RAMP_HT } from '../physics/constants';
+import { H, RAMP_HT, BOARD } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
 import { DEL_GRAB, PICK_PAD } from '../managers/LevelManager';
 
-export function GameCanvas() {
+export function GameCanvas({ children }: { children?: ReactNode }) {
   const { canvas, controller, levels } = useGame();
   const host = useRef<HTMLDivElement>(null);
   useGameVersion();                       // re-render for the Skip button
@@ -25,16 +25,51 @@ export function GameCanvas() {
     return () => { controller.stop(); canvas.remove(); };
   }, [canvas, controller]);
 
-  /* The board is height-driven, so it has to repaint on any resize. */
+  /* ============================================================
+     SIZING THE BOARD
+
+     CSS cannot do this one. The board must be the LARGER of the
+     two fits - by width or by height, whichever runs out first -
+     and `aspect-ratio` only solves that when the constrained
+     axis is the automatic one. Written either way round, one of
+     the two cases silently stretched the canvas instead: a 3:5
+     board was rendering at 0.543 on every phone.
+
+     So the slot takes the leftover space, and the box is
+     computed here from BOARD.w / H - the same numbers the
+     renderer draws with, so the canvas and its frame cannot
+     disagree about the shape. The chrome above and below then
+     matches the result through --board-w.
+
+     Observing the SLOT, not the stage: the slot's size comes
+     from the column and never from its child, so writing the
+     stage's size back cannot feed into the measurement.
+     ============================================================ */
   useEffect(() => {
-    const onResize = () => controller.notifyRampsChanged();
-    window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
-    const ro = window.ResizeObserver ? new ResizeObserver(onResize) : null;
-    if (ro && host.current) ro.observe(host.current);
+    const fit = () => {
+      const stage = host.current, slot = stage?.parentElement;
+      if (stage && slot) {
+        const r = slot.getBoundingClientRect();
+        const ratio = BOARD.w / H;
+        // -2 for the stage's 1px border, which sits outside the board itself
+        const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2);
+        const w = Math.min(avW, avH * ratio);
+        if (w > 0) {
+          stage.style.width = `${Math.round(w)}px`;
+          stage.style.height = `${Math.round(w / ratio)}px`;
+          slot.parentElement?.style.setProperty('--board-w', `${Math.round(w)}px`);
+        }
+      }
+      controller.notifyRampsChanged();
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', fit);
+    const ro = window.ResizeObserver ? new ResizeObserver(fit) : null;
+    if (ro && host.current?.parentElement) ro.observe(host.current.parentElement);
     return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
+      window.removeEventListener('resize', fit);
+      window.removeEventListener('orientationchange', fit);
       ro?.disconnect();
     };
   }, [controller]);
@@ -58,10 +93,13 @@ export function GameCanvas() {
     };
   }, [canvas, controller]);
 
+  /* The canvas spans the BOARD, which on a tablet reaches past the design box
+     on both sides, so a pointer at the very left edge is x0 (negative) rather
+     than 0. Everything downstream stays in design coordinates. */
   const toBoard = (e: React.PointerEvent) => {
     const r = canvas.getBoundingClientRect();
     return {
-      x: clamp((e.clientX - r.left) * (W / r.width), 0, W),
+      x: clamp(BOARD.x0 + (e.clientX - r.left) * (BOARD.w / r.width), BOARD.x0, BOARD.x1),
       y: clamp((e.clientY - r.top) * (H / r.height), 0, H),
     };
   };
@@ -139,6 +177,7 @@ export function GameCanvas() {
   const step = controller.tutorialStep();
 
   return (
+    <div className="board-slot">
     <div className="stage" ref={host}
          onPointerDown={onPointerDown}
          onPointerMove={onPointerMove}
@@ -157,6 +196,10 @@ export function GameCanvas() {
           Skip
         </button>
       )}
+      {/* board-level chrome: the flash. Out of flow and pointer-transparent,
+          so it can neither move the board nor swallow a drag across it. */}
+      {children}
+    </div>
     </div>
   );
 }

@@ -17,7 +17,7 @@ import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
-import { MIN_RAMP, MAX_RAMP, RAMP_HT, W, H } from '../physics/constants';
+import { MIN_RAMP, MAX_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
 
 /** How close a finger has to be to grab a ramp or one of its controls.
     Board coordinates throughout, so a grab radius means the same thing
@@ -61,9 +61,22 @@ export class LevelManager {
   /** The player's ramps, as the physics wants them: plain segments. */
   get rampSegments(): readonly Segment[] { return this.ramps; }
   get rampEntities(): Ramp[] { return this.ramps.map((s, i) => EntityFactory.createRamp(s, i)); }
+  /* Spare ramps the player has spent ON THIS LEVEL, on top of what the level
+     hands them. Reset by setLevel: a spare is bought into a board, not into
+     the save, so navigating away does not carry it along.
+
+     Kept separate from maxBlocks rather than added to it, because the star
+     rating is judged against the level's DESIGNED budget - see starsFor. If
+     spares inflated that number, fifteen coins would buy a third star. */
+  extraBudget = 0;
+
   get rampsUsed(): number { return this.ramps.length; }
-  get rampsLeft(): number { return this.level.maxBlocks - this.ramps.length; }
-  get canPlaceRamp(): boolean { return this.ramps.length < this.level.maxBlocks; }
+  /** The level's own budget. What the stars are measured against. */
+  get levelBudget(): number { return this.level.maxBlocks; }
+  /** The budget actually in force, spares included. */
+  get budget(): number { return this.level.maxBlocks + this.extraBudget; }
+  get rampsLeft(): number { return this.budget - this.ramps.length; }
+  get canPlaceRamp(): boolean { return this.ramps.length < this.budget; }
 
   /* ---------------- level changes ---------------- */
 
@@ -77,6 +90,7 @@ export class LevelManager {
 
   private rebuild(): void {
     this.ramps = [];
+    this.extraBudget = 0;
     this.sessionBroken = falses(this.level.breakables.length);
     this.cachedEntities = EntityFactory.createFromLevel(this.level);
   }
@@ -128,7 +142,7 @@ export class LevelManager {
     if (len < MIN_RAMP) {
       // too close to the anchor: push it back out along the same heading
       const a = len > 1e-6 ? Math.atan2(dy, dx) : -Math.PI / 2;
-      q = { x: clamp(ax + Math.cos(a) * MIN_RAMP, 0, W),
+      q = { x: clamp(ax + Math.cos(a) * MIN_RAMP, BOARD.x0, BOARD.x1),
             y: clamp(ay + Math.sin(a) * MIN_RAMP, 0, H) };
     }
     if (which === 1) { s.x1 = q.x; s.y1 = q.y; } else { s.x2 = q.x; s.y2 = q.y; }
@@ -140,9 +154,17 @@ export class LevelManager {
     if (!s) return;
     const loX = Math.min(s.x1, s.x2), hiX = Math.max(s.x1, s.x2);
     const loY = Math.min(s.y1, s.y2), hiY = Math.max(s.y1, s.y2);
-    dx = clamp(dx, -loX, W - hiX);
+    dx = clamp(dx, BOARD.x0 - loX, BOARD.x1 - hiX);
     dy = clamp(dy, -loY, H - hiY);
     s.x1 += dx; s.x2 += dx; s.y1 += dy; s.y2 += dy;
+  }
+
+  /* The board can narrow under the player - a desktop window dragged in past
+     the tablet threshold - and a ramp drawn out in the old margins would be
+     left hanging off the edge. Pulling it in is a translation, so its length
+     and angle survive: the player's work is moved, not discarded. */
+  reclampRamps(): void {
+    for (let i = 0; i < this.ramps.length; i++) this.moveRampBy(i, 0, 0);
   }
 
   /** Where the × sits: off the ramp's midpoint, along its normal, flipped to
@@ -153,10 +175,12 @@ export class LevelManager {
     const m = Math.hypot(dx, dy) || 1;
     const nx = -dy / m, ny = dx / m;
     let bx = mx + nx * DEL_OFF, by = my + ny * DEL_OFF;
-    if (bx < DEL_R || bx > W - DEL_R || by < DEL_R || by > H - DEL_R) {
+    if (bx < BOARD.x0 + DEL_R || bx > BOARD.x1 - DEL_R ||
+        by < DEL_R || by > H - DEL_R) {
       bx = mx - nx * DEL_OFF; by = my - ny * DEL_OFF;
     }
-    return { x: clamp(bx, DEL_R, W - DEL_R), y: clamp(by, DEL_R, H - DEL_R) };
+    return { x: clamp(bx, BOARD.x0 + DEL_R, BOARD.x1 - DEL_R),
+             y: clamp(by, DEL_R, H - DEL_R) };
   }
 
   /* Short ramps cannot afford a full-size grab circle at each end or the two

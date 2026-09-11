@@ -16,15 +16,34 @@
    and a half-built controller that components have to null-check
    is worse than owning one detached node.
    ============================================================ */
-import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { createGameBus, type GameBus } from './events';
 import { LevelManager } from '../managers/LevelManager';
 import { RewardManager } from '../managers/RewardManager';
 import { GameController } from '../managers/GameController';
 import { Renderer } from '../render/Renderer';
 import { LEVELS } from '../levels';
-import { createEngine, preferredEngineId } from '../physics/engines';
+import { createEngine } from '../physics/engines';
+import { setBoardPad, PAD_TABLET } from '../physics/constants';
 import { installGameHook } from './debugHook';
+
+/* ============================================================
+   BOARD PROFILE
+
+   A tablet and a desktop get a 3:4 board; a phone keeps the 3:5
+   one the levels are designed in. The test is the viewport's
+   SHORTER side, which is what makes it survive a rotation: an
+   iPad is over 640 both ways round and a phone is under it both
+   ways round, so neither ever changes shape mid-level. Only
+   dragging a desktop window across the threshold can do that.
+
+   The same query is in the stylesheet, on .stage's aspect-ratio.
+   They have to agree - the canvas is the board - so if one moves
+   the other moves with it.
+   ============================================================ */
+const TABLET = '(min-width: 640px) and (min-height: 640px)';
+
+const padFor = (wide: boolean) => (wide ? PAD_TABLET : 0);
 
 export interface GameServices {
   bus: GameBus;
@@ -39,6 +58,10 @@ const Ctx = createContext<GameServices | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const services = useMemo<GameServices>(() => {
+    /* Before ANY of it: the renderer sizes its surface from the board and the
+       managers clamp ramps to it, so the profile has to be settled first. */
+    setBoardPad(padFor(typeof matchMedia === 'function' && matchMedia(TABLET).matches));
+
     const bus = createGameBus();
     const levels = new LevelManager(bus);
     const rewards = new RewardManager(bus, LEVELS.length);
@@ -48,10 +71,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     canvas.setAttribute('aria-label', 'Game board');
 
     const renderer = new Renderer(canvas);
-    /* Which simulator runs the game. ?engine=… wins, then the last choice,
-       then the default - see src/physics/engines.ts. */
     const controller = new GameController(bus, levels, rewards, renderer,
-                                          createEngine(preferredEngineId()));
+                                          createEngine());
     // resume where the player left off, exactly as the original did
     controller.setLevel(rewards.highest);
 
@@ -59,6 +80,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     installGameHook(services);      // the Playwright suite and the solver sweep
     return services;
   }, []);
+
+  /* Dragging a desktop window across the threshold reshapes the board under
+     the player. Nothing in flight breaks - there are no side walls, so a ball
+     mid-drop is at a valid position on either board - but ramps drawn out in
+     a tablet's margins would be left hanging off a phone-sized one, so they
+     are pulled back in. */
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const mq = matchMedia(TABLET);
+    const onChange = () => {
+      setBoardPad(padFor(mq.matches));
+      services.levels.reclampRamps();
+      services.controller.renderer.invalidateBackdrop();
+      services.controller.notifyRampsChanged();
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [services]);
 
   return <Ctx.Provider value={services}>{children}</Ctx.Provider>;
 }

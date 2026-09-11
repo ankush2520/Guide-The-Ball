@@ -13,16 +13,14 @@
    ============================================================ */
 import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
-import { Ball } from '../physics/Ball';
-import { stepBall, simulate } from '../physics/simulate';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
-import type { EngineId } from '../physics/PhysicsEngine';
 import * as C from '../physics/constants';
 import { CAPTURE_MS } from '../render/constants';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
+         STARTING_COINS, BALL_PRICE, RAMP_PRICE, COIN_CLEAR, coinsFor,
          SPIN_PRIZES, SPIN_COOLDOWN_MS, SPIN_MS } from '../managers/RewardManager';
-import { BALLS_KEY, SPIN_KEY } from '../managers/ProgressStore';
+import { BALLS_KEY, SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
 import { STAR_N } from '../render/Starfield';
 import { Ease } from '../render/Tweens';
 import { Sound } from '../audio/Sound';
@@ -39,6 +37,16 @@ const physics = {
   cityOf,
   cityIndex,
   buildWalls,
+  /* The live board, which is NOT CONSTS.W: that is the design box every level
+     is authored in and every proof was made against, and it never changes.
+     This is the box the player actually gets, which is wider on a tablet. */
+  board: () => ({ pad: C.BOARD.pad, w: C.BOARD.w, x0: C.BOARD.x0, x1: C.BOARD.x1 }),
+
+  /* Headlessly switch profiles. The game sets this from the viewport; the
+     harness sets it by hand, which is what lets tests/board.test.mjs prove
+     the two boards agree about every solution. */
+  setBoardPad: (pad: number) => C.setBoardPad(pad),
+
   CONSTS: {
     W: C.W, H: C.H, BALL_R: C.BALL_R,
     GRAVITY: C.GRAVITY, TERMINAL_VY: C.TERMINAL_VY, MAX_VX: C.MAX_VX,
@@ -56,21 +64,19 @@ const physics = {
   },
   BALLS: { key: BALLS_KEY, start: STARTING_BALLS,
            adReward: AD_REWARD, clearBonus: CLEAR_BONUS.slice() },
+  WALLET: { key: WALLET_KEY, startCoins: STARTING_COINS,
+            ballPrice: BALL_PRICE, rampPrice: RAMP_PRICE,
+            clearTable: COIN_CLEAR.map(r => r.slice()) },
   SPIN: { key: SPIN_KEY, cooldownMs: SPIN_COOLDOWN_MS, animMs: SPIN_MS,
-          prizes: SPIN_PRIZES.map(p => ({ balls: p.balls, w: p.w })) },
+          prizes: SPIN_PRIZES.map(p => ({ kind: p.kind, n: p.n, w: p.w })) },
   starsFor,
+  coinsFor,
 
   /* The legacy argument order, kept exactly: (ramps, seed, levelIdx, broken).
      levelIdx is optional, as it was - the tuning rig calls simulate(ramps,
      seed) and expects the current level, which is level 1 headlessly. */
   simulate(ramps: Segment[], seed: number, levelIdx = 0, broken?: boolean[] | null) {
-    return simulate(LEVELS[levelIdx], ramps, seed, broken);
-  },
-
-  /** Run a drop through a NAMED engine, for the engine comparison harness. */
-  simulateWith(engineId: EngineId, ramps: Segment[], seed: number,
-               levelIdx = 0, broken?: boolean[] | null) {
-    return createEngine(engineId).simulate(LEVELS[levelIdx], ramps, seed, broken);
+    return createEngine().simulate(LEVELS[levelIdx], ramps, seed, broken);
   },
 
   /** Matter with every guard removed - see MATTER_PURE. */
@@ -94,15 +100,18 @@ const physics = {
      ball happened to land. */
   trace(ramps: Segment[], seed: number, levelIdx: number, broken?: boolean[] | null) {
     const lv: Level = LEVELS[levelIdx];
-    const b = new Ball(lv, seed >>> 0, broken);
+    const engine = createEngine();
+    const b = engine.createBall(lv, seed >>> 0, broken);
     const out = [];
     while (!b.result && out.length < 900) {
-      stepBall(b, lv, ramps);
+      engine.step(b, lv, ramps);
       out.push({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, sp: Math.hypot(b.vx, b.vy),
                  boosts: b.boosts, teleports: b.teleports, stars: b.stars,
                  broken: b.broken.filter(Boolean).length });
     }
-    return { result: b.result, steps: b.steps, samples: out };
+    const traced = { result: b.result, steps: b.steps, samples: out };
+    engine.dispose?.(b);   // Matter holds a world per ball
+    return traced;
   },
 };
 
@@ -118,15 +127,12 @@ export function installGameHook(s: GameServices): void {
   w.__gtb = {
     ...physics,
 
-    /* With a game running, `simulate` means "what will THIS game do" - so it
-       runs the ACTIVE engine, not the arcade one. A solution found here has to
-       be a solution the live drop will reproduce, or every headless probe in
-       the suite is answering a different question from the one on screen.
-
-       The physics-only hook (used by the generator and the mechanic tests)
-       keeps the arcade simulator, which is what those verify against. */
+    /* With a game running, `simulate` still means "what will THIS game do":
+       same engine, but defaulting to the level on screen. A solution found
+       here has to be one the live drop reproduces, or every headless probe in
+       the suite is answering a different question from the one on screen. */
     simulate(ramps: Segment[], seed: number, levelIdx?: number, broken?: boolean[] | null) {
-      return createEngine(c.engineId)
+      return createEngine()
         .simulate(LEVELS[levelIdx ?? levels.levelIndex], ramps, seed, broken);
     },
 
@@ -138,6 +144,8 @@ export function installGameHook(s: GameServices): void {
         highest: rewards.highest,
         ramps: levels.rampSegments.map(r => ({ ...r })),
         maxBlocks: lv.maxBlocks, rampsLeft: levels.rampsLeft,
+        budget: levels.budget, extraBudget: levels.extraBudget,
+        coins: rewards.coins, spareRamps: rewards.extraRamps,
         walls: lv.walls.length, targetType: lv.targetType, target: lv.target,
         capturing: !!c.capture, selected: c.selected,
         dragging: c.dragging ? c.dragging.mode : null,
@@ -148,6 +156,7 @@ export function installGameHook(s: GameServices): void {
                                     ?.classList.contains('tut-pulse'),
                     handT: c.tutHand.t },
         infoOpen: !!document.getElementById('infopanel'),
+        settingsOpen: !!document.getElementById('settingspanel'),
         infoText: document.getElementById('info-body')?.textContent ?? '',
         juice: { squash: c.squash.amt, tweens: c.tweens.count,
                  trail: c.renderer.trail.length, stars: STAR_N,
@@ -175,29 +184,43 @@ export function installGameHook(s: GameServices): void {
 
     audioMix: () => Sound.debugMix(),
 
-    engine: () => c.engineId,
-    setEngine: (id: EngineId) => c.setEngine(id),
-
     balls: () => rewards.balls,
     setBalls: (n: number) => rewards.setBallsForTest(n),
+    coins: () => rewards.coins,
+    spareRamps: () => rewards.extraRamps,
+    setWallet: (coins: number, ramps: number) => rewards.setWalletForTest(coins, ramps),
+    buyBalls: (n: number) => rewards.buyBalls(n),
+    buyRamps: (n: number) => rewards.buyRamps(n),
+    useExtraRamp: () => c.useExtraRamp(),
+    budget: () => ({ level: levels.levelBudget, inForce: levels.budget,
+                     left: levels.rampsLeft, extra: levels.extraBudget }),
     clearBonus: (id: number) => rewards.clearBonus(id),
     cleared: () => ({ ...rewards.clearedLevels }),
     stars: () => ({ ...rewards.bestStars }),
     pickups: () => ({ ...rewards.bestPickups }),
     tries: () => c.tries,
     pickPrize: () => rewards.pickPrize(),
+    /* btnReady/btnLocked read the GEAR, not the wheel's own button: the wheel
+       moved into the settings panel, so its button only exists while that
+       panel is open, and the thing the player can actually see from the
+       board is the gear wearing the wheel's state. cdText still comes from
+       the wheel's row, which is where the countdown is now written. */
     spinInfo: () => {
       const el = (id: string) => document.getElementById(id);
       const cd = el('spin-cd');
+      const gear = el('btn-settings');
       return { last: rewards.spinLast, ready: rewards.spinReady(),
                spinning: rewards.spinning,
                nextMs: rewards.msToSpin(),
                deg: rewards.wheelDeg,
-               shown: rewards.spinShown,
-               btnReady: !!el('btn-spin')?.classList.contains('ready'),
+               shown: rewards.spinShown ? rewards.spinShown.n : 0,
+               shownKind: rewards.spinShown ? rewards.spinShown.kind : null,
+               btnReady: !!gear?.classList.contains('ready'),
                panelOpen: !!el('spinpanel'),
+               settingsOpen: !!el('settingspanel'),
                goDisabled: !!(el('btn-spin-go') as HTMLButtonElement | null)?.disabled,
-               btnLocked: !!el('btn-spin')?.classList.contains('locked'),
+               btnLocked: !!gear?.classList.contains('locked'),
+               badge: !!gear?.querySelector('.dot'),
                cdText: cd ? cd.textContent ?? '' : '',
                sub: el('spin-sub')?.textContent ?? '' };
     },

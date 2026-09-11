@@ -7,7 +7,7 @@
    as a single image each frame - the vignette alone would be an
    expensive full-board gradient fill if it were done live.
    ============================================================ */
-import { W, H } from '../physics/constants';
+import { H, BOARD } from '../physics/constants';
 import type { Country } from '../levels/types';
 
 export class Backdrop {
@@ -16,8 +16,12 @@ export class Backdrop {
 
   get image(): HTMLCanvasElement { return this.canvas; }
 
+  /* Painted in BOARD-width coordinates starting at 0, not in the design
+     box's - the renderer blits it across the board's full x range, margins
+     included, so the sky and the vignette have to reach the real edges. */
   /** Repaint for a country at a given device scale. */
   build(country: Country, width: number, height: number, scale: number): void {
+    const W = BOARD.w;
     this.canvas.width = width;
     this.canvas.height = height;
     const c = this.ctx;

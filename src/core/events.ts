@@ -37,7 +37,9 @@ export interface GameEvents extends Record<string, unknown> {
   /* ---- economy ---- */
   'balls:changed':   { balls: number; delta: number; reason: BallChangeReason };
   'balls:empty':     Record<string, never>;
-  'spin:won':        { prizeIndex: number; balls: number };
+  'coins:changed':   { coins: number; delta: number; reason: CoinChangeReason };
+  'ramps:changed':   { ramps: number; delta: number; reason: RampChangeReason };
+  'spin:won':        { prizeIndex: number; kind: PrizeKind; n: number };
 
   /* ---- ui / teaching ---- */
   'phase:changed':   { phase: Phase };
@@ -46,7 +48,12 @@ export interface GameEvents extends Record<string, unknown> {
   'tip:shown':       { key: string; text: string };
 }
 
-export type BallChangeReason = 'drop' | 'clear-bonus' | 'ad' | 'spin' | 'grant' | 'load';
+export type BallChangeReason = 'drop' | 'clear-bonus' | 'ad' | 'spin' | 'grant' | 'load' | 'buy';
+export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy';
+export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use';
+
+/** What a wheel wedge pays. Coins buy the other two - see RewardManager. */
+export type PrizeKind = 'coins' | 'balls' | 'ramps';
 
 /** 'plan' -> 'drop' -> ('capture' -> 'over') | back to 'plan' on a miss. */
 export type Phase = 'plan' | 'drop' | 'capture' | 'over';

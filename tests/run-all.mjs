@@ -3,8 +3,8 @@
 
    Two kinds of test, and they need different things:
 
-   - parity, mechanics and engines run HEADLESS against the
-     bundled physics (tools/harness.mjs): no build, no server.
+   - mechanics and board run HEADLESS against the bundled
+     physics (tools/harness.mjs): no build, no server.
    - play + smoke drive the real app, so they need a production
      build being served. This boots `vite preview` for them and
      shuts it down afterwards.
@@ -34,9 +34,8 @@ const waitFor = async (url, ms = 20000) => {
 let server = null;
 try {
   /* ---- server-free: the simulator itself ---- */
-  await run('node', ['tests/parity.test.mjs']);
   await run('node', ['tests/mechanics.mjs']);
-  await run('node', ['tests/engines.test.mjs']);
+  await run('node', ['tests/board.test.mjs']);
 
   /* ---- the real app ---- */
   console.log('\nbuilding for the UI tests…');
