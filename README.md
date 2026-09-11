@@ -359,6 +359,25 @@ already-cleared level pays a quarter (minimum 2), which keeps a board you
 enjoy worth returning to while leaving farming level 1 far worse than playing
 on — 5 coins for a drop that cost a ball worth 2.
 
+### The reward flight
+
+Anything the game pays out flies from the panel that announced it into the
+counter that now holds it — off the win card, and off the wheel when a spin
+settles. Each currency flies **its own mark to its own counter**: gold to the
+coins, bronze to the balls, a blue bar to the ramps. A gold coin sailing into
+the ball tank would be saying the wrong thing.
+
+Three marks, one shared curve, no rotation, and a shrink into the counter at
+the end so each visibly *merges* with the label rather than stopping on top of
+it. The first pass threw nine on randomised arcs with randomised tumble and
+read as confetti. `src/ui/CoinFlight.tsx` — DOM, not canvas, because the
+renderer only paints inside the stage and both ends of the flight are outside
+it.
+
+It is a **flourish, not a count**: three marks fly whether the payout was 10 or
+150, and the wallet was already credited when the level was recorded, so
+nothing here can be missed, interrupted or replayed into paying twice.
+
 ### Spare ramps
 
 A level's own ramp budget is fixed and is **not** what a spare changes. The
@@ -383,6 +402,19 @@ are, in order: 20 coins, 10 balls, 3 ramps, 150 coins, 5 balls, 1 ramp, 100
 coins, 50 coins. `gtb.spin.v1` holds `{last, pending}`, where `pending` is now
 `{kind, n}`; a bare number there is a debt recorded by the old balls-only
 wheel and is still honoured on load (`tests/play.test.mjs` asserts it).
+
+**The wheel opens itself.** A daily reward nobody remembers to collect is not
+a daily reward, so once a spin comes due the panel raises itself — but only at
+a quiet moment: nothing else on screen, the board in planning rather than
+mid-drop, and the tutorial finished. `shouldOfferSpin()` makes that **once per
+availability**, not once per check: opening it moves `offered` past `last`, and
+only taking a spin (which moves `last`) re-arms it. Closing it without spinning
+therefore leaves the spin there to take by hand and does not raise it again —
+not a second later, and not on the next reload.
+
+`window.__gtbNoAutoSpin` suppresses it. The test suite sets it through
+`addInitScript`, because it has to be in place before the app's first check
+runs; `play.test.mjs` section 14b turns it back on to test the behaviour.
 
 Weights total 100, so each reads as its own percentage. Wedges are only
 comparable in coins (a ball is 2, a ramp is 15), which puts the wheel at about

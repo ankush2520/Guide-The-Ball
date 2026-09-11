@@ -1,11 +1,19 @@
 /* ============================================================
-   THE COIN FLIGHT
+   THE REWARD FLIGHT
 
-   A win pays coins, and the payout lands in a counter at the
-   top of the screen that the win card is sitting in front of.
-   Without this the number simply differs by ten the next time
-   you look at it. So the coins make the journey: they leave the
-   card's payout chip, arc up, and each one chimes as it arrives.
+   Anything the game pays out lands in a counter at the top of
+   the screen, behind whatever panel just announced it. Without
+   this the number simply differs by ten the next time you look
+   at it. So the payout makes the journey: three marks leave the
+   panel that announced them, arc up, and each chimes as it
+   arrives.
+
+   Two callers. The win card fires it through the effect below,
+   once per card; the prize wheel calls flyReward() directly
+   when a spin settles. Each currency flies its OWN mark to its
+   OWN counter - gold to the coins, bronze to the balls, a blue
+   bar to the ramps - because a gold coin sailing into the ball
+   tank would be saying the wrong thing.
 
    DOM, not canvas. The board's renderer only paints inside the
    stage, and both ends of this flight - a modal card and the
@@ -27,6 +35,7 @@
 import { useEffect, useRef } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Sound } from '../audio/Sound';
+import type { PrizeKind } from '../core/events';
 import type { WinCard } from '../managers/GameController';
 
 const COINS = 3;
@@ -41,7 +50,20 @@ const FLIGHT = 2060;         // ms in the air
    where three random offsets just look like a mistake. */
 const FAN = 19;
 
+/* Where each currency flies, and what it looks like on the way. The marks
+   are the same three the HUD, the shop and the win card use. */
+const LANDS: Record<PrizeKind, { to: string; mark: string }> = {
+  coins: { to: '.counter.coins .coin', mark: 'flycoin' },
+  balls: { to: '.counter.balls .pip',  mark: 'flyball' },
+  ramps: { to: '.counter.ramps',       mark: 'flyramp' },
+};
+
 interface Pt { x: number; y: number; }
+
+/* The layer is mounted once by <CoinFlight/> and reached from here, so the
+   wheel can launch a flight without being handed a ref through three
+   components that have no other reason to know about it. */
+let layerEl: HTMLElement | null = null;
 
 const centreOf = (sel: string): Pt | null => {
   const el = document.querySelector(sel);
@@ -65,6 +87,23 @@ const bez = (a: Pt, b: Pt, c: Pt, t: number): Pt => {
 const easeInOut = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
+/** Fly a payout from `fromSel` to the counter that holds it. Safe to call
+    when either end is missing - it simply does nothing. */
+export function flyReward(kind: PrizeKind, fromSel: string): void {
+  const land = LANDS[kind];
+  const from = centreOf(fromSel);
+  const to = centreOf(land.to);
+  if (!layerEl || !from || !to) return;
+
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    Sound.coin(0);
+    bump(kind);
+    return;
+  }
+  for (let i = 0; i < COINS; i++)
+    window.setTimeout(() => launch(layerEl!, from, to, i, kind), i * STAGGER);
+}
+
 export function CoinFlight() {
   const { controller } = useGame();
   useGameVersion();
@@ -72,53 +111,39 @@ export function CoinFlight() {
   /* The card object is new on every win, which makes it the identity to test:
      re-renders during the card's life must not relaunch the flight. */
   const flown = useRef<WinCard | null>(null);
-  const timers = useRef<number[]>([]);
 
   const card = controller.winCard;
   const showing = controller.phase === 'over' && !!card && card.coins > 0;
 
+  /* The layer has to be in the document before anything can launch into it,
+     and the wheel reaches it through the module rather than through props. */
+  useEffect(() => {
+    layerEl = host.current;
+    return () => { layerEl = null; };
+  }, []);
+
   useEffect(() => {
     if (!showing || !card || flown.current === card) return;
     flown.current = card;
-
-    const layer = host.current;
-    const from = centreOf('#ov-coins');
-    const to = centreOf('.counter.coins .coin');
-    if (!layer || !from || !to) return;
-
-    /* Reduced motion gets the sound and the counter's bump, but nothing
-       flying across the screen. */
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (still) { Sound.coin(0); bump(); return; }
-
-    for (let i = 0; i < COINS; i++) {
-      const id = window.setTimeout(() => launch(layer, from, to, i), i * STAGGER);
-      timers.current.push(id);
-    }
+    flyReward('coins', '#ov-coins');
   }, [showing, card]);
-
-  /* A card dismissed mid-flight must not leave timers firing into a torn-down
-     layer, or chime after the player has already moved on. */
-  useEffect(() => () => {
-    for (const id of timers.current) clearTimeout(id);
-    timers.current = [];
-  }, []);
 
   return <div className="coinfly" ref={host} aria-hidden="true" />;
 }
 
 /** The counter takes the hit, so the arrival lands on something. */
-function bump(): void {
-  const chip = document.querySelector('.counter.coins');
+function bump(kind: PrizeKind): void {
+  const chip = document.querySelector(
+    kind === 'coins' ? '.counter.coins' : kind === 'balls' ? '.counter.balls' : '.counter.ramps');
   if (!chip) return;
   chip.classList.remove('took');
   void (chip as HTMLElement).offsetWidth;     // restart the animation
   chip.classList.add('took');
 }
 
-function launch(layer: HTMLElement, from: Pt, to: Pt, i: number): void {
+function launch(layer: HTMLElement, from: Pt, to: Pt, i: number, kind: PrizeKind): void {
   const el = document.createElement('i');
-  el.className = 'flycoin';
+  el.className = `flymark ${LANDS[kind].mark}`;
 
   /* A fixed fan: left, centre, right of the payout chip. All three land on
      the SAME point, so the paths converge as they climb - which is what
@@ -157,7 +182,7 @@ function launch(layer: HTMLElement, from: Pt, to: Pt, i: number): void {
     if (t < 1) { requestAnimationFrame(step); return; }
     el.remove();
     Sound.coin(i);
-    bump();
+    bump(kind);
   };
   requestAnimationFrame(step);
 }

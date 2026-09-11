@@ -39,9 +39,12 @@ export function WinOverlay() {
             </span>
           )}
         </div>
+        {/* Two choices, not three. Replay and Adjust both meant "stay on this
+            level" and the difference between them - one re-drops for you, the
+            other hands the board back to edit first - was too fine to be
+            worth a third button on a card this short. */}
         <div className="row">
           <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>
-          <button id="btn-adjust" onClick={() => controller.adjust()}>Adjust</button>
           {!card.isLast && (
             <button id="btn-next" className="primary" onClick={() => controller.nextLevel()}>Next</button>
           )}

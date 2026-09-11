@@ -15,7 +15,7 @@
    and its Close button. Keeping them out here means the board's
    shape can never crop them.
    ============================================================ */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GameProvider, useGame } from '../core/GameContext';
 import { GameCanvas } from './GameCanvas';
 import { Hud } from './Hud';
@@ -34,7 +34,7 @@ import { Sound } from '../audio/Sound';
 type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop';
 
 function Game() {
-  const { bus, levels } = useGame();
+  const { bus, levels, controller, rewards } = useGame();
   /* A STACK, not a single panel. The wheel has to open ON TOP of the
      out-of-balls screen - it is one of the two ways out of it - and closing
      the wheel has to hand that screen back rather than dismissing both. The
@@ -42,6 +42,10 @@ function Game() {
      info panel open FROM it, and closing either has to land back on it. The
      z-index order the stylesheet states is what keeps them layered. */
   const [stack, setStack] = useState<Panel[]>([]);
+  /* The offer timer reads the stack without wanting to be restarted every
+     time a panel opens, so it reads it through a ref. */
+  const stackRef = useRef(stack);
+  stackRef.current = stack;
   const open = (p: Panel) => setStack(s => (s.includes(p) ? s : [...s, p]));
   const close = () => setStack(s => s.slice(0, -1));
   const has = (p: Panel) => stack.includes(p);
@@ -49,6 +53,40 @@ function Game() {
   /* The out-of-balls screen is opened by the GAME, not by a button - pressing
      Drop with an empty tank has to lead somewhere. */
   useEffect(() => bus.on('balls:empty', () => open('noballs')), [bus]);
+
+  /* ============================================================
+     THE WHEEL LETS ITSELF IN
+
+     A daily reward nobody remembers to collect is not a daily
+     reward, so once a spin comes due the wheel opens itself.
+
+     It waits for a QUIET moment to do it, because interrupting
+     is the whole risk here: nothing else on screen, the board in
+     planning rather than mid-drop, and the tutorial finished.
+     A player who has never seen the game does not want a modal
+     first. RewardManager.shouldOfferSpin() then makes it once
+     per availability rather than once per check - see the note
+     there on why closing it must not re-arm it.
+
+     __gtbNoAutoSpin turns it off. It is read live, and the test
+     suite sets it before the app boots, because a modal that can
+     appear on a timer makes every other test in the file
+     non-deterministic - and reading a flag is the only kind of
+     off switch that can be in place before the first check runs.
+     ============================================================ */
+  useEffect(() => {
+    const offer = () => {
+      if ((window as unknown as Record<string, unknown>).__gtbNoAutoSpin) return;
+      if (stackRef.current.length > 0) return;
+      if (controller.phase !== 'plan' || controller.tutorialStep() !== 0) return;
+      if (!rewards.shouldOfferSpin()) return;
+      rewards.markSpinOffered();
+      open('spin');
+    };
+    const id = setInterval(offer, 1000);
+    offer();
+    return () => clearInterval(id);
+  }, [controller, rewards]);
 
   /* A country recolours the chrome accent. The entity palette never changes. */
   useEffect(() => {

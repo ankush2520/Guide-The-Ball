@@ -15,6 +15,11 @@ page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
 console.log('\nSMOKE — the rebuilt React/TS app');
 
+/* The daily wheel opens itself once a spin is due, and on a fresh profile one
+   always is - which would land a modal on top of the very first boot this
+   test is here to check. Suppressed before the app runs; section 14b of
+   play.test.mjs is where that behaviour is actually tested. */
+await page.addInitScript(() => { window.__gtbNoAutoSpin = true; });
 await page.goto(URL, { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas#board', { timeout: 10000 });
 chk(true, 'the app boots and mounts the board');

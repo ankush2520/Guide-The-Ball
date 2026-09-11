@@ -29,7 +29,15 @@ export interface SaveData {
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */
 export interface PendingPrize { kind: 'coins' | 'balls' | 'ramps'; n: number; }
-export interface SpinData { last: number; pending: PendingPrize | null; }
+export interface SpinData {
+  last: number;
+  pending: PendingPrize | null;
+  /* When the wheel last OPENED ITSELF. Separate from `last`, which only moves
+     when a spin is actually taken: a player who is offered the wheel and
+     closes it without spinning must not be offered it again on every reload
+     for the next 24 hours. */
+  offered: number;
+}
 export interface WalletData { coins: number | null; ramps: number; }
 
 function readJSON<T>(key: string, fallback: T): T {
@@ -61,21 +69,23 @@ export class ProgressStore {
   saveBalls(balls: number): void { writeJSON(BALLS_KEY, { balls }); }
 
   loadSpin(): SpinData {
-    const raw = readJSON<{ last?: unknown; pending?: unknown }>(SPIN_KEY, {});
+    const raw = readJSON<{ last?: unknown; pending?: unknown; offered?: unknown }>(SPIN_KEY, {});
     const last = isFinite(Number(raw.last)) ? Number(raw.last) : 0;
+    const offered = isFinite(Number(raw.offered)) ? Number(raw.offered) : 0;
     const p = raw.pending;
     /* A bare number is a save from before the wheel paid anything but balls.
        It still owes those balls, so it is read rather than discarded. */
-    if (typeof p === 'number' && p > 0) return { last, pending: { kind: 'balls', n: p | 0 } };
+    if (typeof p === 'number' && p > 0)
+      return { last, offered, pending: { kind: 'balls', n: p | 0 } };
     if (p && typeof p === 'object') {
       const { kind, n } = p as PendingPrize;
       if ((kind === 'coins' || kind === 'balls' || kind === 'ramps') && (n | 0) > 0)
-        return { last, pending: { kind, n: n | 0 } };
+        return { last, offered, pending: { kind, n: n | 0 } };
     }
-    return { last, pending: null };
+    return { last, offered, pending: null };
   }
-  saveSpin(last: number, pending: PendingPrize | null = null): void {
-    writeJSON(SPIN_KEY, { last, pending });
+  saveSpin(last: number, pending: PendingPrize | null = null, offered = 0): void {
+    writeJSON(SPIN_KEY, { last, pending, offered });
   }
 
   /** `coins: null` means the game has never been opened - see loadBalls(). */

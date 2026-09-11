@@ -31,6 +31,7 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 page.on('pageerror', e => bad('uncaught page error', e.message));
+await page.addInitScript(() => { window.__gtbNoAutoSpin = true; });
 await page.goto(GAME);
 await page.waitForSelector('canvas#board');
 await page.waitForFunction(() => !!(window.__gtb && window.__gtb.state));
@@ -41,6 +42,13 @@ await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(
    so every one of those is followed by another top-up. */
 const topUp = () => page.evaluate(() => window.__gtb.setBalls(999));
 await topUp();
+
+/* The wheel opens itself once a spin comes due (see App.tsx). Left on, a
+   modal would appear on a timer part-way through unrelated tests and steal
+   their clicks. The flag is set by an INIT SCRIPT rather than an evaluate:
+   it has to be in place before the app's first check runs, and the app boots
+   the instant a reload completes. Section 14b turns it back on to test it. */
+const autoSpin = on => page.evaluate(v => window.__gtb.setAutoSpin(v), on);
 
 /* The wheel, the info panel and the mute sit behind the gear now, so anything
    that used to click them straight off the HUD opens settings first. Both
@@ -1741,6 +1749,58 @@ sp = await page.evaluate(() => window.__gtb.spinInfo());
 check(sp.ready && sp.btnReady, 'past 24h the wheel is available again');
 check(await page.evaluate(() => document.getElementById('btn-settings').classList.contains('ready')),
   'and the gear pulses to say so');
+
+/* --- the wheel lets itself in, once a day --- */
+section('14b. The wheel opens itself');
+await seedSpin(SPIN.cooldownMs * 2);          // a spin is due
+await autoSpin(true);
+await page.evaluate(() => window.__gtb.skipTutorial());
+let auto = await page.evaluate(() => window.__gtb.spinInfo());
+check(auto.wouldOffer, 'with a spin due and nothing offered yet, it is armed');
+await page.waitForFunction(() => !!document.getElementById('spinpanel'),
+  null, { timeout: 4000 });
+check(await page.locator('#spinpanel').isVisible(),
+  'and it opens on its own, with no button pressed');
+
+/* Closing it without spinning must not make it a nag. */
+await page.locator('#btn-spin-close').click();
+await page.waitForSelector('#spinpanel', { state: 'detached' });
+auto = await page.evaluate(() => window.__gtb.spinInfo());
+check(!auto.wouldOffer && auto.ready,
+  'closing it without spinning leaves the spin available but disarms the offer');
+await page.waitForTimeout(1600);
+check(await page.locator('#spinpanel').count() === 0,
+  'so it does not raise itself again a second later');
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+await page.evaluate(() => window.__gtb.skipTutorial());
+await page.waitForTimeout(1600);
+check(await page.locator('#spinpanel').count() === 0,
+  'nor on the next reload - the offer is remembered, not the session');
+check((await page.evaluate(() => window.__gtb.spinInfo())).ready,
+  'and the spin itself is still there to be taken by hand');
+
+/* It must not interrupt. */
+await seedSpin(SPIN.cooldownMs * 2);
+await autoSpin(true);
+await page.evaluate(() => { window.__gtb.skipTutorial(); window.__gtb.setBalls(9);
+  window.__gtb.setLevel(0);
+  window.__gtb.setRamps([{ x1:150, y1:300, x2:250, y2:360 }]); });
+await page.locator('#btn-drop').click();
+check((await page.evaluate(() => window.__gtb.state())).phase !== 'plan',
+  'set up: a drop is in flight');
+await page.waitForTimeout(1400);
+check(await page.locator('#spinpanel').count() === 0,
+  'it does not open over a drop in flight');
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan',
+  null, { timeout: 25000 });
+await page.waitForFunction(() => !!document.getElementById('spinpanel'),
+  null, { timeout: 5000 });
+check(true, 'and waits for the board to come back to planning');
+await page.locator('#btn-spin-close').click();
+await page.waitForSelector('#spinpanel', { state: 'detached' });
+await autoSpin(false);
+await topUp();
 
 /* --- a spin abandoned mid-animation still pays out on the next load --- */
 const owe = async (pending, read) => {

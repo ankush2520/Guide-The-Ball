@@ -217,19 +217,27 @@
   /* what is on the board you are looking at right now, called out */
   .iline.here b:after{content:' • on this level';font-size:10.5px;font-weight:700;
                       color:var(--accent);letter-spacing:.02em}
-  .wheelwrap{position:relative;width:212px;height:212px;margin:4px auto 14px}
-  #wheel{display:block;width:212px;height:212px;
-         transform:rotate(0deg);will-change:transform;
-         filter:drop-shadow(0 6px 18px rgba(0,0,0,.55))}
+  /* A gold ring and a warm glow around the wheel, so it sits ON the card
+     rather than being a circle printed into it. */
+  .wheelwrap{position:relative;width:212px;height:212px;margin:6px auto 16px;
+             border-radius:50%;
+             box-shadow:0 0 0 5px #3a2a08, 0 0 0 7px rgba(255,201,60,.5),
+                        0 0 34px -4px rgba(255,180,50,.45),
+                        0 10px 26px rgba(0,0,0,.55)}
+  #wheel{display:block;width:212px;height:212px;border-radius:50%;
+         transform:rotate(0deg);will-change:transform}
   /* the pointer and the hub do NOT rotate - they sit over the wheel */
-  .wheelptr{position:absolute;top:-3px;left:50%;transform:translateX(-50%);
-            width:0;height:0;border-left:9px solid transparent;
-            border-right:9px solid transparent;border-top:16px solid #ffd479;
-            filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
-  .wheelhub{position:absolute;top:50%;left:50%;width:34px;height:34px;
-            margin:-17px 0 0 -17px;border-radius:50%;
-            background:radial-gradient(circle at 36% 32%,#fff,#ffc451);
-            box-shadow:0 0 12px rgba(255,201,60,.7), 0 2px 6px rgba(0,0,0,.5)}
+  /* The pointer sits OVER the rim, biting into the wheel, so which wedge it
+     is reading is never in question. */
+  .wheelptr{position:absolute;top:-9px;left:50%;transform:translateX(-50%);z-index:2;
+            width:0;height:0;border-left:11px solid transparent;
+            border-right:11px solid transparent;border-top:22px solid #fff0c0;
+            filter:drop-shadow(0 3px 5px rgba(0,0,0,.7))}
+  .wheelhub{position:absolute;top:50%;left:50%;width:40px;height:40px;
+            margin:-20px 0 0 -20px;border-radius:50%;z-index:2;
+            background:radial-gradient(circle at 36% 30%,#fff,#ffd06a 55%,#e09a10);
+            box-shadow:0 0 0 3px #3a2a08, 0 0 16px rgba(255,201,60,.75),
+                       0 3px 8px rgba(0,0,0,.55)}
   #spin-sub b{color:#ffd479;font-weight:800}
   .chips .counter{padding:4px 8px;font-size:12px}
   .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
@@ -338,6 +346,29 @@
            background:rgba(8,10,22,.74);backdrop-filter:blur(4px);
            padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
                    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+  /* ============================================================
+     THE WIN CARD'S SCRIM IS THE LIGHT ONE
+
+     Every other overlay is a menu or a reference, and dimming
+     what is behind one is right: nothing back there is worth
+     reading while it is open.
+
+     The win card is the exception. It is celebrating something
+     that just happened ON the board - where the ball went in,
+     the ramps that put it there - and the shared .overlay scrim
+     (0.74 plus a 4px blur) hid exactly that. So this one barely
+     tints, and does not blur at all. The card carries its own
+     background, border and shadow, so it still reads without
+     needing the board darkened underneath it.
+     ============================================================ */
+  #overlay{background:rgba(8,10,22,.30);
+           -webkit-backdrop-filter:none;backdrop-filter:none}
+  /* The wheel needs the same treatment for the same reason: its prize FLIES
+     to a counter in the HUD, and a 4px blur over the destination makes the
+     journey end nowhere. */
+  #spinpanel{background:rgba(8,10,22,.30);
+             -webkit-backdrop-filter:none;backdrop-filter:none}
+
   /* One stacking order, stated once. The wheel must open ON TOP of the
      out-of-balls screen, because it is a way out of it. */
   #select{z-index:50} #overlay{z-index:55} #noballs{z-index:60}
@@ -355,17 +386,24 @@
      its flight path the whole way.
      ============================================================ */
   .coinfly{position:fixed;inset:0;z-index:95;pointer-events:none;overflow:hidden}
-  .flycoin{position:absolute;top:0;left:0;width:17px;height:17px;border-radius:50%;
-           will-change:transform,opacity;
+  /* One mark per currency, each the bigger cousin of the one its counter
+     wears - so what lands is visibly the thing the counter counts. */
+  .flymark{position:absolute;top:0;left:0;will-change:transform,opacity}
+  .flycoin{width:17px;height:17px;border-radius:50%;
            background:radial-gradient(circle at 36% 30%,#ffe08c,#d99406 70%,#b87a04);
            box-shadow:0 0 10px rgba(255,190,60,.65), inset 0 0 0 2px rgba(90,56,0,.5)}
+  .flyball{width:17px;height:17px;border-radius:50%;
+           background:radial-gradient(circle at 33% 28%,#f6c99b,#b06a2e 58%,#75401a);
+           box-shadow:0 0 10px rgba(200,120,55,.6), inset 0 0 0 1.5px rgba(60,30,8,.4)}
+  .flyramp{width:26px;height:8px;border-radius:4px;background:var(--ramp);
+           box-shadow:0 0 12px var(--glow-ramp)}
   /* the counter taking a coin: a quick swell, so the arrival lands on
      something rather than the number just being different afterwards */
   @keyframes cointook{
     0%{transform:scale(1)} 38%{transform:scale(1.17)} 100%{transform:scale(1)}
   }
-  .counter.coins.took{animation:cointook .26s ease-out}
-  @media (prefers-reduced-motion:reduce){ .counter.coins.took{animation:none} }
+  .counter.took{animation:cointook .26s ease-out}
+  @media (prefers-reduced-motion:reduce){ .counter.took{animation:none} }
   /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
   .overlay[hidden]{display:none}
   /* A column: heading and buttons pinned, the long middle scrolls. Without

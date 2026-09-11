@@ -200,6 +200,11 @@ export function installGameHook(s: GameServices): void {
     pickups: () => ({ ...rewards.bestPickups }),
     tries: () => c.tries,
     pickPrize: () => rewards.pickPrize(),
+    /* The suite turns the self-opening wheel OFF at boot: a modal that can
+       appear on a timer makes every other test in the file flaky. */
+    setAutoSpin: (on: boolean) => {
+      (window as unknown as Record<string, unknown>).__gtbNoAutoSpin = !on;
+    },
     /* btnReady/btnLocked read the GEAR, not the wheel's own button: the wheel
        moved into the settings panel, so its button only exists while that
        panel is open, and the thing the player can actually see from the
@@ -216,6 +221,9 @@ export function installGameHook(s: GameServices): void {
                shown: rewards.spinShown ? rewards.spinShown.n : 0,
                shownKind: rewards.spinShown ? rewards.spinShown.kind : null,
                btnReady: !!gear?.classList.contains('ready'),
+               offered: rewards.spinOffered,
+               wouldOffer: rewards.shouldOfferSpin(),
+               autoSpin: !(window as unknown as Record<string, unknown>).__gtbNoAutoSpin,
                panelOpen: !!el('spinpanel'),
                settingsOpen: !!el('settingspanel'),
                goDisabled: !!(el('btn-spin-go') as HTMLButtonElement | null)?.disabled,

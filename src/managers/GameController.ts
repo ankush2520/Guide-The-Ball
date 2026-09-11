@@ -344,8 +344,13 @@ export class GameController {
 
   nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
 
-  /** Replay repeats this layout; adjust hands the board back for editing. */
+  /** Replay: drop the same layout again, which costs a ball like any drop. */
   retry(): void { this.setPhase('plan'); this.winCard = null; this.drop(); }
+
+  /** Put the board back in the player's hands with the ramps untouched, and
+      no ball spent. It was the win card's Adjust button until that card was
+      cut to two choices; it stays because it is also how a reset returns to
+      planning - see debugHook.reset(). */
   adjust(): void { this.releaseBall(); this.winCard = null; this.setPhase('plan'); }
 
   private setPhase(p: Phase): void {
@@ -458,7 +463,7 @@ export class GameController {
   get hint(): string {
     if (this.tutorialStep() === 2) return 'Tap Drop Ball when ready.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
-    if (this.phase === 'over') return 'Replay repeats this layout. Adjust lets you edit it.';
+    if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
     if (this.selected >= 0) return 'Drag an end to reshape, the middle to move, × to delete.';
     if (this.levels.rampsLeft <= 0)
       return this.rewards.extraRamps > 0

@@ -148,6 +148,9 @@ export class RewardManager {
   tipsSeen: Record<string, boolean> = {};
 
   spinLast = 0;
+  /* When the wheel last opened itself. See ProgressStore.SpinData. */
+  spinOffered = 0;
+
   /* Wheel animation state. It lives here rather than in the panel component
      because it is game state, not view state: whether a spin is in flight
      decides whether another may start, and the panel can be unmounted and
@@ -224,9 +227,10 @@ export class RewardManager {
     this.bestStars = {}; this.bestPickups = {}; this.clearedLevels = {};
     this.tutorialSeen = false; this.obstacleTipSeen = false; this.tipsSeen = {};
     this.spinLast = 0;
+    this.spinOffered = 0;
     this.spinning = false;
     this.spinShown = null;
-    progressStore.saveSpin(0, null);
+    progressStore.saveSpin(0, null, 0);
     this.balls = STARTING_BALLS;
     progressStore.saveBalls(this.balls);
     this.coins = STARTING_COINS;
@@ -389,9 +393,10 @@ export class RewardManager {
   /* ---------------- the daily wheel ---------------- */
 
   private loadSpin(): void {
-    const { last, pending } = progressStore.loadSpin();
+    const { last, pending, offered } = progressStore.loadSpin();
     const now = Date.now();
     this.spinLast = last;
+    this.spinOffered = offered > now ? 0 : offered;
     // a clock that has moved backwards just hands the player a spin; the worst
     // case is one extra spin, where the alternative is a wheel locked forever
     if (this.spinLast > now) this.spinLast = 0;
@@ -406,10 +411,27 @@ export class RewardManager {
       else if (pending.kind === 'coins') { this.coins += pending.n; this.saveWallet(); }
       else { this.extraRamps += pending.n; this.saveWallet(); }
     }
-    progressStore.saveSpin(this.spinLast, null);
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered);
   }
 
   spinReady(now = Date.now()): boolean { return now - this.spinLast >= SPIN_COOLDOWN_MS; }
+
+  /* ---- letting itself in ----
+
+     A daily reward nobody remembers to collect is not a daily reward, so once
+     a spin is available the wheel opens on its own. ONCE per availability,
+     though: `offered` is moved past `spinLast` when it opens, and only a spin
+     (which moves `spinLast` forward again) re-arms it. Closing the wheel
+     without spinning therefore leaves it alone until the next day, rather
+     than raising it again on the next reload. */
+  shouldOfferSpin(now = Date.now()): boolean {
+    return this.spinReady(now) && this.spinOffered <= this.spinLast;
+  }
+
+  markSpinOffered(now = Date.now()): void {
+    this.spinOffered = now;
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered);
+  }
   msToSpin(now = Date.now()): number {
     return clamp(SPIN_COOLDOWN_MS - (now - this.spinLast), 0, SPIN_COOLDOWN_MS);
   }
@@ -433,7 +455,8 @@ export class RewardManager {
     this.spinLast = Date.now();
     this.spinning = true;
     this.spinShown = null;
-    progressStore.saveSpin(this.spinLast, { kind: p.kind, n: p.n } as PendingPrize);
+    progressStore.saveSpin(this.spinLast, { kind: p.kind, n: p.n } as PendingPrize,
+                           this.spinOffered);
     return ix;
   }
 
@@ -442,7 +465,7 @@ export class RewardManager {
     const p = SPIN_PRIZES[ix];
     this.spinning = false;
     this.spinShown = { kind: p.kind, n: p.n };
-    progressStore.saveSpin(this.spinLast, null);
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered);
     if (p.kind === 'balls') this.grant(p.n, 'spin');
     else if (p.kind === 'coins') this.grantCoins(p.n, 'spin');
     else this.grantRamps(p.n, 'spin');
