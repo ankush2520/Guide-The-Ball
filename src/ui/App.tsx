@@ -28,6 +28,7 @@ import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { ShopPanel } from './ShopPanel';
+import { CoinFlight } from './CoinFlight';
 import { Sound } from '../audio/Sound';
 
 type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop';
@@ -92,6 +93,9 @@ function Game() {
       </div>
 
       <WinOverlay />
+      {/* Above every panel: it flies from the win card to the HUD, so it has
+          to paint over both of them. */}
+      <CoinFlight />
       {has('noballs') && <NoBallsPanel onClose={close} onSpin={() => open('spin')}
                                        onShop={() => open('shop')} />}
       {has('levels')  && <LevelSelect  onClose={close} />}

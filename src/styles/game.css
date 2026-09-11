@@ -120,8 +120,10 @@
   /* the ball chip leads with the thing it counts, drawn the same way the
      board draws the ball, so the HUD and the board agree */
   .counter.balls{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
-  /* White, because the ball IS white on the board - and because a gold pip
-     next to a gold coin is one shape twice.
+  /* BROWN, not the white of the ball on the board. Two gold discs side by
+     side in the HUD read as one shape twice, and at 11px a rim is not enough
+     to separate them - hue is. The board keeps its white ball; this mark's
+     job is to be unmistakably Not A Coin at a glance.
 
      Declared on its own, not under .counter.balls: the same three marks are
      used by the HUD, the shop and the win card, and a mark that only exists
@@ -129,8 +131,8 @@
      what the shop's ball bundles did. */
   .pip{width:11px;height:11px;border-radius:50%;flex:none;display:inline-block;
        vertical-align:-1px;
-       background:radial-gradient(circle at 34% 30%,#fff,#e6ecff 78%,#c6d0f0);
-       box-shadow:0 0 8px rgba(255,255,255,.55)}
+       background:radial-gradient(circle at 33% 28%,#f0bd8c,#b06a2e 58%,#75401a);
+       box-shadow:0 0 7px rgba(190,110,50,.5), inset 0 0 0 1px rgba(60,30,8,.4)}
   /* ============================================================
      THE THREE CURRENCIES
 
@@ -343,6 +345,27 @@
      lands back on it rather than dismissing both */
   #settingspanel{z-index:65} #shoppanel{z-index:68}
   #spinpanel{z-index:70} #infopanel{z-index:80}
+
+  /* ============================================================
+     THE COIN FLIGHT
+
+     Above every panel, because it flies BETWEEN two of them -
+     out of the win card and into the HUD counter behind it -
+     and pointer-transparent, because the Next button is under
+     its flight path the whole way.
+     ============================================================ */
+  .coinfly{position:fixed;inset:0;z-index:95;pointer-events:none;overflow:hidden}
+  .flycoin{position:absolute;top:0;left:0;width:17px;height:17px;border-radius:50%;
+           will-change:transform,opacity;
+           background:radial-gradient(circle at 36% 30%,#ffe08c,#d99406 70%,#b87a04);
+           box-shadow:0 0 10px rgba(255,190,60,.65), inset 0 0 0 2px rgba(90,56,0,.5)}
+  /* the counter taking a coin: a quick swell, so the arrival lands on
+     something rather than the number just being different afterwards */
+  @keyframes cointook{
+    0%{transform:scale(1)} 38%{transform:scale(1.17)} 100%{transform:scale(1)}
+  }
+  .counter.coins.took{animation:cointook .26s ease-out}
+  @media (prefers-reduced-motion:reduce){ .counter.coins.took{animation:none} }
   /* class sets display:flex, which would otherwise beat the UA [hidden] rule */
   .overlay[hidden]{display:none}
   /* A column: heading and buttons pinned, the long middle scrolls. Without
@@ -397,10 +420,16 @@
                  color:#ffd479;font-size:11.5px;font-weight:700}
   .buybtn:disabled{opacity:.34;cursor:not-allowed}
 
-  /* the win card's takings */
-  .payout{display:flex;align-items:center;justify-content:center;gap:6px;
-          margin:-4px 0 12px;font-size:13px;color:#c3cbee}
-  .payout b{color:#ffd479;font-weight:800}
+  /* The win card's takings. Two chips, no prose: the marks carry the units,
+     and they are the same marks the HUD counts in. */
+  .rewards{display:flex;justify-content:center;gap:8px;margin:2px 0 15px}
+  .reward{display:inline-flex;align-items:center;gap:6px;
+          padding:6px 12px;border-radius:999px;
+          background:linear-gradient(180deg,#1e2440,#151931);
+          border:1px solid var(--edge);
+          box-shadow:inset 0 1px 0 var(--sheen)}
+  .reward b{font-size:15px;font-weight:800;color:#ffd479;letter-spacing:.01em}
+  #ov-balls b{color:#f0bd8c}
   .infocard{max-width:340px;text-align:left}
   .infocard .big{text-align:center}
   /* The ad may look like the recommended action, but declining it must be

@@ -1,5 +1,18 @@
-/* The win card. Only a WIN reaches here - a miss is handled by the flash
-   line, which keeps the player on the board. */
+/* ============================================================
+   THE WIN CARD
+
+   Deliberately short. It used to spell out the try count, the
+   ramp count, which star was missed and how to earn it, the
+   ball bonus and the next level's number - five lines of prose
+   over a board the player wants to get back to. Everything in
+   it except the payout is either already on screen (the level
+   number, the Next button) or explained once in the info panel
+   (how the rating works).
+
+   What is left is what the player came for: did I win, how well,
+   and what did it pay. The payout is also the ANCHOR the coin
+   flight launches from - see CoinFlight.
+   ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
 
 export function WinOverlay() {
@@ -9,11 +22,6 @@ export function WinOverlay() {
   const card = controller.winCard;
   if (controller.phase !== 'over' || !card) return null;
 
-  let sub = card.isLast ? 'That was the last level for now.'
-                        : `On to level ${card.nextId}.`;
-  if (card.bonus > 0)
-    sub = `First clear: +${card.bonus} ball${card.bonus === 1 ? '' : 's'}. ${sub}`;
-
   return (
     <div className="overlay" id="overlay">
       <div className="card win" id="card">
@@ -21,14 +29,16 @@ export function WinOverlay() {
         <div className="stars" id="ov-stars">
           {[0, 1, 2].map(i => <i key={i} className={i < card.stars ? 'on' : ''}>&#9733;</i>)}
         </div>
-        <div className="starnote" id="ov-starnote">{card.note}</div>
-        {/* The takings, next to the stars that set them - three stars pays
-            roughly double one, and that is only legible if the two are read
-            together. */}
-        <div className="payout" id="ov-coins">
-          <i className="coin" /><b>+{card.coins}</b> coins
+        <div className="rewards" id="ov-rewards">
+          <span className="reward" id="ov-coins">
+            <i className="coin" /><b>+{card.coins}</b>
+          </span>
+          {card.bonus > 0 && (
+            <span className="reward" id="ov-balls" title="First clear bonus">
+              <i className="pip" /><b>+{card.bonus}</b>
+            </span>
+          )}
         </div>
-        <div className="sub" id="ov-sub">{sub}</div>
         <div className="row">
           <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>
           <button id="btn-adjust" onClick={() => controller.adjust()}>Adjust</button>

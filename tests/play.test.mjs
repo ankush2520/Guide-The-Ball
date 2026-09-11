@@ -1264,11 +1264,44 @@ for (const [li, want] of [[0,1],[5,2],[10,2],[15,3]]){
   check(after - before === want - 1,
     `first clear of level ${li+1} pays +${want} against the 1 the drop spent`,
     `${before} -> ${after}`);
-  check((await page.locator('#ov-sub').textContent()).includes(`+${want} ball`),
-    'and the win card says so', await page.locator('#ov-sub').textContent());
+  /* The card states the payout as two chips and no prose - a coin mark and a
+     ball mark, each with its number. */
+  check((await page.locator('#ov-balls').textContent()).trim() === `+${want}`,
+    'and the win card says so', await page.locator('#ov-balls').textContent());
   check((await page.evaluate(() => window.__gtb.cleared()))[li] === true,
     'the level is recorded as cleared');
 }
+
+/* --- the coin flight: a flourish that must not leak or double-pay --- */
+await freshPlayer();
+await page.evaluate(() => window.__gtb.setBalls(20));
+await winLevel(0);
+const flight = await page.evaluate(() => ({
+  layer: !!document.querySelector('.coinfly'),
+  inAir: document.querySelectorAll('.flycoin').length,
+  coins: window.__gtb.coins(),
+}));
+check(flight.layer, 'the flight layer is mounted above the panels');
+check(flight.inAir > 0, 'coins leave the card when it opens', `${flight.inAir} in the air`);
+/* The wallet is credited by recordClear, not by the animation. Nothing here
+   can be missed, interrupted, or replayed into paying twice - so the total is
+   already right while the coins are still mid-flight. */
+check(flight.coins === (await page.evaluate(() => window.__gtb.coins())),
+  'and the wallet was already credited before they land - the flight pays nothing');
+/* The whole run is STAGGER * (COINS - 1) + FLIGHT, about 2.8s - so this waits
+   well past it rather than on top of it. */
+await page.waitForFunction(() => document.querySelectorAll('.flycoin').length === 0,
+  null, { timeout: 10000 });
+check(true, 'every coin removes itself on arrival - the layer does not leak nodes');
+
+/* A re-render while the card is open must not relaunch it. */
+const flightPaid = await page.evaluate(() => window.__gtb.coins());
+await page.evaluate(() => { window.__gtb.setBalls(19); window.__gtb.setBalls(20); });
+await page.waitForTimeout(120);
+check(await page.evaluate(() => document.querySelectorAll('.flycoin').length) === 0,
+  'and a re-render while the card is open does not relaunch it');
+check(await page.evaluate(() => window.__gtb.coins()) === flightPaid,
+  'nor pay again', `${flightPaid} coins`);
 
 /* --- replaying an already-cleared level pays nothing --- */
 await freshPlayer();

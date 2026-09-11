@@ -236,6 +236,21 @@ class SoundEngine {
     };
   }
 
+  /* SFX 3 - one coin landing in the counter. `i` is its place in the run,
+     which walks the pitch up a semitone at a time: a cascade of eight then
+     reads as a count-up rather than as the same note struck eight times.
+     Capped so a big payout does not climb out of the register. */
+  coin(i = 0): void {
+    if (this.isMuted) return;
+    // fired by an animation frame, not by a tap - so nudge, never construct
+    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
+    const t = this.ctx.currentTime;
+    const f = 1245 * Math.pow(2, Math.min(i, 7) / 12);
+    this.tone(this.sfx!, f, t, 0.10, 0.105, 'triangle');
+    this.tone(this.sfx!, f * 2, t, 0.055, 0.045, 'sine');
+    this.noise(this.sfx!, t, 0.028, 0.018, 6500);
+  }
+
   /** SFX 2 - the target swallowed the ball. */
   win(): void {
     if (this.isMuted) return;
