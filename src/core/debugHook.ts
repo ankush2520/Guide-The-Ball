@@ -18,7 +18,8 @@ import * as C from '../physics/constants';
 import { CAPTURE_MS } from '../render/constants';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
-         STARTING_COINS, BALL_PRICE, RAMP_PRICE, COIN_CLEAR, coinsFor,
+         STARTING_COINS, BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
+         COIN_CLEAR, coinsFor,
          SPIN_PRIZES, SPIN_COOLDOWN_MS, SPIN_MS } from '../managers/RewardManager';
 import { BALLS_KEY, SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
 import { STAR_N } from '../render/Starfield';
@@ -191,6 +192,11 @@ export function installGameHook(s: GameServices): void {
     setWallet: (coins: number, ramps: number) => rewards.setWalletForTest(coins, ramps),
     buyBalls: (n: number) => rewards.buyBalls(n),
     buyRamps: (n: number) => rewards.buyRamps(n),
+    /* The shop's table and the prices it charges, so a test can check the two
+       against each other rather than against numbers copied out of the UI. */
+    BALL_BUNDLES, RAMP_BUNDLES,
+    ballCost: (n: number) => rewards.ballCost(n),
+    rampCost: (n: number) => rewards.rampCost(n),
     useExtraRamp: () => c.useExtraRamp(),
     budget: () => ({ level: levels.levelBudget, inForce: levels.budget,
                      left: levels.rampsLeft, extra: levels.extraBudget }),

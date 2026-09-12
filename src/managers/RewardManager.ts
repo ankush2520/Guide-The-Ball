@@ -44,6 +44,57 @@ export const STARTING_COINS = 100;
 export const BALL_PRICE = 2;
 export const RAMP_PRICE = 15;
 
+/* ---- what the shop sells ---- */
+
+/* BUNDLES, not straight multiples. A bulk row priced at exactly ten times the
+   single is not an offer - there is no reason to ever press it over ten taps
+   of the single, and it teaches the player that the shop holds no decision.
+   So the quantity climbs faster than the price: the big ball bundle pays 0.7
+   balls a coin against the single's 0.5, the big ramp bundle 14 for the price
+   of 10.
+
+   BALL_PRICE and RAMP_PRICE stay the LIST price - one unit, no discount. They
+   are what the wheel values its wedges at and what the panels quote, so they
+   must keep meaning "a ball costs this", not "a ball costs this if you buy
+   one at a time and nothing else".
+
+   Each bundle's price is a multiple of the one below it (20 = 10x2,
+   100 = 5x20; 45 = 3x15, 150 = 10x15) and each is better value than the one
+   below. Those two facts together are what make `bestBuy` exactly optimal
+   with a plain greedy walk; break either and it becomes a knapsack that
+   greedy can quietly get wrong. */
+export interface Bundle { n: number; coins: number; }
+
+export const BALL_BUNDLES: readonly Bundle[] = [
+  { n: 1, coins: 2 }, { n: 12, coins: 20 }, { n: 70, coins: 100 },
+];
+export const RAMP_BUNDLES: readonly Bundle[] = [
+  { n: 1, coins: 15 }, { n: 4, coins: 45 }, { n: 14, coins: 150 },
+];
+
+/** What `n` of something costs: the bundle price when `n` is exactly a bundle,
+    the plain list price otherwise. Only the shop's own rows are discounted -
+    the debug hook and any other caller can ask for any quantity and gets the
+    honest per-unit sum rather than an interpolated bargain. */
+function priced(bundles: readonly Bundle[], n: number, unit: number): number {
+  const k = Math.max(0, n | 0);
+  return bundles.find(b => b.n === k)?.coins ?? k * unit;
+}
+
+/** The most units `coins` can actually buy, spending across as many bundles as
+    it takes. Exact rather than approximate - see the divisibility note above -
+    so the panels can promise a number the shop will really hand over. */
+export function bestBuy(bundles: readonly Bundle[], coins: number): number {
+  let left = Math.max(0, Math.floor(coins));
+  let got = 0;
+  for (let i = bundles.length - 1; i >= 0; i--) {
+    const take = Math.floor(left / bundles[i].coins);
+    got += take * bundles[i].n;
+    left -= take * bundles[i].coins;
+  }
+  return got;
+}
+
 /* What a clear pays, by Act (the same floor((id-1)/5) bands the ball bonus
    uses) and by stars earned. Playing well is worth roughly double a scrape,
    and the later Acts pay more because they cost more to reach. */
@@ -305,8 +356,8 @@ export class RewardManager {
 
   /* ---------------- the shop ---------------- */
 
-  ballCost(n: number): number { return Math.max(0, n | 0) * BALL_PRICE; }
-  rampCost(n: number): number { return Math.max(0, n | 0) * RAMP_PRICE; }
+  ballCost(n: number): number { return priced(BALL_BUNDLES, n, BALL_PRICE); }
+  rampCost(n: number): number { return priced(RAMP_BUNDLES, n, RAMP_PRICE); }
   canAfford(cost: number): boolean { return cost > 0 && this.coins >= cost; }
 
   /* Both purchases take the coins and hand over the goods in one step, and

@@ -120,10 +120,17 @@
   /* the ball chip leads with the thing it counts, drawn the same way the
      board draws the ball, so the HUD and the board agree */
   .counter.balls{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
-  /* BROWN, not the white of the ball on the board. Two gold discs side by
-     side in the HUD read as one shape twice, and at 11px a rim is not enough
-     to separate them - hue is. The board keeps its white ball; this mark's
-     job is to be unmistakably Not A Coin at a glance.
+  /* A LIT SPHERE, and that is the whole point. Recolouring it - white, then
+     brown - never worked, because hue is the weaker signal here: two discs of
+     the same size with the same flat shading still read as one mark twice, and
+     the eye sorts them by brightness long after it has already mis-read them.
+
+     So the ball and the coin now differ in KIND. The coin below is a flat
+     minted disc: a hard rim, a groove, an even face. This is a ball - a tight
+     specular dot high-left, an unbroken falloff to a cool shadow side, no rim
+     anywhere, and a pale halo instead of a gold one. Round and lit versus
+     round and stamped survives 11px in a way brown-versus-gold did not, and it
+     goes back to agreeing with the white ball the board actually drops.
 
      Declared on its own, not under .counter.balls: the same three marks are
      used by the HUD, the shop and the win card, and a mark that only exists
@@ -131,21 +138,34 @@
      what the shop's ball bundles did. */
   .pip{width:11px;height:11px;border-radius:50%;flex:none;display:inline-block;
        vertical-align:-1px;
-       background:radial-gradient(circle at 33% 28%,#f0bd8c,#b06a2e 58%,#75401a);
-       box-shadow:0 0 7px rgba(190,110,50,.5), inset 0 0 0 1px rgba(60,30,8,.4)}
+       background:
+         radial-gradient(circle at 31% 25%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,0) 44%),
+         radial-gradient(circle at 58% 66%,#8f9ab8,#dfe4f2 46%,#ffffff 78%);
+       box-shadow:0 0 8px rgba(200,214,255,.5)}
   /* ============================================================
      THE THREE CURRENCIES
 
      One mark each, used EVERYWHERE that currency appears - the
      HUD, the shop, the win card and the wheel's wedges - so the
      player learns three shapes once rather than reading a word
-     every time. A coin has a rim, a ball does not; a ramp is the
+     every time. A coin is stamped, a ball is lit, a ramp is the
      blue bar it is on the board.
      ============================================================ */
-  .coin{width:11px;height:11px;border-radius:50%;flex:none;display:inline-block;
-        vertical-align:-1px;
-        background:radial-gradient(circle at 36% 30%,#ffd873,#d99406 72%,#b87a04);
-        box-shadow:0 0 7px rgba(255,180,40,.5), inset 0 0 0 1.4px rgba(90,56,0,.55)}
+  /* Minted, not merely gold: face, groove, raised rim, shaded edge, drawn as
+     concentric stops rather than one smooth falloff. The rings are what the
+     eye catches first, so this stays a coin even in greyscale - and a pixel
+     wider than the ball, which is the currency you spend the other one on. */
+  .coin{width:12px;height:12px;border-radius:50%;flex:none;display:inline-block;
+        vertical-align:-2px;
+        background:
+          radial-gradient(circle at 36% 28%,rgba(255,255,255,.5) 0 8%,rgba(255,255,255,0) 38%),
+          /* closest-side, so 100% IS the disc's edge. On the default
+             farthest-CORNER ray a 12px circle ends at 71% and the rim band
+             lands outside the element - the rings vanish and it goes back to
+             being a plain gold dot, which is the bug this replaces. */
+          radial-gradient(circle closest-side at 50% 50%,#ffdf86 0 40%,
+                          #b8820c 47% 56%,#ffd45f 63% 87%,#96650a 100%);
+        box-shadow:0 0 7px rgba(255,180,40,.5)}
   .rampmark{width:16px;height:5px;border-radius:3px;flex:none;display:inline-block;
             background:var(--ramp);box-shadow:0 0 8px var(--glow-ramp);
             transform:rotate(-18deg)}
@@ -389,12 +409,17 @@
   /* One mark per currency, each the bigger cousin of the one its counter
      wears - so what lands is visibly the thing the counter counts. */
   .flymark{position:absolute;top:0;left:0;will-change:transform,opacity}
-  .flycoin{width:17px;height:17px;border-radius:50%;
-           background:radial-gradient(circle at 36% 30%,#ffe08c,#d99406 70%,#b87a04);
-           box-shadow:0 0 10px rgba(255,190,60,.65), inset 0 0 0 2px rgba(90,56,0,.5)}
+  .flycoin{width:18px;height:18px;border-radius:50%;
+           background:
+             radial-gradient(circle at 36% 28%,rgba(255,255,255,.5) 0 8%,rgba(255,255,255,0) 38%),
+             radial-gradient(circle closest-side at 50% 50%,#ffe79c 0 40%,
+                             #b8820c 47% 56%,#ffd45f 63% 87%,#96650a 100%);
+           box-shadow:0 0 10px rgba(255,190,60,.65)}
   .flyball{width:17px;height:17px;border-radius:50%;
-           background:radial-gradient(circle at 33% 28%,#f6c99b,#b06a2e 58%,#75401a);
-           box-shadow:0 0 10px rgba(200,120,55,.6), inset 0 0 0 1.5px rgba(60,30,8,.4)}
+           background:
+             radial-gradient(circle at 31% 25%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,0) 44%),
+             radial-gradient(circle at 58% 66%,#8f9ab8,#dfe4f2 46%,#ffffff 78%);
+           box-shadow:0 0 11px rgba(200,214,255,.6)}
   .flyramp{width:26px;height:8px;border-radius:4px;background:var(--ramp);
            box-shadow:0 0 12px var(--glow-ramp)}
   /* the counter taking a coin: a quick swell, so the arrival lands on
@@ -456,6 +481,13 @@
   .buybtn b{display:flex;align-items:center;gap:5px;font-size:14px;font-weight:800}
   .buybtn .price{display:flex;align-items:center;gap:4px;
                  color:#ffd479;font-size:11.5px;font-weight:700}
+  /* The saving, stated on the bundle itself. Green rather than gold: gold is
+     what the row COSTS, and a discount printed in the price's own colour is
+     read as part of the price. Only the rows that actually save anything
+     carry it, so the single stays plain. */
+  .buybtn .save{margin-top:1px;font-size:9.5px;font-weight:800;letter-spacing:.02em;
+                color:#5fe0a0;background:rgba(47,217,122,.13);
+                border-radius:999px;padding:1px 6px}
   .buybtn:disabled{opacity:.34;cursor:not-allowed}
 
   /* The win card's takings. Two chips, no prose: the marks carry the units,
@@ -467,7 +499,8 @@
           border:1px solid var(--edge);
           box-shadow:inset 0 1px 0 var(--sheen)}
   .reward b{font-size:15px;font-weight:800;color:#ffd479;letter-spacing:.01em}
-  #ov-balls b{color:#f0bd8c}
+  /* the number wears its mark's colour, so the pair reads as one thing */
+  #ov-balls b{color:#dfe4f2}
   .infocard{max-width:340px;text-align:left}
   .infocard .big{text-align:center}
   /* The ad may look like the recommended action, but declining it must be

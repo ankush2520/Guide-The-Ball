@@ -1454,14 +1454,17 @@ check(/need \d+ coins/i.test(info.buyText),
   'and says what a ball costs instead of just refusing', info.buyText.trim());
 await page.evaluate(() => window.__gtb.setWallet(40, 0));
 info = await page.evaluate(() => window.__gtb.ballInfo());
-check(!info.buyDisabled && /buys 20/.test(info.buyText),
-  'with coins, it says how many balls they buy', info.buyText.trim());
+/* 24, not 20: 40 coins is two of the 12-ball bundles. The number quoted here
+   has to be one the shop will really hand over, or the offer reads as broken
+   the moment the player gets there. */
+check(!info.buyDisabled && /buys 24/.test(info.buyText),
+  'with coins, it says how many balls they buy - at bundle prices', info.buyText.trim());
 await page.locator('#btn-buy').click();
 check(await page.locator('#shoppanel').isVisible(), 'and it opens the shop');
-await page.locator('#btn-buy-balls-10').click();
+await page.locator('#btn-buy-balls-12').click();
 const shopBought = await page.evaluate(() => [window.__gtb.coins(), window.__gtb.balls()]);
-check(shopBought[0] === 20 && shopBought[1] === 10,
-  'buying 10 balls costs 20 coins and delivers 10 balls',
+check(shopBought[0] === 20 && shopBought[1] === 12,
+  'the bulk row is a real discount: 20 coins buys 12 balls, not 10',
   `${shopBought[0]} coins, ${shopBought[1]} balls`);
 await page.locator('#btn-shop-close').click();
 await page.evaluate(() => { window.__gtb.setBalls(0); window.__gtb.setWallet(0, 0); });
@@ -1530,6 +1533,27 @@ check(await page.evaluate(() => window.__gtb.buyBalls(10)), 'ten balls can be bo
 w = await page.evaluate(() => ({ coins: window.__gtb.coins(), balls: window.__gtb.balls() }));
 check(w.coins === 100 - 10 * WALLET.ballPrice,
   `a ball costs ${WALLET.ballPrice} coins, exactly`, `100 -> ${w.coins}`);
+
+/* --- and the bundles are cheaper than the sum of their parts --- */
+/* The whole point of a bulk row. Checked against the LIST price rather than
+   against a hard-coded number, so retuning the table cannot leave a bundle
+   quietly charging full freight. */
+const deals = await page.evaluate(() => {
+  const g = window.__gtb;
+  return { balls: g.BALL_BUNDLES.map(b => [b.n, b.coins, g.ballCost(b.n)]),
+           ramps: g.RAMP_BUNDLES.map(b => [b.n, b.coins, g.rampCost(b.n)]) };
+});
+for (const [kind, unit, rows] of [['ball', WALLET.ballPrice, deals.balls],
+                                  ['ramp', WALLET.rampPrice, deals.ramps]]) {
+  for (const [n, listed, charged] of rows) {
+    check(charged === listed && charged <= n * unit,
+      `${n} ${kind}${n === 1 ? '' : 's'} costs ${listed}, never more than ${n * unit} singles`,
+      `charged ${charged}`);
+  }
+  const top = rows[rows.length - 1];
+  check(top[1] < top[0] * unit, `and the biggest ${kind} bundle is a real discount`,
+    `${top[0]} for ${top[1]} vs ${top[0] * unit} at list`);
+}
 check(await page.evaluate(() => window.__gtb.buyRamps(3)), 'three spare ramps can be bought');
 w = await page.evaluate(() => ({ coins: window.__gtb.coins(), ramps: window.__gtb.spareRamps() }));
 check(w.coins === 100 - 20 - 3 * WALLET.rampPrice,

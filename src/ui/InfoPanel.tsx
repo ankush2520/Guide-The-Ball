@@ -50,8 +50,9 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              already cleared pays a quarter of that. You start with
              <b>{STARTING_COINS}</b>, and the daily wheel pays coins too.</p>
           <p>Coins are spent in the <b>shop</b>, behind the gear:
-             <b>{BALL_PRICE}</b> coins a ball, <b>{RAMP_PRICE}</b> coins a spare ramp.
-             Nothing converts back the other way.</p>
+             <b>{BALL_PRICE}</b> coins a ball, <b>{RAMP_PRICE}</b> coins a spare ramp,
+             and both come cheaper by the bundle. Nothing converts back the
+             other way.</p>
 
           <h4>Spare ramps</h4>
           <p>Every level hands you its own ramp budget, and that never changes. A

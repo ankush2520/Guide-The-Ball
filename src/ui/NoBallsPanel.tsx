@@ -1,14 +1,19 @@
 /* Running out is a real stop, so unlike a miss this one does get the
    full-screen treatment. */
 import { useGame, useGameVersion } from '../core/GameContext';
-import { AD_REWARD, BALL_PRICE } from '../managers/RewardManager';
+import { AD_REWARD, BALL_PRICE, BALL_BUNDLES, bestBuy } from '../managers/RewardManager';
 
 interface Props { onClose: () => void; onSpin: () => void; onShop: () => void; }
 
 export function NoBallsPanel({ onClose, onSpin, onShop }: Props) {
   const { rewards } = useGame();
   useGameVersion();          // the offer below is priced off a live wallet
-  const afford = Math.floor(rewards.coins / BALL_PRICE);
+  /* Priced through the BUNDLES, not the list price. A stranded player is
+     being told what their wallet is worth, and since the shop's bulk rows
+     hand over more balls per coin than the single, dividing by the list price
+     quotes them a number the shop then beats - which reads as a bug in the
+     shop rather than a bargain. */
+  const afford = bestBuy(BALL_BUNDLES, rewards.coins);
 
   return (
     <div className="overlay" id="noballs">

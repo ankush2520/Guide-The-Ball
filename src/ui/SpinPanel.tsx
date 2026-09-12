@@ -51,8 +51,9 @@ function spinTarget(ix: number, from: number, jitter: number): number {
 const PALETTE: Record<'coins' | 'balls' | 'ramps', [string, string][]> = {
   // amber gold - the hub currency
   coins: [['#ffd76b', '#d98b0c'], ['#ffc44f', '#b9700a']],
-  // bronze, the colour of the ball mark in the HUD
-  balls: [['#f0ab74', '#a8561f'], ['#e39a63', '#8e4517']],
+  // pearl, the colour of the ball mark in the HUD - and pointedly not a
+  // second gold, which is what a coin wedge and a ball wedge used to be
+  balls: [['#eceffb', '#8b8fb4'], ['#dfe3f5', '#767aa2']],
   // the ramp's own cyan, straight off the board
   ramps: [['#7fe0ff', '#1c86c4'], ['#6bd6fb', '#146ea6']],
 };
@@ -65,9 +66,11 @@ function wedgeColours(kind: 'coins' | 'balls' | 'ramps',
   return PALETTE[kind][i % 2];
 }
 
-/* The three units, drawn the way the HUD draws them: a gold disc with a rim
-   for a coin, a bronze ball, a short blue bar for a ramp. Every wedge is
-   light now, so all three are inked dark rather than switching on jackpot. */
+/* The three units, drawn the way the HUD draws them: a disc with a rim for a
+   coin, a plain disc for a ball, a short blue bar for a ramp. Every wedge is
+   light now, so all three are inked dark rather than switching on jackpot.
+   Inked flat, the rim is the ONLY thing separating the first two - which is
+   why the HUD's marks carry it too, rather than leaning on colour. */
 function drawUnit(g: CanvasRenderingContext2D, kind: 'coins' | 'balls' | 'ramps',
                   x: number, y: number): void {
   g.save();

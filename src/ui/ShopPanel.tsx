@@ -10,12 +10,23 @@
    states the whole offer at a glance, and the ones you cannot
    afford say so by being disabled rather than by failing when
    pressed.
+
+   The bundles and their prices live on RewardManager, not here.
+   A shop that names its own quantities and asks the wallet to
+   price them can drift from what the wallet will actually charge
+   - and the discount is the whole point of the bulk rows, so the
+   two must come from one table.
    ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
-import { BALL_PRICE, RAMP_PRICE } from '../managers/RewardManager';
+import { BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
+         type Bundle } from '../managers/RewardManager';
 
-const BALL_BUNDLES = [1, 10, 50];
-const RAMP_BUNDLES = [1, 3, 10];
+/* How much better than buying singles this row is, as whole percent. The
+   bulk rows are only worth a second look if the saving is stated, and it is
+   derived rather than written down so it cannot disagree with the price. */
+function saving(b: Bundle, unit: number): number {
+  return Math.round((1 - b.coins / (b.n * unit)) * 100);
+}
 
 export function ShopPanel({ onClose }: { onClose: () => void }) {
   const { rewards } = useGame();
@@ -32,17 +43,20 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
         <div className="scroll">
           <h4>Balls</h4>
           <p className="shopnote">
-            Every drop costs one ball, win or lose. {BALL_PRICE} coins each.
+            Every drop costs one ball, win or lose. {BALL_PRICE} coins each,
+            and fewer the more you take.
           </p>
           <div className="buyrow">
-            {BALL_BUNDLES.map(n => {
-              const cost = rewards.ballCost(n);
+            {BALL_BUNDLES.map(b => {
+              const cost = rewards.ballCost(b.n);
+              const off = saving(b, BALL_PRICE);
               return (
-                <button key={n} className="buybtn" id={`btn-buy-balls-${n}`}
+                <button key={b.n} className="buybtn" id={`btn-buy-balls-${b.n}`}
                         disabled={!rewards.canAfford(cost)}
-                        onClick={() => rewards.buyBalls(n)}>
-                  <b><i className="pip" />{n}</b>
+                        onClick={() => rewards.buyBalls(b.n)}>
+                  <b><i className="pip" />{b.n}</b>
                   <span className="price"><i className="coin" />{cost}</span>
+                  {off > 0 && <span className="save">{off}% off</span>}
                 </button>
               );
             })}
@@ -51,17 +65,20 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
           <h4>Spare ramps</h4>
           <p className="shopnote">
             Every level hands you its own ramps. A spare is one more, on any
-            level, whenever you want it. {RAMP_PRICE} coins each.
+            level, whenever you want it. {RAMP_PRICE} coins each, and fewer
+            the more you take.
           </p>
           <div className="buyrow">
-            {RAMP_BUNDLES.map(n => {
-              const cost = rewards.rampCost(n);
+            {RAMP_BUNDLES.map(b => {
+              const cost = rewards.rampCost(b.n);
+              const off = saving(b, RAMP_PRICE);
               return (
-                <button key={n} className="buybtn" id={`btn-buy-ramps-${n}`}
+                <button key={b.n} className="buybtn" id={`btn-buy-ramps-${b.n}`}
                         disabled={!rewards.canAfford(cost)}
-                        onClick={() => rewards.buyRamps(n)}>
-                  <b><i className="rampmark" />{n}</b>
+                        onClick={() => rewards.buyRamps(b.n)}>
+                  <b><i className="rampmark" />{b.n}</b>
                   <span className="price"><i className="coin" />{cost}</span>
+                  {off > 0 && <span className="save">{off}% off</span>}
                 </button>
               );
             })}

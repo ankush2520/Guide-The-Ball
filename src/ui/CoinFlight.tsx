@@ -11,9 +11,10 @@
    Two callers. The win card fires it through the effect below,
    once per card; the prize wheel calls flyReward() directly
    when a spin settles. Each currency flies its OWN mark to its
-   OWN counter - gold to the coins, bronze to the balls, a blue
-   bar to the ramps - because a gold coin sailing into the ball
-   tank would be saying the wrong thing.
+   OWN counter - a stamped gold coin to the coins, a lit white
+   ball to the balls, a blue bar to the ramps - because a gold
+   coin sailing into the ball tank would be saying the wrong
+   thing.
 
    DOM, not canvas. The board's renderer only paints inside the
    stage, and both ends of this flight - a modal card and the
