@@ -100,6 +100,33 @@ export const MIN_RAMP = 28, MAX_RAMP = 160;
    trajectory model the whole game is built on. */
 export const SPEED_CAP = MAX_SPEED;
 
+/* What a booster multiplies its authored exit speed by. The levels store the
+   speed each booster was DESIGNED around; this is the one dial that scales
+   every one of them at once, so the tuning rig can sweep it (see
+   tools/harness.mjs) without rewriting thirty levels.
+
+   Note what it collides with: SPEED_CAP above is hypot(MAX_VX, TERMINAL_VY) =
+   12.73, and every authored booster speed is already 9.98-12.21. Any gain
+   above ~1.05 is therefore swallowed by the cap unless the cap moves with it -
+   and the cap is the tunnelling guard, so moving it has a price the comment on
+   SPEED_CAP spells out. BOOST_CAP below is what actually decides whether a
+   gain reaches the ball. */
+export const BOOST_GAIN = 2;
+
+/* The ceiling a BOOSTED ball is held to, as distinct from the one the rest of
+   the board lives under. A booster is a deliberate, authored kick, so it is
+   allowed to outrun the general cap - but not past the speed at which the
+   ball stops colliding at all. Matter runs one 1/60s step with no continuous
+   collision detection, so a ball moving more than a ramp's full 9px thickness
+   per frame can pass clean through one. 13 keeps every boosted frame inside
+   that thickness with a margin. */
+export const BOOST_CAP = 13;
+
+/* How long the kick is allowed to outlive the step that applied it. Long
+   enough to be a launch the player can see and plan around; short enough that
+   the ball is back under the board's normal rules well before it crosses it. */
+export const BOOST_STEPS = 18;       // 0.3s
+
 export const SLIP_REST = 0.985;      // restitution inside a slippery zone
 
 /* Substeps of immunity after a teleport. This alone is NOT enough: the ball

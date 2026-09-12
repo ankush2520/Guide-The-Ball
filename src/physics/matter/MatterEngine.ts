@@ -38,7 +38,8 @@ import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '.
 import { mulberry32, falses, closestOnSeg } from '../math';
 import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
-  SPEED_CAP, PORTAL_CD, STAR_R, MAX_STEPS, REST_STEPS, REST_PX,
+  SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, PORTAL_CD, STAR_R,
+  MAX_STEPS, REST_STEPS, REST_PX,
   OB_JITTER, OB_MAX_DEV, H, BOARD,
 } from '../constants';
 
@@ -96,6 +97,10 @@ export class MatterBall implements BallState {
   bounces: BounceRecord[] = [];
 
   boostIn: boolean[];
+  /* Steps of boosted flight still owed. While it runs, the ball is held to
+     BOOST_CAP rather than the board's general cap, and the downward clamp is
+     off - otherwise the kick is undone by the same step that applied it. */
+  boostCd = 0;
   portalCd = 0;
   portalHold: { k: number; side: 'a' | 'b' } | null = null;
   broken: boolean[];
@@ -381,8 +386,18 @@ export class MatterEngine implements PhysicsEngine {
       const inside = Math.hypot(b.x - z.x, b.y - z.y) <= z.r;
       if (inside && !b.boostIn[k]) {
         const a = z.angle * Math.PI / 180;
-        const sp = cfg.speedCap === null ? z.speed : Math.min(z.speed, cfg.speedCap);
+        /* The kick is held to the BOOSTER's own ceiling, not the board's. The
+           general cap is hypot(MAX_VX, TERMINAL_VY) - the fastest the base
+           game can reach on its own - and every authored booster speed is
+           already within a whisker of it, so clamping the gain to that cap
+           would quietly turn a 2x into a few percent. What a boosted ball must
+           still respect is the tunnelling limit, which is what BOOST_CAP is.
+           A config with no cap at all (MATTER_PURE) keeps none here either. */
+        const sp = cfg.speedCap === null
+          ? z.speed * BOOST_GAIN
+          : Math.min(z.speed * BOOST_GAIN, BOOST_CAP);
         b.setVelocity(Math.cos(a) * sp, Math.sin(a) * sp);
+        b.boostCd = BOOST_STEPS;
         b.boosts++;
         b.noteHit(z.x, z.y, Math.cos(a), Math.sin(a), 'booster');
       }
@@ -396,7 +411,12 @@ export class MatterEngine implements PhysicsEngine {
       if (Math.hypot(b.x - st.x, b.y - st.y) <= STAR_R + BALL_R) { b.got[k] = true; b.stars++; }
     }
 
-    if (cfg.terminalVy !== null && b.vy > cfg.terminalVy) b.setVelocity(b.vx, cfg.terminalVy);
+    /* The kick outlives the step that applied it. Both clamps below would
+       otherwise take it straight back: terminalVy alone drags a downward
+       booster from 24 to 9 in the frame it fired. */
+    if (b.boostCd > 0) b.boostCd--;
+    if (b.boostCd === 0 && cfg.terminalVy !== null && b.vy > cfg.terminalVy)
+      b.setVelocity(b.vx, cfg.terminalVy);
     capSpeed(b, cfg);
     b.noteSpeed();
 
@@ -451,8 +471,11 @@ function inRect(x: number, y: number, z: { x: number; y: number; w: number; h: n
 
 function capSpeed(b: MatterBall, cfg: MatterConfig): void {
   if (cfg.speedCap === null) return;
+  /* A booster is an authored kick and is allowed to outrun the general cap
+     for its window; nothing is allowed to outrun the tunnelling limit. */
+  const cap = b.boostCd > 0 ? Math.max(cfg.speedCap, BOOST_CAP) : cfg.speedCap;
   const m = b.speed;
-  if (m > cfg.speedCap) { const k = cfg.speedCap / m; b.setVelocity(b.vx * k, b.vy * k); }
+  if (m > cap) { const k = cap / m; b.setVelocity(b.vx * k, b.vy * k); }
 }
 
 function enforceMinBounce(b: MatterBall, nx: number, ny: number, floor: number): void {

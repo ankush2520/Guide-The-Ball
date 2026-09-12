@@ -25,8 +25,14 @@ console.log('\nBOOSTER — deterministic redirect, fires once on entry');
   const after=boost.samples.find(s=>s.boosts===1);
   chk(plain.samples.every(s=>Math.abs(s.vx)<1e-9),'without a booster the ball falls dead straight');
   chk(!!after,'the booster fires');
-  chk(Math.abs(after.vx-10)<0.4 && Math.abs(after.vy)<0.4,
-    'it sets the exact configured direction and speed',`v=(${after.vx.toFixed(2)}, ${after.vy.toFixed(2)})`);
+  /* The authored speed is what the booster is DESIGNED around; what it fires
+     at is that times BOOST_GAIN, held to BOOST_CAP. Asserted against the
+     constants rather than a number, so retuning the gain moves this with it -
+     and so the day the cap stops binding, this notices. */
+  const want=Math.min(10*MECH.BOOST_GAIN, MECH.BOOST_CAP);
+  chk(Math.abs(after.vx-want)<0.4 && Math.abs(after.vy)<0.4,
+    `it fires at the authored speed x${MECH.BOOST_GAIN}, held to the boost cap`,
+    `v=(${after.vx.toFixed(2)}, ${after.vy.toFixed(2)}) want ${want}`);
   chk(boost.samples[boost.samples.length-1].boosts===1,
     'and fires ONCE per entry, not every step it is inside',
     `${boost.samples[boost.samples.length-1].boosts} boost(s)`);
@@ -115,12 +121,27 @@ console.log('\nSTAR — collected, and never touches the trajectory');
 
 console.log('\nSPEED_CAP — nothing stacks into runaway speed');
 {
+  /* The gale alone, with nothing to boost off: held to the general cap.
+     ax is 0 here deliberately - the old version of this check used ax:99 and
+     blew the ball off the side of the board before it ever touched a booster,
+     so it fired ZERO boosters while claiming to prove they were capped. The
+     `boosts` assertion below is what stops that happening again. */
+  const gale=await run({...base, wind:[{x:0,y:0,w:480,h:800,ax:0,ay:99}]});
+  const galeTop=Math.max(...gale.samples.map(s=>s.sp));
+  chk(galeTop<=MECH.SPEED_CAP+1e-9,'a full-board gale alone stays under the general cap',
+    `peak ${galeTop.toFixed(3)} vs cap ${MECH.SPEED_CAP.toFixed(3)}`);
+
+  /* Boosters stacked with that gale. A booster is allowed past the general
+     cap - that is the point of the boost window - but never past the boost
+     ceiling, which is the speed the ball stops colliding with ramps at. */
   const stacked=await run({...base,
     boosters:[{x:240,y:200,r:30,angle:-90,speed:999},{x:240,y:120,r:30,angle:90,speed:999}],
-    wind:[{x:0,y:0,w:480,h:800,ax:99,ay:99}]});
+    wind:[{x:0,y:0,w:480,h:800,ax:0,ay:99}]});
+  const fired=stacked.samples[stacked.samples.length-1].boosts;
   const top=Math.max(...stacked.samples.map(s=>s.sp));
-  chk(top<=MECH.SPEED_CAP+1e-9,'a booster asking for 999 and a full-board gale stay under the cap',
-    `peak ${top.toFixed(3)} vs cap ${MECH.SPEED_CAP.toFixed(3)}`);
+  chk(fired>0,'the stacked scenario actually reaches a booster',`${fired} fired`);
+  chk(top<=MECH.BOOST_CAP+1e-9,'a booster asking for 999 and a gale stay under the boost cap',
+    `peak ${top.toFixed(3)} vs boost cap ${MECH.BOOST_CAP}`);
   const plain=await run({...base});
   chk(Math.max(...plain.samples.map(s=>s.sp))<=MECH.SPEED_CAP+1e-9,
     'and an ordinary fall never reaches it, so world 1 cannot be affected');

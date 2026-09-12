@@ -442,13 +442,13 @@
      small and faint under a high one. Take the shadow away and
      the same bounce reads as a ball sliding up and down.
      ============================================================ */
-  /* Tall enough to hold the whole hop: 4px of floor, a 23px ball and the 25px
+  /* Tall enough to hold the whole hop: 4px of floor, a 28px ball and the 25px
      it climbs. The card clips its overflow, so a box sized to the resting ball
      would have the apex cut off by the card's top edge the moment anything
      trimmed the padding that currently hides the difference. The negative
      bottom margin gives the title back the space the taller box took. */
-  .dancefloor{position:relative;height:52px;margin:0 0 -4px;flex:none}
-  .dancer{position:absolute;left:50%;bottom:4px;width:23px;height:23px;
+  .dancefloor{position:relative;height:57px;margin:0 0 -4px;flex:none}
+  .dancer{position:absolute;left:50%;bottom:4px;width:28px;height:28px;
           border-radius:50%;
           /* closest-side, so the gradient ends at the ball's edge rather than
              at the box's corner - the same trap the coin's rim fell into. */
@@ -459,9 +459,46 @@
              shrinking about the ball's middle and leaving a gap under it */
           transform-origin:50% 100%;
           animation:ballhop .92s infinite}
-  .dancershade{position:absolute;left:50%;bottom:1px;width:22px;height:5px;
+  .dancershade{position:absolute;left:50%;bottom:1px;width:26px;height:5px;
                border-radius:50%;background:rgba(255,170,60,.5);filter:blur(1.5px);
                transform-origin:50% 50%;animation:ballshade .92s infinite}
+
+  /* ------------------------------------------------------------
+     THE FACE, AND HOW PLEASED IT IS
+
+     Three tiers, one per star, each ADDING to the one below it:
+     a small closed smile, a wider and deeper one, then an open
+     laugh with the eyes squeezed shut and colour in the cheeks.
+     Written that way round so .dancer alone is already a face.
+
+     Brown rather than black. The ball is white through gold, and
+     a black feature on it reads as a hole punched in the ball
+     instead of as a mark on its surface.
+     ------------------------------------------------------------ */
+  .dancer .eye{position:absolute;top:34%;width:3.4px;height:4.4px;border-radius:50%;
+               background:#6b4405}
+  .dancer .eye.l{left:26%} .dancer .eye.r{right:26%}
+  /* One star: a small, closed, pleased smile - an arc, not a shape. */
+  .dancer .mouth{position:absolute;left:50%;top:56%;width:8px;height:3.4px;
+                 transform:translateX(-50%);
+                 border-bottom:1.7px solid #6b4405;border-radius:0 0 999px 999px}
+  .dancer .cheek{display:none}
+
+  /* Two stars: the same smile, wider and deeper. */
+  .dancer.joy2 .mouth{width:11px;height:4.8px;border-bottom-width:1.9px}
+
+  /* Three stars: an open laugh. Filled rather than drawn, because at 28px a
+     thicker arc just reads as a thicker arc, where a solid shape reads as a
+     mouth that is actually OPEN. */
+  .dancer.joy3 .mouth{width:12.5px;height:7px;top:52%;
+                      background:#6b4405;border:0;border-radius:2px 2px 999px 999px}
+  /* and the eyes squeeze shut into two happy arcs */
+  .dancer.joy3 .eye{top:33%;width:5px;height:2.6px;background:transparent;
+                    border-top:1.7px solid #6b4405;border-radius:999px 999px 0 0}
+  .dancer.joy3 .eye.l{left:21%} .dancer.joy3 .eye.r{right:21%}
+  .dancer.joy3 .cheek{display:block;position:absolute;top:53%;width:4.5px;height:3px;
+                      border-radius:50%;background:rgba(255,110,85,.42)}
+  .dancer.joy3 .cheek.l{left:8%} .dancer.joy3 .cheek.r{right:8%}
   /* Up fast and decelerating, down accelerating - gravity is the whole of the
      character here, so each half gets its own curve rather than one ease. */
   @keyframes ballhop{

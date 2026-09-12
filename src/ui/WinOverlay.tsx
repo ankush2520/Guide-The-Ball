@@ -16,6 +16,8 @@
    The one thing added back is the bouncing ball above the title.
    It is not prose and it is not a number: it costs no reading,
    it holds the card's own height, and it is the BOARD's ball -
+   now wearing how well you did on its face, so the rating lands
+   twice: once countable in the stars, once as an expression -
    the white-to-gold one with the amber bloom - rather than the
    silvery mark the HUD counts spare balls with. Those are two
    different things and a win card is the worst place to confuse
@@ -34,10 +36,23 @@ export function WinOverlay() {
     <div className="overlay" id="overlay">
       <div className="card win" id="card">
         {/* Fixed height, and the ball moves only by transform, so the hop
-            cannot shift a single row of the card under it. */}
+            cannot shift a single row of the card under it.
+
+            The face is worn on the BALL, as children of it, so the squash and
+            stretch carry it: a grin that stayed rigid while the ball flattened
+            under it would read as a sticker rather than as a face.
+
+            How pleased it is, is the rating. `joy2`/`joy3` only ADD to the
+            face below them, so the plain .dancer is already a whole, valid
+            one-star face - a rating that somehow arrived outside 1-3 gets a
+            quieter smile, never a broken one. */}
         <div className="dancefloor" aria-hidden="true">
           <i className="dancershade" />
-          <i className="dancer" />
+          <i className={`dancer joy${card.stars}`}>
+            <i className="eye l" /><i className="eye r" />
+            <i className="cheek l" /><i className="cheek r" />
+            <i className="mouth" />
+          </i>
         </div>
         <div className="big" id="ov-title">Target hit!</div>
         <div className="stars" id="ov-stars">

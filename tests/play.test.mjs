@@ -471,34 +471,56 @@ check(bq.mean > 8, 'bounces still carry real randomness', `mean ${bq.mean.toFixe
 
 /* ---------------------------------------------------------------- */
 section('5. Gravity model: terminal velocity, caps, and lossy bounces');
+/* A BOOSTER IS THE ONE THING ALLOWED PAST THESE CAPS, and only it.
+
+   The general caps are what the whole trajectory model rests on, so the sweep
+   below splits the levels rather than relaxing the bound for all of them. A
+   level with no booster on it must still obey MAX_SPEED and TERMINAL_VY
+   exactly as before - that is what proves a boost tuning cannot leak into the
+   worlds that have none. A level with a booster is held to BOOST_CAP, which
+   is the speed the ball would start passing through ramps at. */
 const inv = await page.evaluate(() => {
-  const { LEVELS, simulate, CONSTS } = window.__gtb;
+  const { LEVELS, simulate, CONSTS, MECH } = window.__gtb;
   const R = Math.PI/180;
   const ramp = (cx,cy,deg,len=110) => { const a=deg*R,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
     return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy}; };
   let rnd = 4242; const rand = () => (rnd=(rnd*1103515245+12345)&0x7fffffff)/0x7fffffff;
   let overSpeed = 0, overVy = 0, runs = 0, bounces = 0, segs = 0;
+  let overBoost = 0, boostRuns = 0;
   let peak = 0, peakVy = 0, varied = 0;
-  for (let li = 0; li < LEVELS.length; li++)
+  for (let li = 0; li < LEVELS.length; li++){
+    const boosted = LEVELS[li].boosters.length > 0;
     for (let i = 0; i < 1200; i++){
       const cfg = [];
       for (let k = 0; k < LEVELS[li].maxBlocks; k++)
         cfg.push(ramp(30+rand()*420, 120+rand()*520, -85+rand()*170, 60+rand()*90));
       const o = simulate(cfg, 1 + (i%64), li);
       runs++; bounces += o.hits; segs += o.segHits;
-      if (o.spdMax > CONSTS.MAX_SPEED + 1e-9) overSpeed++;
-      if (o.vyMax  > CONSTS.TERMINAL_VY + 1e-9) overVy++;
+      if (boosted) {
+        boostRuns++;
+        if (o.spdMax > MECH.BOOST_CAP + 1e-9) overBoost++;
+      } else {
+        if (o.spdMax > CONSTS.MAX_SPEED + 1e-9) overSpeed++;
+        if (o.vyMax  > CONSTS.TERMINAL_VY + 1e-9) overVy++;
+        peakVy = Math.max(peakVy, o.vyMax);
+      }
       if (o.spdMax - o.spdMin > 1e-6) varied++;
       peak   = Math.max(peak, o.spdMax);
-      peakVy = Math.max(peakVy, o.vyMax);
     }
-  return { runs, bounces, segs, overSpeed, overVy, peak, peakVy, varied,
-           cap: CONSTS.MAX_SPEED, term: CONSTS.TERMINAL_VY };
+  }
+  return { runs, bounces, segs, overSpeed, overVy, overBoost, boostRuns,
+           peak, peakVy, varied,
+           cap: CONSTS.MAX_SPEED, term: CONSTS.TERMINAL_VY, boostCap: MECH.BOOST_CAP };
 });
-console.log(`  ${inv.runs} runs, ${inv.bounces} obstacle + ${inv.segs} segment bounces; ` +
-            `peak speed ${inv.peak.toFixed(2)}/${inv.cap.toFixed(2)}, peak vy ${inv.peakVy.toFixed(2)}/${inv.term}`);
-check(inv.overSpeed === 0, 'speed never exceeds the cap on any level', `${inv.overSpeed} runs over`);
-check(inv.overVy === 0, 'vy never exceeds TERMINAL_VY', `${inv.overVy} runs over`);
+console.log(`  ${inv.runs} runs (${inv.boostRuns} on boosted levels), ` +
+            `${inv.bounces} obstacle + ${inv.segs} segment bounces; ` +
+            `peak speed ${inv.peak.toFixed(2)}, peak vy ${inv.peakVy.toFixed(2)}/${inv.term}`);
+check(inv.overSpeed === 0, 'on a level with no booster, speed never exceeds the cap',
+  `${inv.overSpeed} runs over ${inv.cap.toFixed(2)}`);
+check(inv.overVy === 0, 'on a level with no booster, vy never exceeds TERMINAL_VY',
+  `${inv.overVy} runs over`);
+check(inv.overBoost === 0, 'and a boosted level never exceeds the boost cap either',
+  `${inv.overBoost} of ${inv.boostRuns} runs over ${inv.boostCap}`);
 check(inv.varied === inv.runs, 'speed genuinely varies during every run (gravity is real)',
   `${inv.varied}/${inv.runs}`);
 check(inv.peakVy > inv.term * 0.98, 'a free fall actually reaches terminal velocity',
