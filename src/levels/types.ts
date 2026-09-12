@@ -23,6 +23,25 @@ export interface PortalDef { id?: string; a: PortalEnd; b: PortalEnd; }
 export type BreakableDef = Circle;
 export type StarDef = Vec;
 
+/** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
+    the same shape of data - what differs is entirely what contact means. The
+    red obstacle deflects; this ends the drop. */
+export type FireDef = Circle;
+
+/** Horizontal-only patrol for a target.
+
+    `x0`/`x1` bound the target CENTRE, and `period` is the full round trip in
+    simulation STEPS - steps rather than seconds because the step count is the
+    simulation's own clock, and a target that moved on wall-clock time would
+    land somewhere different in the solver than it does on screen.
+
+    Horizontal only, and no vertical twin, on purpose: see the note on Rect
+    above. A target that moved in y would drag its walls through the space the
+    player drew a ramp in, which is precisely the bug that got moving targets
+    cut the first time. This mechanic is therefore confined to OPEN targets,
+    which have no walls to drag - initLevel() enforces it. */
+export interface TargetMove { x0: number; x1: number; period: number; }
+
 export type TargetType = 'OPEN' | 'SIDE_WALL' | 'POCKET' | 'NARROW_GAP' | 'ENCLOSED';
 export type WallSide = 'left' | 'right';
 
@@ -48,7 +67,11 @@ export interface RawLevel {
   portals?: PortalDef[];
   breakables?: BreakableDef[];
   stars?: StarDef[];
+  fires?: FireDef[];
   target: Circle;
+  /** Absent on every level that came before it, which is what keeps a static
+      target a zero-migration default. */
+  targetMove?: TargetMove;
 }
 
 /** A level after normalisation: every list present, walls built. The
@@ -62,6 +85,7 @@ export interface Level extends RawLevel {
   portals: PortalDef[];
   breakables: BreakableDef[];
   stars: StarDef[];
+  fires: FireDef[];
   walls: Segment[];
 }
 

@@ -33,6 +33,7 @@ import {
   type IEventCollision, type Body as MBody,
 } from 'matter-js';
 import type { Level, Segment, Circle } from '../../levels/types';
+import { targetAt } from '../../levels/target';
 import type { BallState, PhysicsEngine } from '../PhysicsEngine';
 import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '../types';
 import { mulberry32, falses, closestOnSeg } from '../math';
@@ -420,7 +421,26 @@ export class MatterEngine implements PhysicsEngine {
     capSpeed(b, cfg);
     b.noteSpeed();
 
-    const c = lv.target;
+    /* ---- fire: contact ends the run, with no bounce to resolve ----
+
+       Deliberately a distance test and NOT a Matter body. A body would have
+       to be given a restitution and would deflect the ball on the frame it
+       killed it, which is the one thing this hazard must never do - the whole
+       point of it is that it is not a bumper. Tested after the solve for the
+       same reason the target is: this is the ball's settled position for the
+       step, so what ended the run is what the player watched it touch. */
+    for (let k = 0; k < lv.fires.length; k++) {
+      const f = lv.fires[k];
+      if (Math.hypot(b.x - f.x, b.y - f.y) <= f.r + BALL_R) {
+        b.noteHit(f.x, f.y, 0, -1, 'fire');
+        b.result = 'burned';
+        return;
+      }
+    }
+
+    /* The target's position NOW, which on a patrolling board is not where it
+       was authored. b.steps is the simulation's own clock - see targetAt. */
+    const c = targetAt(lv, b.steps);
     if (Math.hypot(b.x - c.x, b.y - c.y) <= c.r) { b.result = 'win'; return; }
     if (b.isOutOfBounds()) { b.result = 'out'; return; }
     b.tickStallWatch();

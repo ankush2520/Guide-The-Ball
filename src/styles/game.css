@@ -715,6 +715,17 @@
          border:1px solid rgba(200,240,255,.6)}
   .sw.pt{border-radius:50%;background:radial-gradient(circle,hsla(285,100%,80%,.6),hsla(285,80%,45%,.15));
          border:2px dashed hsl(285,100%,80%);box-shadow:0 0 9px hsla(285,100%,70%,.6)}
+  /* Fire: same danger family as .sw.ob, and pointedly not the same shape. The
+     obstacle swatch is a smooth lit sphere; this one is a teardrop with a
+     white-hot tip, so the legend shows the difference the board does. */
+  .sw.fr{border-radius:50% 50% 50% 50% / 60% 60% 40% 40%;
+         background:linear-gradient(180deg,#fff0c0 0%,#ffc451 22%,#ff6a1e 52%,#e0281f 78%,#8e1219 100%);
+         box-shadow:0 0 10px rgba(255,110,40,.75)}
+  /* Moving target: the target's own green, with the travel stated as arrows
+     either side rather than as a second colour. */
+  .sw.mt{border-radius:50%;background:radial-gradient(circle,rgba(47,217,122,.45),rgba(47,217,122,.08));
+         box-shadow:0 0 0 1.5px rgba(47,217,122,.9) inset,
+                    -7px 0 0 -5px rgba(47,217,122,.8), 7px 0 0 -5px rgba(47,217,122,.8)}
   .sw.st{background:#ffc451;box-shadow:0 0 9px rgba(255,201,60,.7);
          clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
   /* the text swaps between one and two lines as you play; reserving the tall

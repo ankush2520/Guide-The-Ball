@@ -73,8 +73,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const renderer = new Renderer(canvas);
     const controller = new GameController(bus, levels, rewards, renderer,
                                           createEngine());
-    // resume where the player left off, exactly as the original did
-    controller.setLevel(rewards.highest);
+    // resume where the player left off, exactly as the original did - and
+    // `resumeAt` rather than `highest` so the dev unlock cannot send a boot
+    // to the final level. See RewardManager.
+    controller.setLevel(rewards.resumeAt);
 
     const services: GameServices = { bus, levels, rewards, controller, canvas };
     installGameHook(services);      // the Playwright suite and the solver sweep

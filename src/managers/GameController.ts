@@ -23,6 +23,7 @@ import { Sound } from '../audio/Sound';
 import { clamp } from '../physics/math';
 import { TERMINAL_VY } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
+import { targetAt } from '../levels/target';
 import type { Level, Segment } from '../levels/types';
 
 const STEP_MS = STEP_MS_DEFAULT;
@@ -266,7 +267,10 @@ export class GameController {
     this.rewards.recordPickups(this.levels.levelIndex, b.stars);
 
     if (result !== 'win') { this.missed(result); return; }
-    const c = this.levels.level.target;
+    /* Where the target WAS when the ball reached it. On a patrolling board
+       the authored centre is only its start, and swallowing the ball toward
+       that would drag it sideways to a place the target had already left. */
+    const c = targetAt(this.levels.level, b.steps);
     Sound.win();
     this.setPhase('capture');
     this.capture = { t: 0, bx: b.x, by: b.y, cx: c.x, cy: c.y };
@@ -286,8 +290,11 @@ export class GameController {
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.squash.amt = 0; this.seenHit = 0; this.seenBroke = 0;
     this.setPhase('plan');
-    this.showFlash(result === 'timeout'
-      ? 'Got stuck! Try readjusting your ramps.'
+    /* Fire says what it was, because a run that ends on contact with
+       something looks like a bug unless the board names it. */
+    this.showFlash(
+      result === 'burned' ? 'Burned up! Fire ends the drop - go around it.'
+      : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);
   }
@@ -434,7 +441,9 @@ export class GameController {
 
   /* ---------------- what the renderer needs ---------------- */
 
-  private renderState() {
+  /* Public only so the test hook can read exactly what the renderer is given.
+     Nothing in the game calls it from outside. */
+  renderState() {
     const lv = this.levels.level;
     return {
       level: lv,
@@ -446,6 +455,11 @@ export class GameController {
       phase: this.phase,
       clock: this.clock,
       alpha: this.acc / STEP_MS,
+      /* Steps plus the part-step the renderer is interpolating through, so a
+         patrolling target slides instead of stepping. Zero with no ball on
+         the board, which parks it at the start of its run - the position the
+         player plans against. */
+      simT: this.ball ? this.ball.steps + this.acc / STEP_MS : 0,
       ball: this.ball,
       broken: this.ball ? this.ball.broken : this.levels.sessionBroken,
       got: this.ball ? this.ball.got : [],

@@ -12,8 +12,13 @@
    what order.
    ============================================================ */
 
+import type { RawLevel } from '../levels/types';
+
 export interface DrawContext {
   ctx: CanvasRenderingContext2D;
+  /** The level being drawn. Only the target reads it, and only to resolve a
+      patrol - an entity still never looks up its own def through this. */
+  level: Pick<RawLevel, 'target' | 'targetMove'>;
   /** Seconds since load. Every animation is a pure function of this, so the
       board looks identical at the same clock on any device. */
   clock: number;
@@ -21,13 +26,18 @@ export interface DrawContext {
       state, read by the entities that have two appearances. */
   broken: boolean[];
   got: boolean[];
+  /** Elapsed SIMULATION time in steps, fractional, and 0 whenever no drop is
+      running. The one thing on the board that is not drawn off the wall
+      clock: a patrolling target has to be painted where the physics says it
+      is, or the board would show a different game than it plays. */
+  simT: number;
 }
 
 export type EntityKind =
   | 'slippery' | 'wind'          // ground
   | 'target'
   | 'wall'
-  | 'obstacle'
+  | 'obstacle' | 'fire'
   | 'breakable' | 'booster' | 'portal' | 'star'
   | 'ramp';
 
@@ -38,7 +48,9 @@ export const LAYER: Record<EntityKind, number> = {
   slippery: 0, wind: 0,
   target: 1,
   wall: 2,
-  obstacle: 3,
+  /* Fire shares the obstacle's layer: they are the same class of furniture
+     and are read against each other, so neither may cover the other. */
+  obstacle: 3, fire: 3,
   breakable: 4, booster: 4, portal: 4, star: 4,
   ramp: 5,
 };

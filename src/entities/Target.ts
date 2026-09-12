@@ -1,21 +1,29 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Circle } from '../levels/types';
+import { targetAt } from '../levels/target';
 
 /* A bullseye portal. Concentric rings, a pulsing core and a few drifting
    motes, so it reads as "land here" and stays alive even before the ball is
    dropped.
 
    Note what does NOT happen here: nothing rotates. The rings breathe along
-   their radius only. An orbiting element on the target implies the target
-   moves, and every target in this game is stationary. */
+   their radius only. An orbiting element implies the target SPINS, which it
+   never does - on a Needlecrest board it slides, and those two would fight.
+
+   Where it is drawn is not its authored centre. A patrolling target is
+   painted at targetAt(simT), the same function and the same clock the win
+   check uses, so what the player sees the ball miss is what the simulation
+   says it missed. simT is fractional - steps plus the interpolation alpha -
+   which is what keeps the slide smooth between physics steps rather than
+   stepping 60 times a second, the same trick the ball's own draw uses. */
 const TARGET_PULSE_S = 1.9;   // seconds per outward pulse ring
 const TARGET_MOTES = 6;       // motes at fixed angles, breathing in and out
 
 export class Target extends Entity<Circle> {
   readonly kind: EntityKind = 'target';
 
-  draw({ ctx, clock }: DrawContext): void {
-    const c = this.def;
+  draw({ ctx, clock, simT, level }: DrawContext): void {
+    const c = targetAt(level, simT);
     const pulse = 0.5 + 0.5 * Math.sin(clock * 2.3);
 
     ctx.save();

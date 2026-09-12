@@ -11,6 +11,7 @@ const p=await (await b.newContext()).newPage();
 p.on('pageerror',e=>bad('page error',e.message));
 await attachHarness(p);
 const MECH=await p.evaluate(()=>window.__gtb.MECH);
+const CONSTS=await p.evaluate(()=>window.__gtb.CONSTS);
 const base={id:999,name:'scratch',maxBlocks:1,targetType:'OPEN',
   spawn:{x:240,y:40},obstacles:[],target:{x:240,y:770,r:20}};
 const run=(lv,ramps=[],seed=1,broken=null)=>p.evaluate(([lv,ramps,seed,broken])=>{
@@ -117,6 +118,77 @@ console.log('\nSTAR — collected, and never touches the trajectory');
   chk(JSON.stringify(withStars.samples.map(s=>[s.x,s.y,s.vx,s.vy]))===
       JSON.stringify(without.samples.map(s=>[s.x,s.y,s.vx,s.vy])),
     'and the trajectory is bit-identical with and without them');
+}
+
+console.log('\nFIRE — contact ends the drop, with no bounce');
+{
+  /* Straight down the spawn column, so the ball cannot help but meet it. */
+  const lv={...base, fires:[{x:240,y:300,r:26}]};
+  const f=await run(lv);
+  chk(f.result==='burned','touching fire ends the run as a loss',`result ${f.result}`);
+  const last=f.samples[f.samples.length-1];
+  chk(Math.hypot(last.x-240,last.y-300)<=26+CONSTS.BALL_R+1.5,
+    'and it ends AT the fire, not somewhere past it',
+    `ended ${Math.hypot(last.x-240,last.y-300).toFixed(1)}px from centre`);
+  /* The whole point of the mechanic: it must not behave like the red one. */
+  chk(f.samples.every(s=>Math.abs(s.vx)<1e-9),
+    'it never deflects the ball - no bounce, no redirect',
+    `peak |vx| ${Math.max(...f.samples.map(s=>Math.abs(s.vx))).toExponential(1)}`);
+  const ob=await run({...base, obstacles:[{x:240,y:300,r:26}]});
+  chk(ob.result!=='burned'&&ob.samples.some(s=>Math.abs(s.vx)>0.5),
+    'while the red obstacle in the same place still bounces and does NOT end it',
+    `result ${ob.result}`);
+  /* A board with no fire on it must be untouched by any of this. */
+  const none=await run({...base});
+  chk(none.result!=='burned','a level with no fire can never burn',`result ${none.result}`);
+}
+
+console.log('\nMOVING TARGET — the win tests where it IS, not where it started');
+{
+  /* Parked far from the spawn column, patrolling to directly under it. The
+     ball falls straight down x=240, so a target still at x0 can never be hit
+     and one that has travelled there in time must be.
+
+     The period is DERIVED from how long the ball actually takes to fall,
+     not guessed: the target reaches x1 at the half period, so timing the
+     drop and doubling it puts the target under the ball at the moment it
+     arrives. Hard-coding a period here would only be testing my arithmetic
+     about terminal velocity. */
+  const fall=await run({...base, target:{x:240,y:700,r:22}});
+  const arrive=fall.samples.findIndex(s=>s.y>=700-22);
+  chk(arrive>0,'timed the fall to the target line',`${arrive} steps`);
+  const period=arrive*2;
+  const mv={...base, target:{x:80,y:700,r:22}, targetMove:{x0:80,x1:240,period}};
+  const moving=await run(mv);
+  chk(moving.result==='win','the ball wins on a target that slid under it',
+    `result ${moving.result}`);
+  /* The control: identical board, target nailed to the patrol's start. */
+  const still=await run({...base, target:{x:80,y:700,r:22}});
+  chk(still.result!=='win','and the same board with a STATIC target at x0 is a miss',
+    `result ${still.result}`);
+
+  // the patrol itself: starts at x0, reaches x1 at the half period, returns
+  const at=await p.evaluate(([mv,period])=>{
+    const t=window.__gtb.targetAt;
+    return [0,period*0.25,period*0.5,period*0.75,period,period*1.5]
+      .map(k=>+t(mv,k).x.toFixed(2));
+  },[{target:{x:80,y:700,r:22},targetMove:mv.targetMove},period]);
+  chk(at[0]===80&&at[2]===240&&at[4]===80,
+    'the patrol is a triangle: x0 at t=0, x1 at the half period, back at the full',
+    `[${at.join(' ')}]`);
+  chk(Math.abs(at[1]-160)<0.01&&Math.abs(at[3]-160)<0.01,
+    'and crosses at a constant rate, so the midpoint is reached at the quarters');
+  chk(at[4]===at[0]&&Math.abs(at[5]-at[2])<0.01,'and repeats exactly, run after run');
+
+  /* Determinism is the contract this mechanic lives or dies by. */
+  const again=await run(mv,[],7);
+  chk(JSON.stringify(again.samples.map(s=>[s.x,s.y]))===
+      JSON.stringify(moving.samples.map(s=>[s.x,s.y])),
+    'a moving target is deterministic - a different seed changes nothing');
+
+  const stat=await run({...base});
+  chk(stat.result==='win','a level with no targetMove still wins exactly as before',
+    `result ${stat.result}`);
 }
 
 console.log('\nSPEED_CAP — nothing stacks into runaway speed');

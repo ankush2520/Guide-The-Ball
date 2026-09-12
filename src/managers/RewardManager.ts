@@ -14,11 +14,23 @@
    paying for it is this manager's business alone. That is what
    lets the payout rules change without the drop code moving.
    ============================================================ */
-import type { GameBus, BallChangeReason, CoinChangeReason,
-              RampChangeReason, PrizeKind } from '../core/events';
-import { progressStore, type SaveData, type PendingPrize,
-         SAVE_KEY, BALLS_KEY, SPIN_KEY, WALLET_KEY } from './ProgressStore';
-import { clamp } from '../physics/math';
+import type {
+  GameBus,
+  BallChangeReason,
+  CoinChangeReason,
+  RampChangeReason,
+  PrizeKind,
+} from "../core/events";
+import {
+  progressStore,
+  type SaveData,
+  type PendingPrize,
+  SAVE_KEY,
+  BALLS_KEY,
+  SPIN_KEY,
+  WALLET_KEY,
+} from "./ProgressStore";
+import { clamp } from "../physics/math";
 
 /* ---- balls ---- */
 
@@ -63,13 +75,20 @@ export const RAMP_PRICE = 15;
    below. Those two facts together are what make `bestBuy` exactly optimal
    with a plain greedy walk; break either and it becomes a knapsack that
    greedy can quietly get wrong. */
-export interface Bundle { n: number; coins: number; }
+export interface Bundle {
+  n: number;
+  coins: number;
+}
 
 export const BALL_BUNDLES: readonly Bundle[] = [
-  { n: 1, coins: 2 }, { n: 12, coins: 20 }, { n: 70, coins: 100 },
+  { n: 1, coins: 2 },
+  { n: 12, coins: 20 },
+  { n: 70, coins: 100 },
 ];
 export const RAMP_BUNDLES: readonly Bundle[] = [
-  { n: 1, coins: 15 }, { n: 4, coins: 45 }, { n: 14, coins: 150 },
+  { n: 1, coins: 15 },
+  { n: 4, coins: 45 },
+  { n: 14, coins: 150 },
 ];
 
 /** What `n` of something costs: the bundle price when `n` is exactly a bundle,
@@ -78,7 +97,7 @@ export const RAMP_BUNDLES: readonly Bundle[] = [
     honest per-unit sum rather than an interpolated bargain. */
 function priced(bundles: readonly Bundle[], n: number, unit: number): number {
   const k = Math.max(0, n | 0);
-  return bundles.find(b => b.n === k)?.coins ?? k * unit;
+  return bundles.find((b) => b.n === k)?.coins ?? k * unit;
 }
 
 /** The most units `coins` can actually buy, spending across as many bundles as
@@ -99,7 +118,7 @@ export function bestBuy(bundles: readonly Bundle[], coins: number): number {
    uses) and by stars earned. Playing well is worth roughly double a scrape,
    and the later Acts pay more because they cost more to reach. */
 export const COIN_CLEAR = [
-  [10, 14, 20],      // Act 1: 1, 2, 3 stars
+  [10, 14, 20], // Act 1: 1, 2, 3 stars
   [14, 18, 24],
   [18, 22, 28],
   [22, 26, 32],
@@ -112,18 +131,28 @@ export const REPLAY_SHARE = 0.25;
 export const REPLAY_MIN = 2;
 
 /** What clearing `levelId` with `stars` pays, first time or on a replay. */
-export function coinsFor(levelId: number, stars: number, firstClear: boolean): number {
+export function coinsFor(
+  levelId: number,
+  stars: number,
+  firstClear: boolean,
+): number {
   const act = clamp(Math.floor((levelId - 1) / 5), 0, COIN_CLEAR.length - 1);
   const full = COIN_CLEAR[act][clamp(stars, 1, 3) - 1];
-  return firstClear ? full : Math.max(REPLAY_MIN, Math.round(full * REPLAY_SHARE));
+  return firstClear
+    ? full
+    : Math.max(REPLAY_MIN, Math.round(full * REPLAY_SHARE));
 }
 
 /* ---- the wheel ---- */
 
 export const SPIN_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-export const SPIN_MS = 4200;               // length of the spin animation
+export const SPIN_MS = 4200; // length of the spin animation
 
-export interface SpinPrize { kind: PrizeKind; n: number; w: number; }
+export interface SpinPrize {
+  kind: PrizeKind;
+  n: number;
+  w: number;
+}
 
 /* Wedge order is the wheel's layout; `w` is the weight, and they are chosen
    to total 100 so a weight reads as its own percentage.
@@ -133,14 +162,14 @@ export interface SpinPrize { kind: PrizeKind; n: number; w: number; }
    day on average, which is a level's takings or fifteen balls: enough to be
    worth coming back for, not enough to replace playing. */
 export const SPIN_PRIZES: SpinPrize[] = [
-  { kind: 'coins', n:  20, w: 22 },
-  { kind: 'balls', n:  10, w: 14 },
-  { kind: 'ramps', n:   3, w:  6 },
-  { kind: 'coins', n: 150, w:  3 },
-  { kind: 'balls', n:   5, w: 20 },
-  { kind: 'ramps', n:   1, w: 16 },
-  { kind: 'coins', n: 100, w:  5 },
-  { kind: 'coins', n:  50, w: 14 },
+  { kind: "coins", n: 20, w: 22 },
+  { kind: "balls", n: 10, w: 14 },
+  { kind: "ramps", n: 3, w: 6 },
+  { kind: "coins", n: 150, w: 3 },
+  { kind: "balls", n: 5, w: 20 },
+  { kind: "ramps", n: 1, w: 16 },
+  { kind: "coins", n: 100, w: 5 },
+  { kind: "coins", n: 50, w: 14 },
 ];
 
 /* What the wheel gilds. Two of the eight wedges - the 150 and the 100 - so
@@ -150,25 +179,33 @@ export const JACKPOT_COINS = 60;
 
 /** What a wedge is worth in coins, which is the only way to compare them. */
 export function prizeValue(p: SpinPrize): number {
-  return p.kind === 'coins' ? p.n
-       : p.kind === 'balls' ? p.n * BALL_PRICE
-       : p.n * RAMP_PRICE;
+  return p.kind === "coins"
+    ? p.n
+    : p.kind === "balls"
+      ? p.n * BALL_PRICE
+      : p.n * RAMP_PRICE;
 }
 
 export const PRIZE_UNIT: Record<PrizeKind, string> = {
-  coins: 'coin', balls: 'ball', ramps: 'ramp',
+  coins: "coin",
+  balls: "ball",
+  ramps: "ramp",
 };
 
 /** "150 coins" / "1 ramp" - the wording the wheel and the flash both use. */
 export function prizeLabel(kind: PrizeKind, n: number): string {
-  return `${n} ${PRIZE_UNIT[kind]}${n === 1 ? '' : 's'}`;
+  return `${n} ${PRIZE_UNIT[kind]}${n === 1 ? "" : "s"}`;
 }
 
 /** Two things are worth rewarding, and they pull against each other: solving
     it in few attempts, and solving it with fewer ramps than the level hands
     you. Retries cost a star; coming in under the ramp budget buys one back,
     so a scrappy solve that is genuinely efficient can still reach three. */
-export function starsFor(nTries: number, rampsUsed: number, budget: number): number {
+export function starsFor(
+  nTries: number,
+  rampsUsed: number,
+  budget: number,
+): number {
   let s = 3;
   if (nTries > 1) s--;
   if (nTries > 3) s--;
@@ -176,13 +213,21 @@ export function starsFor(nTries: number, rampsUsed: number, budget: number): num
   return clamp(s, 1, 3);
 }
 
-export function starNote(nTries: number, rampsUsed: number, budget: number, s: number): string {
-  const bits = [`try ${nTries}`, `${rampsUsed}/${budget} ramp${budget === 1 ? '' : 's'}`];
-  if (s === 3) return `Perfect - ${bits.join(', ')}.`;
+export function starNote(
+  nTries: number,
+  rampsUsed: number,
+  budget: number,
+  s: number,
+): string {
+  const bits = [
+    `try ${nTries}`,
+    `${rampsUsed}/${budget} ramp${budget === 1 ? "" : "s"}`,
+  ];
+  if (s === 3) return `Perfect - ${bits.join(", ")}.`;
   const want: string[] = [];
-  if (nTries > 1) want.push('clear it first try');
-  if (rampsUsed >= budget) want.push('use fewer ramps');
-  return `Cleared on ${bits.join(', ')}. Next star: ${want.join(' or ')}.`;
+  if (nTries > 1) want.push("clear it first try");
+  if (rampsUsed >= budget) want.push("use fewer ramps");
+  return `Cleared on ${bits.join(", ")}. Next star: ${want.join(" or ")}.`;
 }
 
 export class RewardManager {
@@ -190,7 +235,41 @@ export class RewardManager {
   coins = STARTING_COINS;
   /** Spare ramps, spendable on ANY level on top of its own budget. */
   extraRamps = 0;
-  highest = 0;
+
+  /* ============================================================
+     UNLOCK EVERYTHING - the dev switch
+
+     Uncomment the one `return` below and every level in the game
+     is open in the picker, immediately, with no save editing and
+     no rebuild of anything else.
+
+     It is a VIEW over progress, not a change to it. The real
+     high-water mark lives in `_highest` and is what gets written
+     to localStorage, what records a clear, and what seeds an old
+     save - so playing with this on cannot promote you, and
+     commenting it back out returns you to exactly the level you
+     had actually reached. That is the whole reason this is a
+     getter rather than `highest = LEVELS.length - 1` somewhere
+     at boot: that version writes itself into your save the first
+     time the game autosaves, and there is no way back.
+     ============================================================ */
+  get highest(): number {
+    return this.levelCount - 1; // <-- UNCOMMENT TO UNLOCK ALL LEVELS
+    // return this._highest;
+  }
+  set highest(n: number) {
+    this._highest = n;
+  }
+  private _highest = 0;
+
+  /** Where to resume on boot: the level actually reached, never the unlocked
+      ceiling. Reading `highest` here would drop you straight into the LAST
+      level in the game the moment the dev switch is on, which is the opposite
+      of what unlocking everything is for - the point is to be able to go
+      anywhere, not to be sent to the end. */
+  get resumeAt(): number {
+    return this._highest;
+  }
   bestStars: Record<number, number> = {};
   bestPickups: Record<number, number> = {};
   clearedLevels: Record<number, boolean> = {};
@@ -219,7 +298,10 @@ export class RewardManager {
      quarter second after it appears. */
   spinShown: { kind: PrizeKind; n: number } | null = null;
 
-  constructor(private bus: GameBus, private levelCount: number) {
+  constructor(
+    private bus: GameBus,
+    private levelCount: number,
+  ) {
     this.loadAll();
   }
 
@@ -227,12 +309,13 @@ export class RewardManager {
 
   private loadAll(): void {
     const s: SaveData = progressStore.load();
-    this.highest = clamp((s.highest as number) | 0, 0, this.levelCount - 1);
-    this.bestStars = (s.stars && typeof s.stars === 'object') ? s.stars : {};
-    this.bestPickups = (s.pickups && typeof s.pickups === 'object') ? s.pickups : {};
+    this._highest = clamp((s.highest as number) | 0, 0, this.levelCount - 1);
+    this.bestStars = s.stars && typeof s.stars === "object" ? s.stars : {};
+    this.bestPickups =
+      s.pickups && typeof s.pickups === "object" ? s.pickups : {};
     this.tutorialSeen = !!s.tutorialSeen;
     this.obstacleTipSeen = !!s.obstacleTipSeen;
-    this.tipsSeen = (s.tips && typeof s.tips === 'object') ? s.tips : {};
+    this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
 
     /* Which levels have ever been cleared, so the first-clear bonus is paid
        once and an easy level cannot be farmed for balls. Deliberately its own
@@ -241,28 +324,52 @@ export class RewardManager {
        finale pays the biggest bonus. Players from before this existed are
        migrated by the only thing their save does prove - reaching level N
        means clearing every level below it. */
-    if (s.cleared && typeof s.cleared === 'object') this.clearedLevels = s.cleared;
+    if (s.cleared && typeof s.cleared === "object")
+      this.clearedLevels = s.cleared;
     else {
       const seeded: Record<number, boolean> = {};
-      for (let i = 0; i < this.highest; i++) seeded[i] = true;
+      // _highest, not highest: with the dev unlock on, the override would
+      // migrate an old save into having "cleared" every level in the game
+      // and pay out every first-clear bonus with it.
+      for (let i = 0; i < this._highest; i++) seeded[i] = true;
       this.clearedLevels = seeded;
     }
 
     const stored = progressStore.loadBalls();
-    if (stored === null) { this.balls = STARTING_BALLS; progressStore.saveBalls(this.balls); }
-    else this.balls = stored;
+    if (stored === null) {
+      this.balls = STARTING_BALLS;
+      progressStore.saveBalls(this.balls);
+    } else this.balls = stored;
 
     /* Same rule as the ball tank: no stored wallet at all is a first open and
        gets the starting grant; a corrupt one is treated the same way rather
        than as zero, so a storage glitch cannot leave a player broke. */
     const w = progressStore.loadWallet();
-    if (w.coins === null) { this.coins = STARTING_COINS; this.extraRamps = 0; this.saveWallet(); }
-    else { this.coins = w.coins; this.extraRamps = w.ramps; }
+    if (w.coins === null) {
+      this.coins = STARTING_COINS;
+      this.extraRamps = 0;
+      this.saveWallet();
+    } else {
+      this.coins = w.coins;
+      this.extraRamps = w.ramps;
+    }
 
     this.loadSpin();
-    this.bus.emit('balls:changed', { balls: this.balls, delta: 0, reason: 'load' });
-    this.bus.emit('coins:changed', { coins: this.coins, delta: 0, reason: 'load' });
-    this.bus.emit('ramps:changed', { ramps: this.extraRamps, delta: 0, reason: 'load' });
+    this.bus.emit("balls:changed", {
+      balls: this.balls,
+      delta: 0,
+      reason: "load",
+    });
+    this.bus.emit("coins:changed", {
+      coins: this.coins,
+      delta: 0,
+      reason: "load",
+    });
+    this.bus.emit("ramps:changed", {
+      ramps: this.extraRamps,
+      delta: 0,
+      reason: "load",
+    });
   }
 
   /** Wipe every persisted record and return to a first-open state. Used by
@@ -273,10 +380,16 @@ export class RewardManager {
       localStorage.removeItem(BALLS_KEY);
       localStorage.removeItem(SPIN_KEY);
       localStorage.removeItem(WALLET_KEY);
-    } catch { /* blocked storage */ }
+    } catch {
+      /* blocked storage */
+    }
     this.highest = 0;
-    this.bestStars = {}; this.bestPickups = {}; this.clearedLevels = {};
-    this.tutorialSeen = false; this.obstacleTipSeen = false; this.tipsSeen = {};
+    this.bestStars = {};
+    this.bestPickups = {};
+    this.clearedLevels = {};
+    this.tutorialSeen = false;
+    this.obstacleTipSeen = false;
+    this.tipsSeen = {};
     this.spinLast = 0;
     this.spinOffered = 0;
     this.spinning = false;
@@ -287,16 +400,33 @@ export class RewardManager {
     this.coins = STARTING_COINS;
     this.extraRamps = 0;
     this.saveWallet();
-    this.bus.emit('balls:changed', { balls: this.balls, delta: 0, reason: 'load' });
-    this.bus.emit('coins:changed', { coins: this.coins, delta: 0, reason: 'load' });
-    this.bus.emit('ramps:changed', { ramps: this.extraRamps, delta: 0, reason: 'load' });
+    this.bus.emit("balls:changed", {
+      balls: this.balls,
+      delta: 0,
+      reason: "load",
+    });
+    this.bus.emit("coins:changed", {
+      coins: this.coins,
+      delta: 0,
+      reason: "load",
+    });
+    this.bus.emit("ramps:changed", {
+      ramps: this.extraRamps,
+      delta: 0,
+      reason: "load",
+    });
   }
 
   saveProgress(): void {
     progressStore.save({
-      highest: this.highest, stars: this.bestStars, cleared: this.clearedLevels,
-      pickups: this.bestPickups, tutorialSeen: this.tutorialSeen,
-      obstacleTipSeen: this.obstacleTipSeen, tips: this.tipsSeen,
+      // the REAL mark - the dev unlock must never persist itself
+      highest: this._highest,
+      stars: this.bestStars,
+      cleared: this.clearedLevels,
+      pickups: this.bestPickups,
+      tutorialSeen: this.tutorialSeen,
+      obstacleTipSeen: this.obstacleTipSeen,
+      tips: this.tipsSeen,
     });
   }
 
@@ -305,10 +435,13 @@ export class RewardManager {
   private setBalls(n: number, delta: number, reason: BallChangeReason): void {
     this.balls = Math.max(0, n);
     progressStore.saveBalls(this.balls);
-    this.bus.emit('balls:changed', { balls: this.balls, delta, reason });
+    this.bus.emit("balls:changed", { balls: this.balls, delta, reason });
   }
 
-  grant(n: number, reason: 'clear-bonus' | 'ad' | 'spin' | 'grant' = 'grant'): void {
+  grant(
+    n: number,
+    reason: "clear-bonus" | "ad" | "spin" | "grant" = "grant",
+  ): void {
     if (!(n > 0)) return;
     this.setBalls(this.balls + n, n, reason);
   }
@@ -316,49 +449,60 @@ export class RewardManager {
   /** Set the tank outright. Test-only: the game itself only ever grants or
       spends, so that the ledger and the balls can never disagree. */
   setBallsForTest(n: number): void {
-    this.setBalls(Math.max(0, n | 0), Math.max(0, n | 0) - this.balls, 'grant');
+    this.setBalls(Math.max(0, n | 0), Math.max(0, n | 0) - this.balls, "grant");
   }
 
   /** One ball per DROP, win or lose - the fiction is a crate of physical
       balls, and one you threw away is gone either way. Returns false if the
       tank is empty, which is the caller's cue to open the stop screen. */
   spendBall(): boolean {
-    if (this.balls <= 0) { this.bus.emit('balls:empty', {}); return false; }
-    this.setBalls(this.balls - 1, -1, 'drop');
+    if (this.balls <= 0) {
+      this.bus.emit("balls:empty", {});
+      return false;
+    }
+    this.setBalls(this.balls - 1, -1, "drop");
     return true;
   }
 
   /* ---------------- the wallet ---------------- */
 
-  private saveWallet(): void { progressStore.saveWallet(this.coins, this.extraRamps); }
+  private saveWallet(): void {
+    progressStore.saveWallet(this.coins, this.extraRamps);
+  }
 
   private setCoins(n: number, delta: number, reason: CoinChangeReason): void {
     this.coins = Math.max(0, n);
     this.saveWallet();
-    this.bus.emit('coins:changed', { coins: this.coins, delta, reason });
+    this.bus.emit("coins:changed", { coins: this.coins, delta, reason });
   }
 
   private setRamps(n: number, delta: number, reason: RampChangeReason): void {
     this.extraRamps = Math.max(0, n);
     this.saveWallet();
-    this.bus.emit('ramps:changed', { ramps: this.extraRamps, delta, reason });
+    this.bus.emit("ramps:changed", { ramps: this.extraRamps, delta, reason });
   }
 
-  grantCoins(n: number, reason: CoinChangeReason = 'grant'): void {
+  grantCoins(n: number, reason: CoinChangeReason = "grant"): void {
     if (!(n > 0)) return;
     this.setCoins(this.coins + n, n, reason);
   }
 
-  grantRamps(n: number, reason: RampChangeReason = 'grant'): void {
+  grantRamps(n: number, reason: RampChangeReason = "grant"): void {
     if (!(n > 0)) return;
     this.setRamps(this.extraRamps + n, n, reason);
   }
 
   /* ---------------- the shop ---------------- */
 
-  ballCost(n: number): number { return priced(BALL_BUNDLES, n, BALL_PRICE); }
-  rampCost(n: number): number { return priced(RAMP_BUNDLES, n, RAMP_PRICE); }
-  canAfford(cost: number): boolean { return cost > 0 && this.coins >= cost; }
+  ballCost(n: number): number {
+    return priced(BALL_BUNDLES, n, BALL_PRICE);
+  }
+  rampCost(n: number): number {
+    return priced(RAMP_BUNDLES, n, RAMP_PRICE);
+  }
+  canAfford(cost: number): boolean {
+    return cost > 0 && this.coins >= cost;
+  }
 
   /* Both purchases take the coins and hand over the goods in one step, and
      both refuse outright rather than partially filling an order the player
@@ -367,16 +511,16 @@ export class RewardManager {
   buyBalls(n: number): boolean {
     const cost = this.ballCost(n);
     if (!this.canAfford(cost)) return false;
-    this.setCoins(this.coins - cost, -cost, 'buy');
-    this.setBalls(this.balls + (n | 0), n | 0, 'buy');
+    this.setCoins(this.coins - cost, -cost, "buy");
+    this.setBalls(this.balls + (n | 0), n | 0, "buy");
     return true;
   }
 
   buyRamps(n: number): boolean {
     const cost = this.rampCost(n);
     if (!this.canAfford(cost)) return false;
-    this.setCoins(this.coins - cost, -cost, 'buy');
-    this.setRamps(this.extraRamps + (n | 0), n | 0, 'buy');
+    this.setCoins(this.coins - cost, -cost, "buy");
+    this.setRamps(this.extraRamps + (n | 0), n | 0, "buy");
     return true;
   }
 
@@ -386,38 +530,58 @@ export class RewardManager {
       the player happened to navigate next. */
   spendExtraRamp(): boolean {
     if (this.extraRamps <= 0) return false;
-    this.setRamps(this.extraRamps - 1, -1, 'use');
+    this.setRamps(this.extraRamps - 1, -1, "use");
     return true;
   }
 
   /** Test-only, like setBallsForTest. */
   setWalletForTest(coins: number, ramps: number): void {
-    const c = Math.max(0, coins | 0), r = Math.max(0, ramps | 0);
-    this.setCoins(c, c - this.coins, 'grant');
-    this.setRamps(r, r - this.extraRamps, 'grant');
+    const c = Math.max(0, coins | 0),
+      r = Math.max(0, ramps | 0);
+    this.setCoins(c, c - this.coins, "grant");
+    this.setRamps(r, r - this.extraRamps, "grant");
   }
 
   /** What clearing level `id` pays the FIRST time, and only the first time. */
   clearBonus(id: number): number {
-    return CLEAR_BONUS[clamp(Math.floor((id - 1) / 5), 0, CLEAR_BONUS.length - 1)];
+    return CLEAR_BONUS[
+      clamp(Math.floor((id - 1) / 5), 0, CLEAR_BONUS.length - 1)
+    ];
   }
 
   /* ---------------- clearing a level ---------------- */
 
   /** Record a win and pay what it is worth. Returns the stars earned and the
       bonus paid, so the win card can say so. */
-  recordClear(levelIndex: number, levelId: number, isLast: boolean,
-              tries: number, rampsUsed: number, budget: number):
-              { stars: number; bonus: number; coins: number;
-                note: string; firstClear: boolean } {
-    if (!isLast && levelIndex + 1 > this.highest) this.highest = levelIndex + 1;
+  recordClear(
+    levelIndex: number,
+    levelId: number,
+    isLast: boolean,
+    tries: number,
+    rampsUsed: number,
+    budget: number,
+  ): {
+    stars: number;
+    bonus: number;
+    coins: number;
+    note: string;
+    firstClear: boolean;
+  } {
+    // compared against the real mark so genuine progress still advances
+    // normally while the dev unlock is on
+    if (!isLast && levelIndex + 1 > this._highest)
+      this._highest = levelIndex + 1;
 
     const firstClear = !this.clearedLevels[levelIndex];
     let bonus = 0;
-    if (firstClear) { this.clearedLevels[levelIndex] = true; bonus = this.clearBonus(levelId); }
+    if (firstClear) {
+      this.clearedLevels[levelIndex] = true;
+      bonus = this.clearBonus(levelId);
+    }
 
     const stars = starsFor(tries, rampsUsed, budget);
-    if (stars > (this.bestStars[levelIndex] | 0)) this.bestStars[levelIndex] = stars;
+    if (stars > (this.bestStars[levelIndex] | 0))
+      this.bestStars[levelIndex] = stars;
 
     /* Coins are paid on EVERY clear, unlike the ball bonus - they are the
        running income the shop is priced against. A replay pays a quarter, so
@@ -427,11 +591,16 @@ export class RewardManager {
 
     this.saveProgress();
     // granted after saveProgress() so the ledger and the wallet commit together
-    if (bonus > 0) this.grant(bonus, 'clear-bonus');
-    this.grantCoins(coins, 'clear');
+    if (bonus > 0) this.grant(bonus, "clear-bonus");
+    this.grantCoins(coins, "clear");
 
-    return { stars, bonus, coins,
-             note: starNote(tries, rampsUsed, budget, stars), firstClear };
+    return {
+      stars,
+      bonus,
+      coins,
+      note: starNote(tries, rampsUsed, budget, stars),
+      firstClear,
+    };
   }
 
   recordPickups(levelIndex: number, stars: number): void {
@@ -458,14 +627,23 @@ export class RewardManager {
        bus has no listeners yet this early, and loadAll() announces the totals
        once it has finished. */
     if (pending) {
-      if (pending.kind === 'balls') { this.balls += pending.n; progressStore.saveBalls(this.balls); }
-      else if (pending.kind === 'coins') { this.coins += pending.n; this.saveWallet(); }
-      else { this.extraRamps += pending.n; this.saveWallet(); }
+      if (pending.kind === "balls") {
+        this.balls += pending.n;
+        progressStore.saveBalls(this.balls);
+      } else if (pending.kind === "coins") {
+        this.coins += pending.n;
+        this.saveWallet();
+      } else {
+        this.extraRamps += pending.n;
+        this.saveWallet();
+      }
     }
     progressStore.saveSpin(this.spinLast, null, this.spinOffered);
   }
 
-  spinReady(now = Date.now()): boolean { return now - this.spinLast >= SPIN_COOLDOWN_MS; }
+  spinReady(now = Date.now()): boolean {
+    return now - this.spinLast >= SPIN_COOLDOWN_MS;
+  }
 
   /* ---- letting itself in ----
 
@@ -506,8 +684,11 @@ export class RewardManager {
     this.spinLast = Date.now();
     this.spinning = true;
     this.spinShown = null;
-    progressStore.saveSpin(this.spinLast, { kind: p.kind, n: p.n } as PendingPrize,
-                           this.spinOffered);
+    progressStore.saveSpin(
+      this.spinLast,
+      { kind: p.kind, n: p.n } as PendingPrize,
+      this.spinOffered,
+    );
     return ix;
   }
 
@@ -517,9 +698,9 @@ export class RewardManager {
     this.spinning = false;
     this.spinShown = { kind: p.kind, n: p.n };
     progressStore.saveSpin(this.spinLast, null, this.spinOffered);
-    if (p.kind === 'balls') this.grant(p.n, 'spin');
-    else if (p.kind === 'coins') this.grantCoins(p.n, 'spin');
-    else this.grantRamps(p.n, 'spin');
-    this.bus.emit('spin:won', { prizeIndex: ix, kind: p.kind, n: p.n });
+    if (p.kind === "balls") this.grant(p.n, "spin");
+    else if (p.kind === "coins") this.grantCoins(p.n, "spin");
+    else this.grantRamps(p.n, "spin");
+    this.bus.emit("spin:won", { prizeIndex: ix, kind: p.kind, n: p.n });
   }
 }

@@ -111,10 +111,521 @@ const SPECS = {
         spawn, obstacles, boosters, target
       };
     }
+  },
+
+  6: {
+    name: 'Emberkeep',
+    /* Emberkeep layers FIRE onto the breakable blocks it already had, and the
+       two are deliberately opposites in the same country: a breakable is a
+       hazard you are allowed to spend a drop on, a fire is one you are not.
+       Learning which is which IS the country, so every board carries both. */
+    /* Bands stay wide compared to Solmesa. The difficulty here is a routing
+       decision, not a precision one - asking for both at once produces boards
+       that fail for the wrong reason and teach nothing. */
+    gate: i => ({ minTol: 3, maxTol: 26 - i * 1.1, maxBlind: 0.05,
+                  requireFire: true, maxObHits: 1.4 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 80, 170) : rint(r, 310, 400), y: 40 };
+      /* THE FIRE SITS IN THE FALL LINE. That is the whole board: do nothing
+         and you burn, so the first ramp is not an optimisation, it is the
+         only way the drop survives. Placed high enough that the player has
+         room to turn the ball before reaching it. */
+      const fires = [{ x: clampX(spawn.x + rint(r, -10, 10), 40),
+                       y: rint(r, 215, 300), r: rint(r, 24, 30) }];
+      if (last) {
+        // the closing board gets a second one, guarding the far approach
+        const f2 = { x: clampX(spawn.x + (leftSpawn ? 190 : -190), 60),
+                     y: rint(r, 380, 460), r: rint(r, 22, 27) };
+        if (clear(f2, f2.r, fires, 30)) fires.push(f2);
+      }
+      /* Target across and low, so the route has to travel rather than just
+         sidestep the flame and drop. */
+      /* A WIDE band, and many attempts. Emberkeep is the third country to be
+         written into a board 480 wide, so most of the low corners are already
+         somebody else's target - a narrow window here does not produce a
+         harder level, it produces a generator that runs out of dice. */
+      let target = null;
+      for (let a = 0; a < 220 && !target; a++){
+        const tx = leftSpawn ? rint(r, 270, 424) : rint(r, 56, 210);
+        const ty = rint(r, 545, 745);
+        if (Math.abs(tx - spawn.x) < 150) continue;
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        if (!clear({ x: tx, y: ty }, 40, fires, 26)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+      }
+      if (!target) return null;
+      /* Breakables sit between the fire and the target: something the route
+         is allowed to go THROUGH, next to something it is not. */
+      const breakables = [];
+      const wantB = last ? 3 : (i < 3 ? 1 : 2);
+      let guard = 0;
+      while (breakables.length < wantB && guard++ < 200){
+        const o = { x: rint(r, 70, 410), y: rint(r, 330, 600), r: rint(r, 26, 34) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (!clear(o, o.r, fires, 26)) continue;
+        if (!clear(o, o.r, breakables, 16)) continue;
+        breakables.push(o);
+      }
+      const obstacles = [];
+      if (i >= 4){
+        let g2 = 0;
+        while (obstacles.length < 1 && g2++ < 120){
+          const o = { x: rint(r, 70, 410), y: rint(r, 340, 580), r: rint(r, 26, 32) };
+          if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+          if (!clear(o, o.r, fires, 24) || !clear(o, o.r, breakables, 18)) continue;
+          obstacles.push(o);
+        }
+      }
+      return {
+        name: pick(r, last ? ['Crucible'] : FIRE_NAMES),
+        maxBlocks: 2,
+        // OPEN throughout bar the closer: the fire is the obstruction this
+        // country is about, and walls would add a second unrelated one
+        targetType: last ? 'SIDE_WALL' : 'OPEN',
+        wallSide: leftSpawn ? 'right' : 'left',
+        spawn, obstacles, breakables, fires, target
+      };
+    }
+  },
+
+  10: {
+    name: 'Needlecrest',
+    /* Needlecrest is the precision country, and a MOVING target is precision
+       in the one axis the game had never asked for: when. The bands are the
+       tightest in the game, and the target is small - but the real difficulty
+       is that arriving in the right place at the wrong moment is a miss. */
+    gate: i => ({ minTol: 2, maxTol: 16 - i * 0.8, maxBlind: 0.035,
+                  requireMove: true, maxObHits: 1.0 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 90, 170) : rint(r, 310, 390), y: 40 };
+      /* The patrol runs ACROSS the board, and the ball has to meet it partway.
+         x0 is where it sits while the player plans, so the board they look at
+         is honest about where the run begins. */
+      let target = null, move = null;
+      for (let a = 0; a < 90 && !target; a++){
+        const span = rint(r, 90, 180);
+        const x0 = rint(r, 60, 420 - span);
+        const x1 = x0 + span;
+        const ty = rint(r, 600, 720);
+        /* Compared on x0, which is what gets STORED as target.x and what the
+           board shows while the player plans. Comparing the patrol's midpoint
+           instead let two levels with different spans share an identical
+           starting spot and still pass - the spread check downstream reads
+           target.x, so the dedupe key has to be the same field. */
+        if (taken.some(t => Math.hypot(t.x - x0, t.y - ty) < 46)) continue;
+        /* The period is the mechanic's only tuning knob, in STEPS. A ball
+           takes roughly 80-110 steps to reach this depth, so a period in this
+           band means the target has crossed at least once - and at the short
+           end, several times - by the time it arrives. */
+        const period = rint(r, 70, 210);
+        target = { x: x0, y: ty, r: last ? rint(r, 20, 24) : rint(r, 22, 28) };
+        move = { x0, x1, period };
+      }
+      if (!target) return null;
+      const obstacles = [];
+      const want = last ? 3 : (i < 3 ? 1 : 2);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 200){
+        const o = { x: rint(r, 60, 420), y: rint(r, 240, 560), r: rint(r, 24, 32) };
+        if (o.y > target.y - 110) continue;          // keep the approach clean
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
+      }
+      return {
+        name: pick(r, last ? ['The Needle'] : MOVE_NAMES),
+        maxBlocks: 2,
+        // OPEN is not a style choice here: walls are built from the target
+        // centre and would be dragged along by the patrol. See levels/index.
+        targetType: 'OPEN',
+        spawn, obstacles, target, targetMove: move
+      };
+    }
+  }
+,
+
+  /* ---------------------------------------------------------------- */
+  /* The remaining ten countries. Every mechanic they use was already
+     built and shipped - what was missing was only the level data, which
+     is why these are specs and not engine work. */
+  /* ---------------------------------------------------------------- */
+
+  3: {
+    name: 'Windemere',
+    /* Wind is the first mechanic that acts on the ball CONTINUOUSLY rather
+       than at a moment, so the boards give it room: a wide band the ball
+       falls through, and a target placed where only the drift can reach. */
+    gate: i => ({ minTol: 3, maxTol: 25 - i * 1.1, maxBlind: 0.06,
+                  requireZone: 'wind', maxObHits: 1.2 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 80, 150) : rint(r, 330, 400), y: 40 };
+      const toward = leftSpawn ? 1 : -1;
+      /* Spanning the spawn column, so the drop cannot miss it. The push is
+         well under WIND_CAP - the cap is a safety rail, not a target. */
+      const zy = rint(r, 200, 300), zh = rint(r, 170, 260);
+      const wind = [{ x: 0, y: zy, w: W, h: zh,
+                      ax: toward * rng(r, 0.35, 0.95), ay: 0 }];
+      let target = null;
+      for (let a = 0; a < 200 && !target; a++){
+        const tx = leftSpawn ? rint(r, 290, 430) : rint(r, 50, 190);
+        const ty = rint(r, 580, 740);
+        if (Math.abs(tx - spawn.x) < 165) continue;
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+      }
+      if (!target) return null;
+      const obstacles = [];
+      const want = last ? 3 : (i < 3 ? 1 : 2);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 200){
+        const o = { x: rint(r, 60, 420), y: rint(r, 300, 600), r: rint(r, 26, 34) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
+      }
+      return { name: pick(r, last ? ['The Gale'] : WIND_NAMES), maxBlocks: 2,
+               targetType: last ? 'SIDE_WALL' : 'OPEN',
+               wallSide: leftSpawn ? 'right' : 'left',
+               spawn, obstacles, wind, target };
+    }
+  },
+
+  4: {
+    name: 'Frostvale',
+    /* Ice makes the ball keep what a bounce would normally cost it, so the
+       difficulty is SETTLING, not reaching. The sheet therefore sits low, in
+       the approach to the target, where overshooting is the failure. */
+    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.1, maxBlind: 0.055,
+                  requireZone: 'slippery', maxObHits: 1.2 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 80, 160) : rint(r, 320, 400), y: 40 };
+      let target = null;
+      for (let a = 0; a < 200 && !target; a++){
+        const tx = leftSpawn ? rint(r, 280, 425) : rint(r, 55, 200);
+        const ty = rint(r, 600, 740);
+        if (Math.abs(tx - spawn.x) < 150) continue;
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+      }
+      if (!target) return null;
+      // full width so it always straddles the fall line, and deep enough to
+      // cover the run-in to the target
+      const zy = rint(r, 360, 470);
+      const slippery = [{ x: 0, y: zy, w: W, h: rint(r, 180, 280) }];
+      const obstacles = [];
+      const want = last ? 3 : (i < 3 ? 1 : 2);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 200){
+        const o = { x: rint(r, 60, 420), y: rint(r, 260, 560), r: rint(r, 26, 34) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
+      }
+      return { name: pick(r, last ? ['Black Ice'] : ICE_NAMES), maxBlocks: 2,
+               targetType: last ? 'POCKET' : 'OPEN',
+               wallSide: leftSpawn ? 'right' : 'left',
+               spawn, obstacles, slippery, target };
+    }
+  },
+
+  5: {
+    name: 'Zunmara Ruins',
+    /* A portal pair is a shortcut across the board, so the target goes where
+       falling alone cannot reach it - the far side, high enough that the ball
+       would run out of board before drifting there. */
+    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.1, maxBlind: 0.055,
+                  requirePortal: true, maxObHits: 1.2 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 80, 160) : rint(r, 320, 400), y: 40 };
+      // mouth on the fall line, exit across the board and lower
+      const ax = clampX(spawn.x + rint(r, -14, 14), 46);
+      const ay = rint(r, 230, 330);
+      const bx = leftSpawn ? rint(r, 290, 420) : rint(r, 60, 190);
+      const by = rint(r, 420, 560);
+      const portals = [{ id: 'p1', a: { x: ax, y: ay, r: rint(r, 26, 32) },
+                         b: { x: bx, y: by, r: rint(r, 26, 32) } }];
+      let target = null;
+      for (let a = 0; a < 200 && !target; a++){
+        const tx = clampX(bx + rint(r, -90, 90), 56);
+        const ty = rint(r, 640, 745);
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+      }
+      if (!target) return null;
+      const obstacles = [];
+      const want = last ? 3 : (i < 3 ? 1 : 2);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 200){
+        const o = { x: rint(r, 60, 420), y: rint(r, 300, 620), r: rint(r, 26, 34) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (!clear(o, o.r, [portals[0].a, portals[0].b], 24)) continue;
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
+      }
+      return { name: pick(r, last ? ['The Gateway'] : PORTAL_NAMES), maxBlocks: 2,
+               targetType: last ? 'SIDE_WALL' : 'OPEN',
+               wallSide: leftSpawn ? 'right' : 'left',
+               spawn, obstacles, portals, target };
+    }
+  },
+
+  7: {
+    name: 'Nocturne Sands',
+    /* Stars change nothing about the physics, so these boards are ordinary
+       boards with a second, optional question laid over them: the route that
+       wins and the route that collects are not the same route. */
+    gate: i => ({ minTol: 3, maxTol: 26 - i * 1.2, maxBlind: 0.06,
+                  requireStars: 1, maxObHits: 1.2 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 80, 170) : rint(r, 310, 400), y: 40 };
+      let target = null;
+      for (let a = 0; a < 200 && !target; a++){
+        const tx = leftSpawn ? rint(r, 270, 425) : rint(r, 55, 210);
+        const ty = rint(r, 590, 740);
+        if (Math.abs(tx - spawn.x) < 145) continue;
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+      }
+      if (!target) return null;
+      /* Strung along the straight line from spawn to target, jittered off it.
+         Placed on the natural route rather than at random, so at least one is
+         always collectable - which is the only thing the gate can check. */
+      const stars = [];
+      const nStars = last ? 3 : (i < 4 ? 2 : 3);
+      for (let k = 0; k < nStars; k++){
+        const t = (k + 1) / (nStars + 1);
+        stars.push({ x: clampX(Math.round(spawn.x + (target.x - spawn.x) * t + rint(r, -40, 40)), 30),
+                     y: Math.round(spawn.y + (target.y - spawn.y) * t + rint(r, -30, 30)) });
+      }
+      const obstacles = [];
+      const want = last ? 3 : (i < 3 ? 1 : 2);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 200){
+        const o = { x: rint(r, 60, 420), y: rint(r, 260, 600), r: rint(r, 26, 34) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (!clear(o, o.r, stars.map(st => ({ ...st, r: 14 })), 12)) continue;
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
+      }
+      return { name: pick(r, last ? ['Constellation'] : STAR_NAMES), maxBlocks: 2,
+               targetType: last ? 'SIDE_WALL' : 'OPEN',
+               wallSide: leftSpawn ? 'right' : 'left',
+               spawn, obstacles, stars, target };
+    }
+  },
+
+  8: {
+    name: 'Neonaka',
+    /* Two mechanics at once, and the pair rotates through the country so it
+       never becomes one gimmick repeated ten times. */
+    gate: i => ({ minTol: 2.5, maxTol: 22 - i * 1.0, maxBlind: 0.05,
+                  minMechanics: 2, maxObHits: 1.2 }),
+    make(r, i, n, taken){ return combo(r, i, n, taken, 2, COMBO_NAMES, 'Overload'); }
+  },
+
+  9: {
+    name: 'Coralis Deep',
+    gate: i => ({ minTol: 2.5, maxTol: 20 - i * 0.9, maxBlind: 0.045,
+                  minMechanics: 3, maxObHits: 1.2 }),
+    make(r, i, n, taken){ return combo(r, i, n, taken, 3, DEEP_NAMES, 'The Trench'); }
+  },
+
+  11: {
+    name: 'Cascadia Falls',
+    /* No new mechanic - the idea is LENGTH. Three ramps, and a target in the
+       far corner at the bottom of the board, so the route is a chain rather
+       than a single deflection. */
+    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.0, maxBlind: 0.05, maxObHits: 1.4 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 55, 120) : rint(r, 360, 425), y: 40 };
+      let target = null;
+      for (let a = 0; a < 200 && !target; a++){
+        const tx = leftSpawn ? rint(r, 330, 440) : rint(r, 40, 150);
+        const ty = rint(r, 660, 755);
+        if (Math.abs(tx - spawn.x) < 230) continue;          // the long diagonal
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 36) };
+      }
+      if (!target) return null;
+      const obstacles = [];
+      const want = last ? 4 : 2 + (i > 4 ? 1 : 0);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 220){
+        const o = { x: rint(r, 55, 425), y: rint(r, 240, 640), r: rint(r, 24, 32) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
+      }
+      return { name: pick(r, last ? ['The Cataract'] : FALL_NAMES), maxBlocks: 3,
+               targetType: last ? 'POCKET' : 'OPEN',
+               wallSide: leftSpawn ? 'right' : 'left',
+               spawn, obstacles, target };
+    }
+  },
+
+  12: {
+    name: 'Ironvale',
+    /* The inverse of Cascadia: a crowded board and FEWER ramps. One ramp for
+       most of the country, so the single placement has to be exactly right. */
+    gate: i => ({ minTol: 2.5, maxTol: 20 - i * 0.9, maxBlind: 0.04, maxObHits: 1.6 }),
+    make(r, i, n, taken){
+      const last = i === n - 1;
+      const leftSpawn = i % 2 === 0;
+      const spawn = { x: leftSpawn ? rint(r, 90, 180) : rint(r, 300, 390), y: 40 };
+      let target = null;
+      for (let a = 0; a < 200 && !target; a++){
+        const tx = rint(r, 55, 425);
+        const ty = rint(r, 620, 750);
+        if (Math.abs(tx - spawn.x) < 110) continue;
+        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 36) };
+      }
+      if (!target) return null;
+      const obstacles = [];
+      const want = last ? 6 : 3 + Math.floor(i / 3);
+      let guard = 0;
+      while (obstacles.length < want && guard++ < 300){
+        const o = { x: rint(r, 55, 425), y: rint(r, 240, 620), r: rint(r, 22, 30) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 24 }], 12)) continue;
+        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 190) continue;
+        if (!clear(o, o.r, obstacles, 14)) continue;
+        obstacles.push(o);
+      }
+      return { name: pick(r, last ? ['The Forgeworks'] : IRON_NAMES),
+               maxBlocks: i < 6 ? 1 : 2,
+               targetType: last ? 'SIDE_WALL' : 'OPEN',
+               wallSide: leftSpawn ? 'right' : 'left',
+               spawn, obstacles, target };
+    }
+  },
+
+  13: {
+    name: 'Aerith Heights',
+    gate: i => ({ minTol: 2.5, maxTol: 19 - i * 0.9, maxBlind: 0.04,
+                  minMechanics: 2, maxObHits: 1.2 }),
+    make(r, i, n, taken){ return combo(r, i, n, taken, 2, SKY_NAMES, 'The Summit Gate'); }
+  },
+
+  14: {
+    name: 'The Zenith',
+    /* The finale. Three mechanics, the tightest bands in the game, and a
+       target small enough that arriving is not the same as landing. */
+    gate: i => ({ minTol: 2, maxTol: 15 - i * 0.7, maxBlind: 0.03,
+                  minMechanics: 3, maxObHits: 1.0 }),
+    make(r, i, n, taken){ return combo(r, i, n, taken, 3, ZENITH_NAMES, 'The Zenith', true); }
   }
 };
+
+/* ---------------------------------------------------------------- */
+/* THE COMBO BUILDER
+
+   Countries 8, 9, 13 and 14 are not defined by a new mechanic but by how
+   many run at once. Rather than four near-identical templates, one builder
+   takes the COUNT and draws that many from the pool - which is also what
+   stops the four of them producing the same board with a different palette.
+   ---------------------------------------------------------------- */
+function combo(r, i, n, taken, want, names, bossName, hard = false){
+  const last = i === n - 1;
+  const leftSpawn = i % 2 === 0;
+  const spawn = { x: leftSpawn ? rint(r, 85, 165) : rint(r, 315, 395), y: 40 };
+  const toward = leftSpawn ? 1 : -1;
+  const lv = { spawn, obstacles: [], maxBlocks: 2,
+               targetType: 'OPEN', wallSide: leftSpawn ? 'right' : 'left' };
+
+  let target = null;
+  for (let a = 0; a < 220 && !target; a++){
+    const tx = leftSpawn ? rint(r, 280, 425) : rint(r, 55, 200);
+    const ty = rint(r, 600, 745);
+    if (Math.abs(tx - spawn.x) < 150) continue;
+    if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+    target = { x: tx, y: ty, r: hard ? rint(r, 22, 27) : (last ? rint(r, 26, 30) : rint(r, 30, 36)) };
+  }
+  if (!target) return null;
+  lv.target = target;
+
+  /* Rotated by level index rather than drawn at random, so a country covers
+     its whole pool instead of landing on the same pair six times. */
+  const POOL = ['booster', 'wind', 'slippery', 'portal', 'breakable', 'star'];
+  const chosen = [];
+  for (let k = 0; k < POOL.length && chosen.length < want; k++)
+    chosen.push(POOL[(i + k) % POOL.length]);
+
+  for (const m of chosen){
+    if (m === 'booster'){
+      const angle = toward > 0 ? rint(r, -30, 20) : rint(r, 160, 210);
+      lv.boosters = [{ x: clampX(spawn.x + rint(r, -12, 12), 46), y: rint(r, 230, 320),
+                       r: rint(r, 28, 34), angle, speed: rng(r, 9.5, 12.4) }];
+    } else if (m === 'wind'){
+      lv.wind = [{ x: 0, y: rint(r, 300, 380), w: W, h: rint(r, 150, 220),
+                   ax: toward * rng(r, 0.3, 0.8), ay: 0 }];
+    } else if (m === 'slippery'){
+      lv.slippery = [{ x: 0, y: rint(r, 430, 500), w: W, h: rint(r, 150, 220) }];
+    } else if (m === 'portal'){
+      const bx = leftSpawn ? rint(r, 280, 410) : rint(r, 70, 200);
+      lv.portals = [{ id: 'p1',
+                      a: { x: clampX(spawn.x + rint(r, -12, 12), 46), y: rint(r, 210, 280), r: rint(r, 26, 31) },
+                      b: { x: bx, y: rint(r, 430, 540), r: rint(r, 26, 31) } }];
+    } else if (m === 'breakable'){
+      lv.breakables = [{ x: rint(r, 90, 390), y: rint(r, 340, 560), r: rint(r, 26, 33) }];
+    } else if (m === 'star'){
+      lv.stars = [0, 1].map(k => ({
+        x: clampX(Math.round(spawn.x + (target.x - spawn.x) * ((k + 1) / 3) + rint(r, -35, 35)), 30),
+        y: Math.round(spawn.y + (target.y - spawn.y) * ((k + 1) / 3) + rint(r, -25, 25)) }));
+    }
+  }
+
+  const solids = [lv.boosters, lv.breakables].filter(Boolean).flat()
+    .concat(lv.portals ? [lv.portals[0].a, lv.portals[0].b] : []);
+  const wantOb = last ? 3 : (i < 3 ? 1 : 2);
+  let guard = 0;
+  while (lv.obstacles.length < wantOb && guard++ < 240){
+    const o = { x: rint(r, 60, 420), y: rint(r, 260, 600), r: rint(r, 24, 32) };
+    if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+    if (!clear(o, o.r, solids, 22)) continue;
+    if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
+    if (!clear(o, o.r, lv.obstacles, 16)) continue;
+    lv.obstacles.push(o);
+  }
+  lv.name = last ? bossName : pick(r, names);
+  if (last) lv.targetType = 'SIDE_WALL';
+  return lv;
+}
+
+const WIND_NAMES = ['Crosswind','The Drift','Squall','Headwind','Bluster','Leeward','Updraught'];
+const ICE_NAMES  = ['Glasswork','Skid','The Rink','Hoarfrost','Slick','Frostbite','Glide'];
+const PORTAL_NAMES = ['Threshold','The Loop','Shortcut','Wayhouse','Passage','Relay','Doorstep'];
+const STAR_NAMES = ['Stargazer','The Trail','Night Watch','Scatter','Lantern','Wanderer'];
+const COMBO_NAMES = ['Crossfire','Neon Run','Double Bill','Interchange','Static','Downtown'];
+const DEEP_NAMES = ['Undertow','Reef Run','Abyssal','Riptide','The Shoal','Deepwater'];
+const FALL_NAMES = ['Long Drop','The Chute','Cascade','Spillway','Plunge','Whitewater'];
+const IRON_NAMES = ['Foundry','Pig Iron','The Press','Slagheap','Anvil','Bellows'];
+const SKY_NAMES = ['Cloudbreak','High Altar','Thin Air','Skybridge','The Ascent','Windward'];
+const ZENITH_NAMES = ['Apex','Culmination','The Last Mile','Starfall','Terminus','Crown'];
 const BOOST_NAMES = ['Kickoff','Slingshot','Updraft','Ricochet','Launch Pad',
                      'The Sling','Green Light','Overshoot','Bank Shot'];
+const FIRE_NAMES = ['Firebreak','Cinder Run','The Forge','Ashfall','Emberline',
+                    'Hot Gate','Flashpoint','Smoulder','Kiln'];
+const MOVE_NAMES = ['Metronome','Pendulum','Crosswalk','The Shuttle','Tempo',
+                    'Sidestep','Drift','Interception','Windowpane'];
 function clampX(v, m){ return Math.max(m, Math.min(W - m, v)); }
 
 /* ---------------------------------------------------------------- */
@@ -123,7 +634,6 @@ if (!SPECS[WORLD]){
   process.exit(1);
 }
 const spec = SPECS[WORLD];
-const FROM = 21 + (WORLD - 2) * 10, TO = FROM + 9;
 
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
@@ -132,6 +642,16 @@ page.on('pageerror', e => console.log('  PAGE ERROR:', e.message));
    physics half of the test hook into a blank page, so a regeneration never
    depends on a dev server or on React booting. */
 await attachHarness(page);
+
+/* The country's range comes from the COUNTRIES table, not from arithmetic on
+   its id. Countries are built out of plan order, so a country's NUMBER long
+   ago stopped predicting its levels - Emberkeep is country 6 and sits at
+   31-40. The old `21 + (WORLD-2)*10` still computed 61 and would have spliced
+   this country's levels on top of whatever now lives there. */
+const COUNTRY = await page.evaluate(w =>
+  window.__gtb.COUNTRIES.find(c => c.id === w), WORLD);
+if (!COUNTRY){ console.error(`No country with id ${WORLD}`); await browser.close(); process.exit(1); }
+const FROM = COUNTRY.from, TO = COUNTRY.to;
 
 /** The acceptance sweep. Runs entirely inside the page against the real
     simulator, so it can never disagree with the shipped physics. */
@@ -225,11 +745,11 @@ async function verify(lv, i){
 
     /* fairness: the winning route must not be a lottery off a random bounce -
        this is the level 20 lesson, encoded */
-    let hits = 0, w = 0, boosts = 0, teles = 0;
+    let hits = 0, w = 0, boosts = 0, teles = 0, picked = 0;
     for (const s of seeds){
       const r = simulate(solution, s, ix);
       hits += r.hits; if (r.result === 'win') w++;
-      boosts += r.boosts; teles += r.teleports;
+      boosts += r.boosts; teles += r.teleports; picked += r.stars;
     }
     const obHits = hits / seeds.length, seedWin = w / seeds.length;
 
@@ -268,12 +788,78 @@ async function verify(lv, i){
       if (bare.boosts < 1) why.push('booster is off the natural drop line');
       else if (boosts / seeds.length < 0.99) why.push('no solution routes through it');
     }
+    /* FIRE has to be a wall, not furniture. The claim made here is the same
+       shape as the booster's and just as honest: the UNRAMPED drop must burn,
+       so the hazard is squarely on the line the ball takes when the player
+       does nothing, and routing around it is the level. What it does not
+       claim is that no route ignores the fire entirely - that would need the
+       same exhaustive negative the booster gate declined to prove.
+
+       Note this gate can only ever be reached by a candidate that already
+       HAS a verified winning solution, above. A fire that walls off every
+       ramp path fails earlier, as 'no solution' - which is exactly the
+       unwinnable case this mechanic had to be swept for. */
+    if (gate.requireFire){
+      const bare = simulate([], 1, ix);
+      if (bare.result !== 'burned') why.push('fire is off the natural drop line');
+    }
+    /* A MOVING TARGET has to be the reason the ball lands. Freeze the patrol
+       and re-run the winning route: if it still wins, the target might as
+       well have been nailed down and the mechanic is decoration. Cheap, and
+       it is the precise thing the mechanic promises. */
+    /* A ZONE has to be on the line the ball takes when the player does
+       nothing, exactly like the booster and the fire before it. Checked
+       geometrically rather than by simulation because wind and ice leave no
+       counter behind on the result the way a boost or a teleport does - but
+       the claim is the same one, and just as cheap to state honestly: the
+       band straddles the spawn's fall line, so the drop goes through it. */
+    if (gate.requireZone){
+      const zones = gate.requireZone === 'wind' ? L.wind : L.slippery;
+      const onLine = zones.some(z => sx >= z.x && sx <= z.x + z.w);
+      if (!onLine) why.push(`${gate.requireZone} zone is off the natural drop line`);
+    }
+    /* A PORTAL is load-bearing when the winning route actually goes through
+       it. Unlike a zone this one leaves a counter, so it is measured rather
+       than inferred. */
+    if (gate.requirePortal && teles / seeds.length < 0.99)
+      why.push('no solution routes through the portal');
+    /* STARS never touch the trajectory - that is the mechanic - so the thing
+       to prove is not that they matter but that they are REACHABLE. A star
+       no route can collect is scenery that looks like content. */
+    if (gate.requireStars && picked / seeds.length < gate.requireStars)
+      why.push(`only ${(picked / seeds.length).toFixed(1)} stars are on the winning route`);
+    /* The combo countries. Counted rather than trusted to the template: the
+       whole promise of Neonaka and Coralis is that more than one thing is
+       happening at once, and a generator that quietly dropped one would still
+       produce a perfectly winnable - and completely off-brief - board. */
+    if (gate.minMechanics){
+      const n = [L.boosters, L.wind, L.slippery, L.portals, L.breakables,
+                 L.fires, L.stars].filter(a => a.length > 0).length
+              + (L.targetMove ? 1 : 0);
+      if (n < gate.minMechanics) why.push(`only ${n} mechanics, wanted ${gate.minMechanics}`);
+    }
+    if (gate.requireMove){
+      const frozen = { ...lv, targetMove: undefined,
+                       target: { ...lv.target, x: lv.targetMove.x0 } };
+      const fz = g.scratch(frozen, 3);
+      if (simulate(solution, 1, fz).result === 'win')
+        why.push('the target may as well be static - the route wins frozen');
+    }
     return { ok: why.length === 0, why: why.join(', '),
              tol1, sols2, blind, obHits, seedWin,
-             boosts: boosts / seeds.length, teles: teles / seeds.length };
+             boosts: boosts / seeds.length, teles: teles / seeds.length,
+             picked: picked / seeds.length };
   }, [lv, gate]);
 }
 
+/* `taken` is this COUNTRY's targets and deliberately not the whole game's.
+   Spreading targets is a within-country property - ten boards in a row that
+   all end in the same corner read as one board played ten times - and two
+   levels forty apart, in different countries with different mechanics and a
+   different palette, may sit in the same spot without anyone noticing. The
+   level harness encodes exactly that rule, and seeding this with every target
+   in the game over-constrained a 480px board into an unsolvable placement
+   problem by the third country. */
 console.log(`\n  Generating country ${WORLD} - ${spec.name}  (levels ${FROM}-${TO})\n`);
 const accepted = [];
 let totalTries = 0;
@@ -303,6 +889,8 @@ for (let i = 0; i < 10; i++){
     `blind ${(v.blind*100).toFixed(1).padStart(4)}%  ` +
     `obHits ${v.obHits.toFixed(1)}  boosts ${v.boosts.toFixed(1)}  (${tries} tries)`);
 }
+const COUNTRY_TABLE = await page.evaluate(() =>
+  window.__gtb.COUNTRIES.map(c => ({ id: c.id, name: c.name, from: c.from, to: c.to })));
 await browser.close();
 
 console.log(`\n  All 10 verified. ${totalTries} candidates tried, ${accepted.length} accepted.`);
@@ -336,7 +924,13 @@ if (WRITE){
       out += `    breakables:[${lv.breakables.map(circ).join(',')}],\n`;
     if (lv.stars && lv.stars.length)
       out += `    stars:[${lv.stars.map(s => `{x:${num(s.x)},y:${num(s.y)}}`).join(',')}],\n`;
-    out += `    target:{x:${num(lv.target.x)},y:${num(lv.target.y)},r:${num(lv.target.r)}} }`;
+    if (lv.fires && lv.fires.length)
+      out += `    fires:[${lv.fires.map(circ).join(',')}],\n`;
+    out += `    target:{x:${num(lv.target.x)},y:${num(lv.target.y)},r:${num(lv.target.r)}}`;
+    if (lv.targetMove)
+      out += `,\n    targetMove:{x0:${num(lv.targetMove.x0)},x1:${num(lv.targetMove.x1)},` +
+             `period:${num(lv.targetMove.period)}}`;
+    out += ` }`;
     return out;
   };
   const file = path.join(root, 'src/levels/levels.data.ts');
@@ -353,6 +947,16 @@ if (WRITE){
     .split(/\n(?=  \{ id:)/)
     .map(blk => blk.trim())
     .filter(blk => /^\{ id:\d+/.test(blk.replace(/^\s*/, '')))
+    /* Shed any country header that trails this block. The split is on the
+       START of a level object, so the header comment introducing the NEXT
+       country rides along on the back of the last level of the previous one.
+       Left on, the regrouping below appends a comma after it and emits a
+       fresh header, which lands as a stray comma after a closed comment in
+       the middle of the array - a hole, and a level that reads as
+       `undefined`. Only shows up when a second
+       country is written after a first already exists, which is why it sat
+       here unnoticed while there was just the one. */
+    .map(blk => blk.replace(/(?:,?\s*\/\*[\s\S]*?\*\/)+\s*$/, ''))
     .map(blk => blk.replace(/,\s*$/, ''))
     .filter(blk => { const id = +blk.match(/id:(\d+)/)[1]; return id < FROM || id > TO; })
     .map(blk => '  ' + blk.replace(/^\s+/, ''));
@@ -363,10 +967,14 @@ if (WRITE){
   let lastWorld = null;
   for (const blk of blocks){
     const id = +blk.match(/id:(\d+)/)[1];
-    const w = Math.floor((id - 21) / 10) + 2;
+    /* Looked up, for the same reason FROM is: the id no longer tells you
+       which country a level belongs to by arithmetic. */
+    const c = COUNTRY_TABLE.find(x => id >= x.from && id <= x.to);
+    const w = c ? c.id : 0;
     if (w !== lastWorld){
-      const nm = (SPECS[w] && SPECS[w].name) || ('Country ' + w);
-      body += (lastWorld === null ? '' : ',\n') + '\n  /* ---- Country ' + w + ': ' + nm + ' ---- */\n';
+      const nm = c ? c.name : ('Country ' + w);
+      body += (lastWorld === null ? '' : ',\n') + '\n  /* ---- Country ' + w + ': ' + nm +
+              ' (levels ' + c.from + '-' + c.to + ') ---- */\n';
       lastWorld = w;
       body += blk;
     } else {

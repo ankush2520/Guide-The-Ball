@@ -23,6 +23,18 @@ export const GLOSSARY: GlossaryEntry[] = [
   { cls: 'ob', has: lv => lv.obstacles.length > 0, name: 'Obstacle',
     long: 'Bounces the ball off at a RANDOM angle. Plan around it, not through it - a route ' +
           'that depends on hitting one is a gamble, not a plan.' },
+  /* Directly after the obstacle, because the ONE thing a player has to learn
+     here is the difference between the two, and a list that separates them
+     makes that comparison harder than it needs to be. */
+  { cls: 'fr', has: lv => lv.fires.length > 0, name: 'Fire',
+    long: 'ENDS YOUR DROP THE INSTANT YOU TOUCH IT. It does not bounce you like the red ' +
+          'obstacle does - there is no recovering from it, so the route has to miss it ' +
+          'completely. It is the flickering one with flames; the plain red circle only ' +
+          'knocks you off course.' },
+  { cls: 'mt', has: lv => !!lv.targetMove, name: 'Moving target',
+    long: 'This target slides side to side at a steady rate, and it starts moving when you ' +
+          'drop. Where it will be is fixed - it depends only on how long the ball has been ' +
+          'falling - so it is a timing puzzle you can plan, not a reflex test.' },
   { cls: 'bk', has: lv => lv.breakables.length > 0, name: 'Breakable block',
     long: 'Bounces you randomly exactly like an obstacle, then shatters and is gone. It stays ' +
           'gone for your next drop on this level, so a first attempt can be spent clearing a path.' },

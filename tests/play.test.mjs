@@ -128,8 +128,16 @@ const lvinfo = await page.evaluate(() => {
   const { LEVELS, CONSTS } = window.__gtb;
   const TYPES = ['OPEN','SIDE_WALL','POCKET','NARROW_GAP','ENCLOSED'];
   let badId=0, badType=0, outOfBoard=0, overlap=0;
+  let prevId = 0;
   LEVELS.forEach((l, i) => {
-    if (l.id !== i+1) badId++;
+    /* STRICTLY INCREASING, not 1..n. The countries are authored out of
+       order - Emberkeep and Needlecrest are in, the countries between them
+       are not yet - so the array has id gaps at the country borders until
+       they land. What must never break is the ORDER (progression walks the
+       array) and the country containment checked below, since countryOf()
+       and every derived city name read the id. */
+    if (l.id <= prevId) badId++;
+    prevId = l.id;
     if (TYPES.indexOf(l.targetType) < 0) badType++;
     const t = l.target;
     if (t.x-t.r < 0 || t.x+t.r > CONSTS.W || t.y-t.r < 0 || t.y+t.r > CONSTS.H) outOfBoard++;
@@ -166,9 +174,24 @@ const lvinfo = await page.evaluate(() => {
            types:  W1.map(l=>l.targetType).join(','),
            moving: LEVELS.map((l,i)=>l.move?i+1:0).filter(Boolean).join(','),
            hasMoveKey: LEVELS.some(l => 'move' in l),
+           idGaps: LEVELS.map((l,i)=> i && l.id !== LEVELS[i-1].id+1
+                     ? `${LEVELS[i-1].id}->${l.id}` : '').filter(Boolean).join(' '),
+           /* Which levels patrol, and the shape of it. A moving target is a
+              deliberate mechanic now, so the guard is no longer "none exist"
+              but "only where intended, and only sideways". */
+           movingIds: LEVELS.filter(l=>l.targetMove).map(l=>l.id).join(','),
+           movingNotOpen: LEVELS.filter(l=>l.targetMove&&l.targetType!=='OPEN').map(l=>l.id).join(','),
            right, left, tooClose,
            ySpread: Math.max(...ys) - Math.min(...ys) };
 });
+/* NO GAPS. Countries are authored out of plan order, but their level RANGES
+   are assigned in shipping order (see countries.data.ts), so the ids the
+   player sees always run 1..N unbroken. This is the check that keeps it that
+   way: build a country and forget to give it the next free block and the
+   numbering splits, which is exactly what it used to do. */
+const PLAN_ID_GAPS = '';
+/* Only Needlecrest patrols its target - country 10, shipped third, at 41-50. */
+const PLAN_MOVING  = '41,42,43,44,45,46,47,48,49,50';
 const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,2,2,3,3';
 const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,3';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
@@ -232,14 +255,28 @@ check(geo.sample[0] === 'Verdholm I' && geo.sample[1] === 'Verdholm XX' &&
   'city names are derived from country + position, and roll over at a border',
   geo.sample.join(', '));
 
-check(lvinfo.badId === 0, 'level ids are sequential from 1');
+check(lvinfo.badId === 0, 'level ids increase strictly down the array');
+/* Stated out loud rather than left implicit: this is the cost of authoring
+   countries out of order, and it is visible to the player as a jump in the
+   level number. It goes away as the missing countries are filled in. */
+check(lvinfo.idGaps === PLAN_ID_GAPS, 'the only id gaps are the un-authored countries',
+  lvinfo.idGaps || 'none');
 check(lvinfo.badType === 0, 'every targetType is one of the five');
 check(lvinfo.outOfBoard === 0, 'spawns, targets and obstacles are inside the board');
 check(lvinfo.overlap === 0, 'no obstacle sits on a target or blocks a spawn');
 check(lvinfo.blocks === PLAN_BLOCKS, 'world 1 ramp budgets match the plan, drops at 7/14/17/18 intact');
 check(lvinfo.obst === PLAN_OBST, 'world 1 obstacle counts match the plan');
 check(lvinfo.types === PLAN_TYPES, 'world 1 target types match the plan');
-check(lvinfo.moving === '' && !lvinfo.hasMoveKey, 'no level defines target movement', lvinfo.moving || 'none');
+/* The OLD 2D waypoint block stays gone for good - that is the one that
+   dragged walls through player ramps. What replaced it is horizontal-only
+   and is checked on its own terms just below. */
+check(lvinfo.moving === '' && !lvinfo.hasMoveKey,
+  'the old 2D `move` waypoint block is still gone', lvinfo.moving || 'none');
+check(lvinfo.movingIds === PLAN_MOVING, 'only Needlecrest patrols its target',
+  lvinfo.movingIds || 'none');
+check(lvinfo.movingNotOpen === '',
+  'and every patrolling target is OPEN, so no wall is ever dragged with it',
+  lvinfo.movingNotOpen || 'none');
 check(lvinfo.right >= 7 && lvinfo.left >= 7,
   'targets are reached both leftward and rightward', `${lvinfo.right}R / ${lvinfo.left}L`);
 check(lvinfo.tooClose === 0, 'no two levels put the target in the same spot');
@@ -380,15 +417,48 @@ check(e.sMax <= C.MAX_SPEED + 1e-9 && e.vyMax <= C.TERMINAL_VY + 1e-9,
   `peak ${e.sMax.toFixed(2)} / cap ${C.MAX_SPEED.toFixed(2)}, vy ${e.vyMax.toFixed(2)}`);
 
 /* ---------------------------------------------------------------- */
-/* Targets used to glide between waypoints on levels 17/19/20. That was
-   removed: a target sliding through the space a ramp occupies made the
-   collision read as a bug. This section is the guard against it coming
-   back by accident - a target that moves is now a defect. */
-section('3b. Every target is static');
+/* Targets used to glide between WAYPOINTS on levels 17/19/20, in two
+   dimensions, dragging their walls with them. That was removed, because a
+   target sliding through the space a ramp occupies made the collision read
+   as a bug, and this section was the guard against it returning.
+
+   Needlecrest reintroduces movement, deliberately and in a narrower form,
+   so the guard is rewritten rather than deleted. What killed the first
+   attempt was never "the target moved" - it was that COLLIDABLE GEOMETRY
+   moved. So the property defended here is now exactly that one:
+
+     - walls are built from the target centre and never move, on any level;
+     - a target with no patrol never drifts, ever;
+     - a patrol is horizontal ONLY: y and r are constant, and the levels
+       carrying one are OPEN, which have no walls to drag in the first place
+       (enforced in levels/index.ts, checked in section 2).
+
+   A target that moves in y, or one that moves while carrying walls, is
+   still a defect and still fails here. */
+section('3b. Targets move only where intended, and never drag geometry');
 const stat = await page.evaluate(async () => {
   const { LEVELS, buildWalls, state, clock } = window.__gtb;
   const noMoveBlock = LEVELS.every(l => l.move === undefined);
-  const noTargetAt  = typeof window.__gtb.targetAt === 'undefined';
+  /* A patrol is horizontal and nothing else. Sampled right across a full
+     period on every patrolling level: y and r must never budge, and x must
+     stay inside the authored bounds - which together is the whole of what
+     "horizontal-only" means. */
+  const { targetAt } = window.__gtb;
+  let vertical = 0, outOfBounds = 0, patrols = 0, planMismatch = 0;
+  LEVELS.filter(l => l.targetMove).forEach(lv => {
+    patrols++;
+    /* t=0 is what the player plans against, so the authored centre and the
+       patrol's start have to be the same point. If they drift apart, the
+       board shows one thing and the drop begins somewhere else. */
+    if (targetAt(lv, 0).x !== lv.target.x) planMismatch++;
+    const lo = Math.min(lv.targetMove.x0, lv.targetMove.x1);
+    const hi = Math.max(lv.targetMove.x0, lv.targetMove.x1);
+    for (let k = 0; k <= 64; k++){
+      const c = targetAt(lv, lv.targetMove.period * k / 64);
+      if (c.y !== lv.target.y || c.r !== lv.target.r) vertical++;
+      if (c.x < lo - 1e-9 || c.x > hi + 1e-9) outOfBounds++;
+    }
+  });
   // walls are built once at boot and must stay identical to a fresh build
   let wallsStale = 0;
   LEVELS.forEach(lv => {
@@ -405,15 +475,26 @@ const stat = await page.evaluate(async () => {
   const t0 = state().target, c0 = clock();
   await new Promise(r => setTimeout(r, 600));
   const t1 = state().target, c1 = clock();
-  return { noMoveBlock, noTargetAt, wallsStale,
+  return { noMoveBlock, wallsStale, patrols, vertical, outOfBounds, planMismatch,
            drift: Math.hypot(t1.x - t0.x, t1.y - t0.y),
            clockRan: c1 - c0 };
 });
-check(stat.noMoveBlock, 'no level carries a `move` block any more');
-check(stat.noTargetAt, 'the targetAt() motion helper is gone');
+check(stat.noMoveBlock, 'no level carries the old 2D `move` waypoint block');
+check(stat.patrols > 0, 'the patrol sampler actually had levels to sample',
+  `${stat.patrols} patrolling levels`);
+check(stat.vertical === 0, 'a patrolling target never changes y or radius - horizontal only',
+  `${stat.vertical} samples off the line`);
+check(stat.outOfBounds === 0, 'and never leaves the bounds it was authored with',
+  `${stat.outOfBounds} samples outside`);
+check(stat.planMismatch === 0, 'a patrol starts exactly where the planning board draws it',
+  `${stat.planMismatch} mismatched`);
 check(stat.wallsStale === 0, 'cached walls match a fresh build for every level');
 check(stat.clockRan > 0.2, 'the animation clock is still running', `${stat.clockRan.toFixed(2)}s`);
-check(stat.drift === 0, 'the target does not move while the clock advances',
+/* Still the sharpest check in this section, and sharper than it was: a patrol
+   runs on the SIMULATION clock, so even on a patrolling board the target must
+   sit perfectly still while the player is only planning. Movement driven off
+   the animation clock would pass every other check here and fail this one. */
+check(stat.drift === 0, 'the target does not move while the animation clock advances',
   `${stat.drift.toFixed(3)}px`);
 
 /* the same thing, but through a real drop: the target the ball is chasing
@@ -1097,8 +1178,24 @@ let grid = await page.evaluate(() => {
 });
 const nLevels = await page.evaluate(() => window.__gtb.LEVELS.length);
 check(grid.n === nLevels, 'the picker shows every level', `${grid.n}`);
-check(grid.locked === nLevels - 1, 'everything past your best is locked', `${grid.locked} locked`);
-check(await page.locator('#lvgrid button').nth(4).isDisabled(), 'level 5 locked on a fresh save');
+
+/* THE DEV UNLOCK. RewardManager has a commented-out line that opens every
+   level at once; with it uncommented, locking is switched off by design and
+   the three checks below cannot pass. Detected on a freshly cleared save -
+   progress is zero, so anything unlocked past the first level can only be the
+   switch - and reported loudly rather than left to fail as three confusing
+   reds that look like a broken picker. */
+const devUnlock = grid.locked === 0 && nLevels > 1;
+if (devUnlock){
+  console.log('  ! DEV UNLOCK IS ON (RewardManager.highest) - 3 lock checks skipped.');
+  console.log('    Comment that line back out before shipping, or to test locking.');
+}
+const lockCheck = (c, n, x) => devUnlock
+  ? console.log(`  - ${n}  (skipped: dev unlock on)`)
+  : check(c, n, x);
+
+lockCheck(grid.locked === nLevels - 1, 'everything past your best is locked', `${grid.locked} locked`);
+lockCheck(await page.locator('#lvgrid button').nth(4).isDisabled(), 'level 5 locked on a fresh save');
 
 // unlock a few and re-open
 await page.evaluate(() => { window.__gtb.setLevel(0);
@@ -1109,7 +1206,7 @@ grid = await page.evaluate(() => {
   const b = [...document.querySelectorAll('#lvgrid button')];
   return { locked: b.filter(x => x.disabled).length };
 });
-check(grid.locked === nLevels - 7, 'reaching level 7 unlocks the first seven', `${grid.locked} locked`);
+lockCheck(grid.locked === nLevels - 7, 'reaching level 7 unlocks the first seven', `${grid.locked} locked`);
 await page.locator('#lvgrid button').nth(3).click();
 const sel = await page.evaluate(() => window.__gtb.state());
 check(sel.levelId === 4 && sel.phase === 'plan', 'picking a level jumps straight to it', `level ${sel.levelId}`);

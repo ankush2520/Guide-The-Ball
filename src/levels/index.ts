@@ -17,8 +17,23 @@ export function initLevel(raw: RawLevel): Level {
     portals: raw.portals ?? [],
     breakables: raw.breakables ?? [],
     stars: raw.stars ?? [],
+    fires: raw.fires ?? [],
     walls: [],
   };
+  /* A moving target may only be an OPEN one. Walls are collidable geometry
+     built FROM the target's centre (see walls.ts), so a patrolling target
+     with walls would sweep real bars through whatever the player drew - the
+     exact failure that got this mechanic cut before. Thrown rather than
+     quietly corrected: it is a mistake in authored data, the data is static,
+     and the level harness loads LEVELS, so this surfaces the moment it is
+     introduced instead of shipping as a board that eats ramps. */
+  if (lv.targetMove && lv.targetType !== 'OPEN')
+    throw new Error(
+      `level ${lv.id}: a moving target must be OPEN, not ${lv.targetType} - ` +
+      `walls are built from the target centre and would move with it`);
+  /* The authored centre and the patrol's start are the same place, so the
+     board a player plans against is the board at t=0 whichever field is read. */
+  if (lv.targetMove) lv.target = { ...lv.target, x: lv.targetMove.x0 };
   // a level may never configure wind stronger than the ceiling
   for (const z of lv.wind) {
     z.ax = clamp(z.ax || 0, -WIND_CAP, WIND_CAP);
@@ -67,4 +82,5 @@ export function cityOf(lv: Pick<Level, 'id' | 'city'>): string {
 }
 
 export { COUNTRIES, buildWalls };
+export { targetAt, isMoving } from './target';
 export type { Level, RawLevel, Country };

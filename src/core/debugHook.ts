@@ -15,6 +15,7 @@ import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls 
 import type { Level, RawLevel, Segment } from '../levels/types';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
 import * as C from '../physics/constants';
+import { targetAt } from '../levels/target';
 import { CAPTURE_MS } from '../render/constants';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
@@ -73,6 +74,9 @@ const physics = {
           prizes: SPIN_PRIZES.map(p => ({ kind: p.kind, n: p.n, w: p.w })) },
   starsFor,
   coinsFor,
+  /* The patrol solved directly, so a test can check the curve itself rather
+     than inferring it from where a ball happened to land. */
+  targetAt,
 
   /* The legacy argument order, kept exactly: (ramps, seed, levelIdx, broken).
      levelIdx is optional, as it was - the tuning rig calls simulate(ramps,
@@ -149,6 +153,11 @@ export function installGameHook(s: GameServices): void {
         budget: levels.budget, extraBudget: levels.extraBudget,
         coins: rewards.coins, spareRamps: rewards.extraRamps,
         walls: lv.walls.length, targetType: lv.targetType, target: lv.target,
+        /* Exactly what the renderer feeds the target entity, and the live
+           position that comes out of it - so a test can assert on the drawn
+           patrol rather than on a number it recomputed for itself. */
+        simT: c.renderState().simT,
+        targetNow: { ...targetAt(lv, c.renderState().simT) },
         capturing: !!c.capture, selected: c.selected,
         dragging: c.dragging ? c.dragging.mode : null,
         tutorial: { step: c.tutorialStep(), seen: rewards.tutorialSeen,

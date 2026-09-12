@@ -46,6 +46,9 @@ export interface RenderState {
   clock: number;
   /** Interpolation: how far through the current physics step we are. */
   alpha: number;
+  /** Elapsed simulation steps, fractional, 0 when no drop is running. Drives
+      a patrolling target and nothing else. */
+  simT: number;
   ball: { x: number; y: number; px: number; py: number } | null;
   broken: boolean[];
   got: boolean[];
@@ -120,7 +123,8 @@ export class Renderer {
     ctx.drawImage(this.backdrop.image, BOARD.x0, 0, BOARD.w, H);
     drawStarfield(ctx, s.clock);
 
-    const g = { ctx, clock: s.clock, broken: s.broken, got: s.got };
+    const g = { ctx, clock: s.clock, broken: s.broken, got: s.got,
+                simT: s.simT, level: s.level };
 
     /* Entities paint themselves in factory order: zones are ground, then the
        target, walls, obstacles, and the mechanics that sit with them. */

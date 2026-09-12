@@ -82,7 +82,12 @@ await page.click('#btn-settings-close');
 await page.click('.title');
 await page.waitForSelector('.selcard');
 const gridCount = await page.locator('.selcard .grid button').count();
-chk(gridCount === 30, 'the level picker lists every level', `${gridCount} levels`);
+/* Read from the game rather than hard-coded: this number moves every time a
+   country is authored, and a smoke test that has to be edited for each one
+   stops being a smoke test and starts being a chore. */
+const levelCount = await page.evaluate(() => window.__gtb.LEVELS.length);
+chk(gridCount === levelCount, 'the level picker lists every level',
+  `${gridCount} of ${levelCount}`);
 await page.click('.selcard .row button');
 
 await page.screenshot({ path: 'tests/screenshots/react-port.png' });

@@ -17,6 +17,7 @@
 import type { Level } from '../levels/types';
 import { Entity, type EntityKind } from './Entity';
 import { Obstacle } from './Obstacle';
+import { FireObstacle } from './FireObstacle';
 import { Breakable } from './Breakable';
 import { Booster } from './Booster';
 import { Portal } from './Portal';
@@ -45,6 +46,7 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   target:    { ctor: Target,       pick: lv => [lv.target] },
   wall:      { ctor: Wall,         pick: lv => lv.walls },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },
+  fire:      { ctor: FireObstacle, pick: lv => lv.fires },
   breakable: { ctor: Breakable,    pick: lv => lv.breakables },
   booster:   { ctor: Booster,      pick: lv => lv.boosters },
   portal:    { ctor: Portal,       pick: lv => lv.portals },

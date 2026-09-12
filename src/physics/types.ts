@@ -1,8 +1,14 @@
-/** How a drop ended. `null` while it is still running. */
-export type DropResult = 'win' | 'out' | 'timeout';
+/** How a drop ended. `null` while it is still running.
+
+    `burned` is a loss like the other two and travels the same plumbing - the
+    controller sends everything that is not a win down one path. It is its own
+    value rather than reusing `out` only so the board can say what happened,
+    which is the difference between a hazard that reads as unfair and one that
+    reads as a rule. */
+export type DropResult = 'win' | 'out' | 'timeout' | 'burned';
 
 /** What the ball last touched. Drives the juice, never the physics. */
-export type HitKind = 'ramp' | 'wall' | 'obstacle' | 'breakable' | 'booster' | 'portal';
+export type HitKind = 'ramp' | 'wall' | 'obstacle' | 'breakable' | 'booster' | 'portal' | 'fire';
 
 /** Last contact, mutated in place so the solver never allocates. */
 export interface Hit {
