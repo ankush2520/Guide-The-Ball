@@ -12,6 +12,14 @@
    What is left is what the player came for: did I win, how well,
    and what did it pay. The payout is also the ANCHOR the coin
    flight launches from - see CoinFlight.
+
+   The one thing added back is the bouncing ball above the title.
+   It is not prose and it is not a number: it costs no reading,
+   it holds the card's own height, and it is the BOARD's ball -
+   the white-to-gold one with the amber bloom - rather than the
+   silvery mark the HUD counts spare balls with. Those are two
+   different things and a win card is the worst place to confuse
+   them: one is what you just did, the other is what it cost.
    ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
 
@@ -25,6 +33,12 @@ export function WinOverlay() {
   return (
     <div className="overlay" id="overlay">
       <div className="card win" id="card">
+        {/* Fixed height, and the ball moves only by transform, so the hop
+            cannot shift a single row of the card under it. */}
+        <div className="dancefloor" aria-hidden="true">
+          <i className="dancershade" />
+          <i className="dancer" />
+        </div>
         <div className="big" id="ov-title">Target hit!</div>
         <div className="stars" id="ov-stars">
           {[0, 1, 2].map(i => <i key={i} className={i < card.stars ? 'on' : ''}>&#9733;</i>)}

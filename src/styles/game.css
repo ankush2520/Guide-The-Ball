@@ -406,6 +406,94 @@
      its flight path the whole way.
      ============================================================ */
   .coinfly{position:fixed;inset:0;z-index:95;pointer-events:none;overflow:hidden}
+
+  /* ============================================================
+     THE WIN BURST
+
+     Between the win card (55) and the coin flight (95): over the
+     card because it is applause for it, under the coins because
+     they are the payout and must never be lost in the paper.
+
+     It cannot live INSIDE #overlay - that layer carries the
+     scrim, so anything in it is painted behind the tint.
+     ============================================================ */
+  .confetti{position:fixed;inset:0;z-index:90;pointer-events:none;overflow:hidden}
+  .cfp{position:absolute;top:0;left:0;border-radius:1.5px;will-change:transform,opacity}
+  /* The game's own palette, read straight off the variables so it cannot
+     drift from them: the accent gold, the ramp's cyan, the target's green,
+     and the ball's white and gold. Nothing here is a new colour. */
+  .cfp0{background:var(--accent)}
+  .cfp1{background:var(--ramp)}
+  .cfp2{background:var(--target)}
+  .cfp3{background:#ffffff}
+  .cfp4{background:#ffc451}
+
+  /* ============================================================
+     THE DANCING BALL
+
+     The board's ball, not the HUD's: the same white-to-gold core
+     and amber bloom the renderer paints, so the thing celebrating
+     the drop is the thing that made it.
+
+     Cartoon weight, which is entirely in the timing. It squashes
+     on contact, stretches leaving the floor and landing, and is
+     round only at the top of the hop; the shadow runs on the same
+     clock in reverse, wide and dark under a grounded ball and
+     small and faint under a high one. Take the shadow away and
+     the same bounce reads as a ball sliding up and down.
+     ============================================================ */
+  /* Tall enough to hold the whole hop: 4px of floor, a 23px ball and the 25px
+     it climbs. The card clips its overflow, so a box sized to the resting ball
+     would have the apex cut off by the card's top edge the moment anything
+     trimmed the padding that currently hides the difference. The negative
+     bottom margin gives the title back the space the taller box took. */
+  .dancefloor{position:relative;height:52px;margin:0 0 -4px;flex:none}
+  .dancer{position:absolute;left:50%;bottom:4px;width:23px;height:23px;
+          border-radius:50%;
+          /* closest-side, so the gradient ends at the ball's edge rather than
+             at the box's corner - the same trap the coin's rim fell into. */
+          background:radial-gradient(circle closest-side at 35% 32%,
+                     #ffffff,#fff6dc 50%,#ffc451 100%);
+          box-shadow:0 0 13px rgba(255,170,50,.55), 0 0 30px rgba(255,150,50,.26);
+          /* bottom-centre, so a squash flattens ONTO the floor instead of
+             shrinking about the ball's middle and leaving a gap under it */
+          transform-origin:50% 100%;
+          animation:ballhop .92s infinite}
+  .dancershade{position:absolute;left:50%;bottom:1px;width:22px;height:5px;
+               border-radius:50%;background:rgba(255,170,60,.5);filter:blur(1.5px);
+               transform-origin:50% 50%;animation:ballshade .92s infinite}
+  /* Up fast and decelerating, down accelerating - gravity is the whole of the
+     character here, so each half gets its own curve rather than one ease. */
+  @keyframes ballhop{
+    0%  { transform:translate(-50%,0) scale(1.22,.78);
+          animation-timing-function:cubic-bezier(.18,.72,.36,1) }
+    9%  { transform:translate(-50%,-5px) scale(.88,1.16);
+          animation-timing-function:cubic-bezier(.2,.62,.36,1) }
+    50% { transform:translate(-50%,-25px) scale(1,1);
+          animation-timing-function:cubic-bezier(.62,0,.85,.42) }
+    91% { transform:translate(-50%,-5px) scale(.9,1.14) }
+    100%{ transform:translate(-50%,0) scale(1.22,.78) }
+  }
+  @keyframes ballshade{
+    0%  { transform:translateX(-50%) scale(1.15,1); opacity:.55;
+          animation-timing-function:cubic-bezier(.18,.72,.36,1) }
+    50% { transform:translateX(-50%) scale(.5,.8); opacity:.16;
+          animation-timing-function:cubic-bezier(.62,0,.85,.42) }
+    100%{ transform:translateX(-50%) scale(1.15,1); opacity:.55 }
+  }
+  /* Reduced motion: the hop goes, but the ball stays - it is the card's one
+     piece of celebration and a still card is a flatter one. What is left is
+     the same gentle swell the gear and the tutorial ring fall back to, with
+     the travel and the squash taken out entirely. */
+  @media (prefers-reduced-motion:reduce){
+    .dancer{animation:ballcalm 2.4s ease-in-out infinite}
+    .dancershade{animation:none;transform:translateX(-50%) scale(1.05,1);opacity:.4}
+  }
+  @keyframes ballcalm{
+    0%,100%{ transform:translate(-50%,0) scale(1) }
+    50%    { transform:translate(-50%,0) scale(1.07) }
+  }
+
   /* One mark per currency, each the bigger cousin of the one its counter
      wears - so what lands is visibly the thing the counter counts. */
   .flymark{position:absolute;top:0;left:0;will-change:transform,opacity}

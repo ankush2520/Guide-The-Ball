@@ -29,6 +29,7 @@ import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { ShopPanel } from './ShopPanel';
 import { CoinFlight } from './CoinFlight';
+import { Confetti } from './Confetti';
 import { Sound } from '../audio/Sound';
 
 type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop';
@@ -131,6 +132,10 @@ function Game() {
       </div>
 
       <WinOverlay />
+      {/* Both of these paint OVER the card rather than inside it. The burst
+          sits under the coin flight, because the coins are the payout and the
+          paper is only applause. */}
+      <Confetti />
       {/* Above every panel: it flies from the win card to the HUD, so it has
           to paint over both of them. */}
       <CoinFlight />
