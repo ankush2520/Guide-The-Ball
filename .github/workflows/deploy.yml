@@ -17,7 +17,7 @@ on:
   workflow_dispatch:        # so a deploy can be re-run by hand
 
 permissions:
-  contents: write        # required to push the built site to gh-pages
+  contents: read
   pages: write
   id-token: write
 
@@ -46,31 +46,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      # ----------------------------------------------------------
-      # Publish the build to the `gh-pages` branch.
-      #
-      # This repo's Pages source is stuck on "Deploy from a branch",
-      # so GitHub's legacy Jekyll builder deploys the branch contents
-      # a few seconds AFTER the Actions deploy below and overwrites
-      # it. Pointing that builder at a branch that holds `dist/`
-      # makes it publish the real build instead of the Vite dev
-      # entry, so the site is correct no matter which deployer wins.
-      # ----------------------------------------------------------
-      - name: Publish build to gh-pages branch
-        run: |
-          touch dist/.nojekyll
-          cd dist
-          git init -q
-          git config user.name  'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -qm "Deploy ${GITHUB_SHA}"
-          git push -qf \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            HEAD:gh-pages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/configure-pages@v5
 
