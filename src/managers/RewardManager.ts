@@ -254,7 +254,7 @@ export class RewardManager {
      time the game autosaves, and there is no way back.
      ============================================================ */
   get highest(): number {
-    return this.levelCount - 1; // <-- UNCOMMENT TO UNLOCK ALL LEVELS
+    return this.levelCount - 1; // <-- UNCOMMENT TO UNLOCK ALL LEVELs
     // return this._highest;
   }
   set highest(n: number) {
