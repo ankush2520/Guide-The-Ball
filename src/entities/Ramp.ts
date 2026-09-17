@@ -2,10 +2,15 @@ import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Segment } from '../levels/types';
 import { RAMP_HT, MIN_RAMP } from '../physics/constants';
 import { drawSeg } from '../render/primitives';
+import { RAMP } from '../render/palette';
+
+/** How every placed ramp is painted - shared with the renderer's own loop. */
+export const RAMP_STYLE = { fill: RAMP.base, shine: 'rgba(255,255,255,.75)',
+                            outline: 2.5, shadow: true } as const;
 
 /* The one entity the PLAYER creates. Physically identical to a wall - same
-   segmentBounce, only a different half-thickness - but drawn as a live neon
-   tube so the thing you placed never reads as level furniture. */
+   segmentBounce, only a different half-thickness - but drawn as a glossy
+   candy-blue bar so the thing you placed never reads as level furniture. */
 export class Ramp extends Entity<Segment> {
   readonly kind: EntityKind = 'ramp';
 
@@ -19,11 +24,13 @@ export class Ramp extends Entity<Segment> {
   get isValid(): boolean { return this.length >= MIN_RAMP; }
 
   draw({ ctx }: DrawContext): void {
-    drawSeg(ctx, this.def, '#3ec8ff', RAMP_HT, 'rgba(62,200,255,.55)');
+    drawSeg(ctx, this.def, RAMP_HT, RAMP_STYLE);
   }
 
-  /** The in-progress drag: no glow, and dimmed until it is long enough. */
+  /** The in-progress drag: no shadow yet, and see-through until it is long
+      enough to keep. */
   drawDraft(ctx: CanvasRenderingContext2D): void {
-    drawSeg(ctx, this.def, this.isValid ? '#3ec8ff' : 'rgba(62,200,255,.45)', RAMP_HT, null);
+    drawSeg(ctx, this.def, RAMP_HT, { fill: RAMP.base, shine: null, outline: 2.5,
+                                      alpha: this.isValid ? 1 : 0.4 });
   }
 }

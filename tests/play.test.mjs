@@ -237,8 +237,10 @@ const geo = await page.evaluate(() => {
     sample: [g.cityOf(g.LEVELS[0]), g.cityOf(g.LEVELS[19]),
              g.cityOf(g.LEVELS[20]), g.cityOf(g.LEVELS[29])],
     verdholmFrozen: C[0].name === 'Verdholm' &&
-                    C[0].sky.join(',') === '#1a2048,#101433,#06081a' &&
-                    C[0].accent === '#ffc93c',
+                    /* the toon day sky. It replaced the night navy on purpose;
+                       pinned so it cannot change by accident either */
+                    C[0].sky.join(',') === '#d3edff,#e4f3ff,#f2ecff' &&
+                    C[0].accent === '#ffb400',
   };
 });
 console.log(`  cities: ${geo.sample.join(', ')}`);
@@ -252,7 +254,7 @@ check(geo.sizes[0] === 20 && geo.sizes.slice(1).every(n => n === 10),
 check(geo.uniqueNames === geo.n, 'every country name is distinct');
 check(geo.uniquePalettes === geo.n, 'every country has its own palette',
   `${geo.uniquePalettes} of ${geo.n}`);
-check(geo.verdholmFrozen, 'Verdholm keeps the original palette untouched');
+check(geo.verdholmFrozen, 'Verdholm keeps its pinned (toon day) palette');
 check(geo.orphan === 0, 'every level falls inside its country range');
 check(geo.uniqueCities === geo.nCities, 'every city name is unique',
   `${geo.uniqueCities} of ${geo.nCities}`);
@@ -897,6 +899,43 @@ await page.waitForTimeout(3200);
 check(await page.locator('#flash').isHidden(), 'the label fades out on its own');
 check(await boardBox() === geoIdle, 'the board is unmoved after the label goes', await boardBox());
 
+/* The flash and the drop cue share ONE slot. Watch a whole miss, frame by
+   frame: at no point may both be showing, the cue must be gone for the whole
+   drop, the flash must hold the slot while it has something to say, and the
+   cue must be back the moment it clears. */
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.reset(); g.setSeed(3);
+  g.setRamps([{ x1: 150, y1: 300, x2: 250, y2: 360 }]);
+  const vis = id => getComputedStyle(document.getElementById(id)).visibility === 'visible';
+  window.__slot = [];
+  const t0 = performance.now();
+  const tick = () => {
+    const s = g.state();
+    window.__slot.push({ t: performance.now() - t0, flash: vis('flash'), cue: vis('drop-cue'),
+                         phase: s.phase, sel: s.selected, text: s.flash || '' });
+    if (performance.now() - t0 < 9000) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+await dropBall();
+await page.waitForTimeout(9300);
+const slot = await page.evaluate(() => window.__slot);
+const both = slot.filter(f => f.flash && f.cue).length;
+const cueInDrop = slot.filter(f => f.cue && f.phase !== 'plan').length;
+const flashWrong = slot.filter(f => f.flash !== !!f.text).length;
+const cueWrong = slot.filter(f => f.cue !== (!f.text && f.phase === 'plan' && f.sel < 0)).length;
+const sawFlash = slot.some(f => f.flash), last = slot[slot.length - 1];
+check(both === 0, 'the flash and the drop cue are never up together',
+      `${both} of ${slot.length} frames`);
+check(cueInDrop === 0, 'the cue is down for the whole drop', `${cueInDrop} frames`);
+check(sawFlash && flashWrong === 0, 'the flash is up exactly while there is a message',
+      `${flashWrong} frames out of step`);
+check(cueWrong === 0, 'the cue is up exactly when nothing else has the slot',
+      `${cueWrong} frames out of step`);
+check(last.cue && !last.flash, 'and the cue has the slot back once the message clears',
+      JSON.stringify(last));
+
 /* ---------------------------------------------------------------- */
 /* Every mechanic gets explained the moment it first appears on a board -
    the game is plan-first, so learning what a booster does by watching one
@@ -1032,6 +1071,34 @@ await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.setLevel(
 await topUp();
 
 /* ---------------------------------------------------------------- */
+section('8c. The toon palette holds its own contrast rules');
+const pal = await page.evaluate(() => {
+  const g = window.__gtb, P = g.PALETTE;
+  const lum = h => { const n = parseInt(h.slice(1), 16);
+    return [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+      .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0); };
+  const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const hue = h => { const n = parseInt(h.slice(1), 16), r = (n >> 16) / 255, gg = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn;
+    const x = mx === r ? ((gg - b) / d) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4;
+    return (x * 60 + 360) % 360; };
+  const light = g.COUNTRIES.filter(c => g.isLightSky(c.sky[1]));
+  const stops = light.flatMap(c => c.sky.map(s => [c.name, s]));
+  const worst = (col) => stops.reduce((m, [n, s]) => { const v = cr(col, s); return v < m.v ? { v, at: `${n} ${s}` } : m; }, { v: 99 });
+  const hd = (a, b) => { const d = Math.abs(hue(a) - hue(b)); return Math.min(d, 360 - d); };
+  return { n: light.length, ink: worst(P.INK), red: worst(P.OBSTACLE.base), green: worst(P.TARGET.dark),
+           blue: worst(P.RAMP.base), wall: worst(P.WALL.base),
+           hues: [hd(P.OBSTACLE.base, P.TARGET.base), hd(P.TARGET.base, P.RAMP.base), hd(P.OBSTACLE.base, P.RAMP.base)] };
+});
+check(pal.n >= 1, 'at least one country has the toon day sky', `${pal.n}`);
+check(pal.ink.v >= 7, 'the ink outline stands off every day sky', `${pal.ink.v.toFixed(2)} at ${pal.ink.at}`);
+for (const [k, name] of [['red', 'obstacle red'], ['green', 'target green'], ['blue', 'ramp blue'], ['wall', 'wall grey']])
+  check(pal[k].v >= 3, `the ${name} clears 3:1 against every day sky`, `${pal[k].v.toFixed(2)} at ${pal[k].at}`);
+check(pal.hues.every(d => d >= 60), 'red, green and blue are at least 60° of hue apart',
+      pal.hues.map(d => d.toFixed(0) + '°').join(' '));
+
+/* ---------------------------------------------------------------- */
 section('9. Ramp drawing - mouse and touch');
 await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });   // level 4: 2 ramps
 const box = await page.locator('#board').boundingBox();
@@ -1109,10 +1176,22 @@ check(afterDismiss.sel === -1 && afterDismiss.balls === bBefore && afterDismiss.
 
 /* the board has to say how the drop is done, since no button does */
 check(await page.locator('#drop-cue').isVisible(), 'the drop cue is on the board while planning');
-check((await page.locator('#drop-cue').textContent()) === 'Touch or click on screen to drop ball',
+check((await page.locator('#drop-cue').textContent()).trim() === 'Touch or click on screen to drop ball',
       'and it says how to drop');
+/* On the board's top EDGE: centred on the frame, and clear of the ball's
+   start marker below it (every spawn is at y=40, its ring from y=27). */
+const cueBox = await page.locator('#drop-cue').boundingBox();
+const stageBox = await page.locator('.stage').boundingBox();
+const spawnRingTop = await page.evaluate(() => {
+  const g = window.__gtb, cv = document.querySelector('canvas#board').getBoundingClientRect();
+  return cv.top + (g.LEVELS[g.state().levelIndex].spawn.y - g.CONSTS.BALL_R - 4) * cv.height / g.CONSTS.H;
+});
+check(Math.abs(cueBox.y + cueBox.height / 2 - stageBox.y) <= 2,
+      'and it sits on the board\'s top edge', `pill centre ${(cueBox.y + cueBox.height / 2).toFixed(1)} vs edge ${stageBox.y.toFixed(1)}`);
+check(cueBox.y + cueBox.height <= spawnRingTop,
+      'clear of where the ball starts', `pill bottom ${(cueBox.y + cueBox.height).toFixed(1)} vs marker ${spawnRingTop.toFixed(1)}`);
 await mouseTap(box, { x:(seg.x1+seg.x2)/2, y:(seg.y1+seg.y2)/2 });
-check(await page.locator('#drop-cue').count() === 0, 'it steps aside while a ramp is selected');
+check(await page.locator('#drop-cue').isHidden(), 'it steps aside while a ramp is selected');
 await mouseTap(box, { x:60, y:120 });            // dismisses, does not drop
 
 /* Out of ramps, a press cannot become a drag, so the drop fires on the press
@@ -1131,12 +1210,32 @@ check(onPress.balls === bPress - 1 && onPress.phase !== 'plan',
       'with no ramps left the drop fires on the press, before the release',
       `balls ${bPress} -> ${onPress.balls}, phase ${onPress.phase}`);
 check(onPress.ripple, 'and the press is answered with a ripple where it landed');
-check(await page.locator('#drop-cue').count() === 0, 'the cue is gone while the ball falls');
+check(await page.locator('#drop-cue').isHidden(), 'the cue is gone while the ball falls');
 await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
 
 /* the × is a real touch target now - 2.5x what it was */
 check(C.DEL_R === 30 && C.DEL_OFF === 50,
-      'the × is drawn at 2.5x its old radius', `r=${C.DEL_R} off=${C.DEL_OFF}`);
+      'the × is sized at 2.5x its old radius', `r=${C.DEL_R} off=${C.DEL_OFF}`);
+/* ...and PAINTED at that size. Checking the constant alone passed for a whole
+   release while the renderer still drew the × at its old radius of 12, so
+   this reads the canvas: three quarters of the way out from the ×'s centre is
+   inside the new button and well outside the old one. */
+await page.evaluate(() => window.__gtb.select(0));
+await page.waitForTimeout(120);
+const delPaint = await page.evaluate((C) => {
+  const g = window.__gtb, cv = document.querySelector('canvas#board');
+  const r = g.state().ramps[0], bd = g.board(), k = cv.width / bd.w;
+  const mx=(r.x1+r.x2)/2, my=(r.y1+r.y2)/2, dx=r.x2-r.x1, dy=r.y2-r.y1, m=Math.hypot(dx,dy)||1;
+  let bx=mx-dy/m*C.DEL_OFF, by=my+dx/m*C.DEL_OFF;
+  if (bx<bd.x0+C.DEL_R||bx>bd.x1-C.DEL_R||by<C.DEL_R||by>C.H-C.DEL_R){ bx=mx+dy/m*C.DEL_OFF; by=my-dx/m*C.DEL_OFF; }
+  bx=Math.min(Math.max(bx,bd.x0+C.DEL_R),bd.x1-C.DEL_R); by=Math.min(Math.max(by,C.DEL_R),C.H-C.DEL_R);
+  const px = p => cv.getContext('2d').getImageData(Math.round((p[0]-bd.x0)*k), Math.round(p[1]*k), 1, 1).data;
+  const probe = [[bx - C.DEL_R*0.75, by], [bx + C.DEL_R*0.75, by]].map(px);
+  return probe.map(d => [d[0], d[1], d[2]]);
+}, C);
+check(delPaint.every(([r,g,b]) => r > 170 && g < 110 && b < 120),
+      'the × is painted at its full radius, not its old one', JSON.stringify(delPaint));
+await page.evaluate(() => window.__gtb.select(-1));
 check(C.DEL_GRAB >= C.DEL_R && C.DEL_GRAB < C.DEL_R * 2,
       'its grab radius hugs the circle instead of swallowing the ramp', `grab=${C.DEL_GRAB}`);
 

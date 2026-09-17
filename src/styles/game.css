@@ -1,19 +1,40 @@
 :root{
-    --bg:#080a18; --panel:#171b33; --panel-2:#232a4d; --ink:#e9ecff; --muted:#8f99c4;
-    --obstacle:#ff4d5e; --target:#2fd97a; --ramp:#3ec8ff; --wall:#93a0b8;
-    --ball:#ffffff; --accent:#ffc93c;
-    /* one border colour and one hairline highlight, used everywhere, so every
-       panel in the game catches the light from the same direction */
-    --edge:#333c6b;
-    --sheen:rgba(255,255,255,.07);
-    --glow-ramp:rgba(62,200,255,.45);
-    --glow-accent:rgba(255,201,60,.40);
+    /* ============================================================
+       THE TOON PALETTE
+
+       A bright daytime board in place of the old dark space one.
+       Surfaces are white and cream "stickers" on a pale sky; every
+       one of them is held by the same thick dark ink line, and
+       that line - not a glow - is what separates a thing from what
+       is behind it.
+
+       The entity triad keeps its meaning and only gets louder:
+       red hurts, green is the goal, blue is yours. The canvas
+       reads the same values from src/render/palette.ts; change one
+       and change the other.
+       ============================================================ */
+    --bg:#dcefff; --bg-2:#efe9ff;
+    --panel:#ffffff; --panel-2:#fff6e3; --ink:#2a2350; --muted:#6a6690;
+    --obstacle:#f0223f; --target:#17963d; --ramp:#1680f0; --wall:#7c83a8;
+    --ball:#ffffff; --accent:#ffb400;
+    /* gold is a FILL colour: on white it is under 2:1. Gold text uses this. */
+    --gold-ink:#8a5200;
+    /* The outline. One ink, one weight, on every card, chip and button, so the
+       whole screen is drawn with the same pen. */
+    --edge:#2a2350;
+    --line:2.5px;
+    /* the sticker's lift: a hard offset in the outline's own ink, no blur */
+    --lift:0 3px 0 #2a2350;
+    --sheen:rgba(255,255,255,.95);
+    --glow-ramp:rgba(22,128,240,.30);
+    --glow-accent:rgba(255,180,0,.35);
     /* Deliberately system fonts, not a webfont: the whole game is one
        index.html with no assets, which is what makes the portal build
        drop-in and offline-safe. Weight, size and tracking carry the
        typographic hierarchy instead of a second typeface. */
     --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    --font-display:"SF Pro Display",ui-sans-serif,system-ui,-apple-system,
+    --font-display:"SF Pro Rounded",ui-rounded,"Arial Rounded MT Bold","SF Pro Display",
+                   ui-sans-serif,system-ui,-apple-system,
                    "Segoe UI Variable Display","Segoe UI",Roboto,sans-serif;
     /* The one piece of iconography in the game that is not drawn on the
        canvas or built from a gradient. Inlined as a mask rather than an
@@ -26,11 +47,12 @@
     margin:0;
     /* two stacked glows, warm over cool, so the page has a light source
        instead of a flat wash */
+    background-color:var(--bg);
     background:
-      radial-gradient(90% 55% at 50% -8%, rgba(90,120,255,.16) 0%, rgba(90,120,255,0) 60%),
-      radial-gradient(120% 80% at 50% 0%, #1a1f42 0%, var(--bg) 68%);
+      radial-gradient(70% 45% at 50% -6%, rgba(255,255,255,.85) 0%, rgba(255,255,255,0) 70%),
+      linear-gradient(180deg, #cfe9ff 0%, var(--bg) 45%, var(--bg-2) 100%);
     background-attachment:fixed;
-    color:var(--ink);font:500 14px/1.45 var(--font);
+    color:var(--ink);font:600 14px/1.45 var(--font);
     font-variant-numeric:tabular-nums;
     -webkit-font-smoothing:antialiased;
     display:flex;justify-content:center;align-items:flex-start;
@@ -105,17 +127,20 @@
   .title{display:flex;flex-direction:column;align-items:flex-start;gap:0;
          min-width:0;line-height:1.12}
   .title .lvnum{font-size:11px;font-weight:700;letter-spacing:.08em;
-                text-transform:uppercase;color:#a3ace0;line-height:1.35}
-  .title .lvname{font-family:var(--font-display);font-size:16.5px;font-weight:800;
+                text-transform:uppercase;color:var(--muted);line-height:1.35;
+                white-space:nowrap}
+  .title .lvname{font-family:var(--font-display);font-size:16px;font-weight:900;
                  letter-spacing:-.012em;color:var(--ink);max-width:100%;
                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .counter{background:linear-gradient(180deg,#1e2440,#151931);
-           border:1px solid var(--edge);border-radius:999px;
-           box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
-           padding:4px 8px;font-size:12px;font-weight:600;white-space:nowrap;
-           color:#bcc4e8;letter-spacing:.01em}
-  .counter b{color:var(--accent);font-weight:800;font-size:13px;
-             text-shadow:0 0 10px var(--glow-accent)}
+  .counter{background:var(--panel);
+           border:2px solid var(--edge);border-radius:999px;
+           box-shadow:0 2px 0 var(--edge);
+           padding:3px 6px;font-size:12px;font-weight:700;white-space:nowrap;
+           color:var(--muted);letter-spacing:0}
+  /* The chips are drawn with a 2px pen where they used to have a 1px one, so
+     their padding gives the difference back: the level name beside them has
+     no width to spare on a narrow phone. */
+  .counter b{color:var(--ink);font-weight:900;font-size:13px}
   .chips{display:flex;align-items:center;gap:4px;flex:none}
   /* the ball chip leads with the thing it counts, drawn the same way the
      board draws the ball, so the HUD and the board agree */
@@ -140,8 +165,8 @@
        vertical-align:-1px;
        background:
          radial-gradient(circle at 31% 25%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,0) 44%),
-         radial-gradient(circle at 58% 66%,#8f9ab8,#dfe4f2 46%,#ffffff 78%);
-       box-shadow:0 0 8px rgba(200,214,255,.5)}
+         radial-gradient(circle at 58% 66%,#b9bfdc,#eef0fa 46%,#ffffff 78%);
+       box-shadow:0 0 0 1.5px var(--edge)}
   /* ============================================================
      THE THREE CURRENCIES
 
@@ -164,28 +189,28 @@
              lands outside the element - the rings vanish and it goes back to
              being a plain gold dot, which is the bug this replaces. */
           radial-gradient(circle closest-side at 50% 50%,#ffdf86 0 40%,
-                          #b8820c 47% 56%,#ffd45f 63% 87%,#96650a 100%);
-        box-shadow:0 0 7px rgba(255,180,40,.5)}
+                          #d08a00 47% 56%,#ffc62e 63% 87%,#b06c00 100%);
+        box-shadow:0 0 0 1.5px var(--edge)}
   .rampmark{width:16px;height:5px;border-radius:3px;flex:none;display:inline-block;
-            background:var(--ramp);box-shadow:0 0 8px var(--glow-ramp);
+            background:var(--ramp);box-shadow:0 0 0 1.5px var(--edge);
             transform:rotate(-18deg)}
   .counter.coins{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
-  .counter.coins b{color:#ffd479}
+  .counter.coins b{color:var(--gold-ink)}
 
   /* the Ramps chip while it is also the spare-ramp button */
   .counter.ramps.spend{display:inline-flex;align-items:center;gap:5px;
-                       flex:none;cursor:pointer;border-color:#5a4a20}
-  .counter.ramps.spend .spare{color:#ffd479;font-weight:800;font-size:11px;
-                              background:rgba(255,201,60,.14);
+                       flex:none;cursor:pointer}
+  .counter.ramps.spend .spare{color:var(--gold-ink);font-weight:900;font-size:11px;
+                              background:#ffe7a3;
                               border-radius:999px;padding:1px 5px;letter-spacing:.01em}
   .counter.ramps.spend:hover:not(:disabled){filter:brightness(1.18)}
   .counter.ramps.spend:active:not(:disabled){transform:scale(.96)}
 
-  .counter.balls.empty{border-color:#6b2a38}
-  .counter.balls.empty .pip{background:#3b3550;box-shadow:none}
-  .counter.balls.empty b{color:#ff8792;text-shadow:none}
-  .big.nb{color:#ffc451;text-shadow:0 0 22px rgba(255,201,60,.45)}
-  .big.sp{color:#ffd479;text-shadow:0 0 22px rgba(255,201,60,.45)}
+  .counter.balls.empty{background:#ffe3e7}
+  .counter.balls.empty .pip{background:#c9c6d8}
+  .counter.balls.empty b{color:#c4122d}
+  .big.nb{color:var(--gold-ink)}
+  .big.sp{color:var(--gold-ink)}
 
   /* ============================================================
      THE GEAR
@@ -199,51 +224,50 @@
      ============================================================ */
   .iconbtn.gear{position:relative;width:29px;height:29px}
   .gearicon{width:15px;height:15px;display:block;
-            background:currentColor;color:#c9d2f5;
+            background:currentColor;color:var(--ink);
             -webkit-mask:var(--gear) center/contain no-repeat;
             mask:var(--gear) center/contain no-repeat}
-  .iconbtn.gear.ready .gearicon{color:#ffd479}
+  .iconbtn.gear.ready .gearicon{color:var(--ink)}
   /* the badge. Drawn the same gold as the ball pip and the counters, so
      "there is something for you" is one colour across the whole game */
   .iconbtn.gear .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;
-     border-radius:50%;border:1.5px solid #151931;
-     background:radial-gradient(circle at 34% 30%,#fff,#ffc451)}
+     border-radius:50%;border:2px solid var(--edge);
+     background:#ff3b5c}
   /* ready: a gold version of the tutorial's pulse, so "there is something for
      you here" always looks the same in this game */
   @keyframes spinpulse{
-    0%,100%{ box-shadow:0 0 0 0 rgba(255,201,60,.55), 0 0 12px 1px rgba(255,170,40,.35) }
-    50%    { box-shadow:0 0 0 6px rgba(255,201,60,0), 0 0 18px 4px rgba(255,170,40,.55) }
+    0%,100%{ box-shadow:0 2px 0 var(--edge), 0 0 0 0 rgba(255,180,0,.75) }
+    50%    { box-shadow:0 2px 0 var(--edge), 0 0 0 7px rgba(255,180,0,0) }
   }
-  .iconbtn.gear.ready{border-color:#7a6320;animation:spinpulse 1.7s ease-in-out infinite}
+  .iconbtn.gear.ready{background:#ffd23f;animation:spinpulse 1.7s ease-in-out infinite}
   @media (prefers-reduced-motion:reduce){ .iconbtn.gear.ready{animation:none;
-    box-shadow:0 0 0 2px rgba(255,201,60,.45)} }
+    box-shadow:0 2px 0 var(--edge), 0 0 0 3px rgba(255,180,0,.6)} }
   /* the wheel's own mark, on the settings row that opens it */
   .wheelicon{width:17px;height:17px;border-radius:50%;flex:none;
-     background:conic-gradient(#ffc93c 0 25%, #3ec8ff 0 50%, #ffc93c 0 75%, #3ec8ff 0);
-     box-shadow:0 0 0 1.5px rgba(255,255,255,.5) inset}
+     background:conic-gradient(#ffb400 0 25%, var(--ramp) 0 50%, #ffb400 0 75%, var(--ramp) 0);
+     box-shadow:0 0 0 2px var(--edge)}
   .setrow.locked .wheelicon{filter:grayscale(.85)}
 
   /* the panel is a reference, so it is allowed to be long - it scrolls
      inside the card rather than growing the card past the board */
   .info{margin:2px 0 14px;text-align:left}
   .info h4{margin:14px 0 7px;font-size:12px;font-weight:800;letter-spacing:.07em;
-           text-transform:uppercase;color:var(--accent);opacity:.9}
+           text-transform:uppercase;color:var(--muted)}
   .info h4:first-child{margin-top:2px}
-  .info p{margin:0 0 7px;font-size:12.5px;line-height:1.5;color:#c3cbee}
+  .info p{margin:0 0 7px;font-size:12.5px;line-height:1.5;color:var(--ink)}
   .iline{display:flex;gap:9px;align-items:flex-start;margin:0 0 8px}
   .iline .sw{margin-top:3px}
   .iline b{display:block;font-size:12.5px;font-weight:700;color:var(--ink)}
   .iline span.d{display:block;font-size:12px;line-height:1.45;color:var(--muted)}
   /* what is on the board you are looking at right now, called out */
   .iline.here b:after{content:' • on this level';font-size:10.5px;font-weight:700;
-                      color:var(--accent);letter-spacing:.02em}
+                      color:var(--gold-ink);letter-spacing:.02em}
   /* A gold ring and a warm glow around the wheel, so it sits ON the card
      rather than being a circle printed into it. */
   .wheelwrap{position:relative;width:212px;height:212px;margin:6px auto 16px;
              border-radius:50%;
-             box-shadow:0 0 0 5px #3a2a08, 0 0 0 7px rgba(255,201,60,.5),
-                        0 0 34px -4px rgba(255,180,50,.45),
-                        0 10px 26px rgba(0,0,0,.55)}
+             box-shadow:0 0 0 4px var(--edge), 0 0 0 8px #ffd23f,
+                        0 0 0 10.5px var(--edge), 0 6px 0 7px var(--edge)}
   #wheel{display:block;width:212px;height:212px;border-radius:50%;
          transform:rotate(0deg);will-change:transform}
   /* the pointer and the hub do NOT rotate - they sit over the wheel */
@@ -251,113 +275,109 @@
      is reading is never in question. */
   .wheelptr{position:absolute;top:-9px;left:50%;transform:translateX(-50%);z-index:2;
             width:0;height:0;border-left:11px solid transparent;
-            border-right:11px solid transparent;border-top:22px solid #fff0c0;
-            filter:drop-shadow(0 3px 5px rgba(0,0,0,.7))}
+            border-right:11px solid transparent;border-top:22px solid #ff3b5c;
+            filter:drop-shadow(0 0 0 var(--edge)) drop-shadow(0 2px 0 var(--edge))}
   .wheelhub{position:absolute;top:50%;left:50%;width:40px;height:40px;
             margin:-20px 0 0 -20px;border-radius:50%;z-index:2;
-            background:radial-gradient(circle at 36% 30%,#fff,#ffd06a 55%,#e09a10);
-            box-shadow:0 0 0 3px #3a2a08, 0 0 16px rgba(255,201,60,.75),
-                       0 3px 8px rgba(0,0,0,.55)}
-  #spin-sub b{color:#ffd479;font-weight:800}
-  .chips .counter{padding:4px 8px;font-size:12px}
-  .iconbtn{flex:none;background:linear-gradient(180deg,#1e2440,#151931);
-           border:1px solid var(--edge);border-radius:999px;
-           box-shadow:inset 0 1px 0 var(--sheen), 0 1px 2px rgba(0,0,0,.35);
+            background:radial-gradient(circle at 36% 30%,#fff,#ffd23f 55%,#f0a000);
+            box-shadow:0 0 0 3px var(--edge), 0 3px 0 3px var(--edge)}
+  #spin-sub b{color:var(--gold-ink);font-weight:900}
+  .chips .counter{padding:3px 6px;font-size:12px}
+  .iconbtn{flex:none;background:var(--panel);
+           border:2px solid var(--edge);border-radius:999px;
+           box-shadow:0 2px 0 var(--edge);
            width:27px;height:27px;padding:0;font-size:12.5px;line-height:1;display:grid;place-items:center}
   .iconbtn.off{opacity:.45}
   /* stars: filled ones glow, unearned ones stay as faint outlines */
   .stars{display:flex;justify-content:center;gap:7px;font-size:27px;line-height:1;margin:2px 0 10px}
-  .stars i{font-style:normal;color:#2b3560}
-  .stars i.on{color:var(--accent);
-              text-shadow:0 0 6px rgba(255,201,60,.9), 0 0 18px rgba(255,170,40,.55)}
+  .stars i{font-style:normal;color:#e3e0f0;
+           -webkit-text-stroke:2px var(--edge);paint-order:stroke fill}
+  /* the ink stroke is what keeps a pale country accent readable on white */
+  .stars i.on{color:var(--accent)}
   .starnote{color:var(--muted);font-size:12px;margin:-6px 0 12px}
   .grid button{position:relative;padding-bottom:15px}
-  .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--accent)}
+  .gstars{position:absolute;left:0;right:0;bottom:3px;font-size:8px;letter-spacing:1px;color:var(--gold-ink)}
 
   /* Step 2 of the tutorial: the button asks for the tap itself, so there is
      no need for a sentence explaining where to find it. */
   @keyframes tutpulse{
-    0%,100%{ box-shadow:0 0 0 0 rgba(120,175,255,.55), 0 0 14px 2px rgba(90,150,255,.35) }
-    50%    { box-shadow:0 0 0 7px rgba(120,175,255,0),  0 0 20px 5px rgba(90,150,255,.55) }
+    0%,100%{ box-shadow:0 0 0 0 rgba(22,128,240,.55) }
+    50%    { box-shadow:0 0 0 7px rgba(22,128,240,0) }
   }
   .tut-pulse{ animation:tutpulse 1.5s ease-in-out infinite }
   @media (prefers-reduced-motion:reduce){ .tut-pulse{ animation:none;
-    box-shadow:0 0 0 3px rgba(120,175,255,.45) } }
+    box-shadow:0 0 0 3px rgba(22,128,240,.45) } }
 
   /* Skip: deliberately quiet, in the board's corner, and only present while
      the tutorial is. It costs no layout space when it is gone. */
-  .tut-skip{position:absolute;top:8px;right:9px;z-index:4;
-            background:rgba(13,16,34,.72);border:1px solid #39416e;border-radius:999px;
-            color:var(--muted);font-size:11.5px;font-weight:600;
+  .tut-skip{position:absolute;top:20px;right:9px;z-index:4;
+            background:var(--panel);border:2px solid var(--edge);border-radius:999px;
+            color:var(--ink);font-size:11.5px;font-weight:800;
+            box-shadow:0 2px 0 var(--edge);
             padding:4px 11px;flex:none;line-height:1;cursor:pointer}
-  .tut-skip:hover:not(:disabled){filter:brightness(1.4)}
+  .tut-skip:hover:not(:disabled){filter:brightness(.96)}
   .tut-skip[hidden]{display:none}
 
   /* ============================================================
-     THE DROP CUE AND THE TAP RIPPLE
+     THE STATUS PILL AND THE TAP RIPPLE
 
-     There is no Drop Ball button, so the board says how the drop
-     is done. Both sit over the board, out of flow and pointer-
-     transparent: they can neither resize the board nor swallow
-     the tap they are describing.
+     One slot on the board's top edge holds either the flash (a
+     miss, a tip) or the drop cue - never both; Status.tsx decides
+     which from the same state in the same render, and says why
+     the slot straddles the frame rather than sitting on the board
+     or under it.
 
-     The cue sits at the bottom edge, below where the ball starts
-     and clear of the miss flash along the top. It is translucent
-     because a target can sit under it on some boards.
+     Both pills are the same fixed box, and switching is
+     visibility only: no crossfade, so there is no frame with one
+     fading out under the other, and nothing in the column moves.
+     The pill may be WIDER than the board (up to the HUD's width):
+     on a narrow landscape board it reads as a ribbon across the
+     frame rather than truncating the cue.
      ============================================================ */
-  .drop-cue{position:absolute;left:50%;bottom:12px;z-index:3;
-            transform:translateX(-50%);pointer-events:none;
-            max-width:calc(100% - 24px);width:max-content;text-align:center;
-            padding:6px 13px;border-radius:999px;
-            background:rgba(10,13,30,.66);border:1px solid rgba(120,140,220,.28);
-            box-shadow:inset 0 1px 0 var(--sheen);
-            color:#d3d9f5;font-size:12.5px;font-weight:650;letter-spacing:.01em;
-            line-height:1.25;
-            animation:cuebreathe 2.6s ease-in-out infinite}
-  @keyframes cuebreathe{ 0%,100%{opacity:.62} 50%{opacity:1} }
+  .status{position:absolute;z-index:5;left:50%;
+          top:calc(50% - var(--board-h, 0px) / 2);
+          transform:translate(-50%,-50%);
+          display:grid;place-items:center;pointer-events:none;
+          width:max-content;
+          max-width:max(calc(var(--board-w, 100%) - 24px), min(100vw - 20px, 300px))}
+  .status > *{grid-area:1 / 1}
+  .flash,.drop-cue{display:block;max-width:100%;
+         /* one line, exactly, always: it can neither wrap nor grow */
+         height:26px;line-height:20px;padding:2px 14px;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+         font-size:12.5px;font-weight:800;text-align:center;
+         color:var(--ink);border:1px solid var(--edge);border-radius:999px;
+         box-shadow:0 0 0 1.5px var(--edge), 0 3px 0 1.5px var(--edge);
+         visibility:hidden}
+  .flash{background:var(--panel)}
+  /* the call to action is the yellow one */
+  .drop-cue{background:#ffd23f;font-family:var(--font-display);
+            font-weight:900;letter-spacing:.02em}
+  /* each pops in as it takes the slot; the cue then keeps a slow bob, since
+     it is the only instruction for the game's one action */
+  .flash.on{visibility:visible;animation:statuspop .22s cubic-bezier(.3,1.6,.6,1)}
+  .drop-cue.on{visibility:visible;
+               animation:statuspop .22s cubic-bezier(.3,1.6,.6,1),
+                         cuebob 1.6s ease-in-out .22s infinite}
+  @keyframes statuspop{ from{transform:scale(.7)} to{transform:scale(1)} }
+  @keyframes cuebob{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
 
   /* Answers the touch at the spot it landed, the instant it lands. `.go` is a
      press that became a drop: brighter, and a little further out. */
   .tap-ripple{position:absolute;z-index:3;width:56px;height:56px;
               margin:-28px 0 0 -28px;border-radius:50%;pointer-events:none;
-              border:2px solid rgba(160,200,255,.75);
-              background:radial-gradient(circle,rgba(160,200,255,.28),rgba(160,200,255,0) 70%);
+              border:3px solid var(--ramp);
+              background:radial-gradient(circle,rgba(22,128,240,.22),rgba(22,128,240,0) 70%);
               animation:tapripple .42s ease-out forwards}
-  .tap-ripple.go{border-color:rgba(255,214,110,.9);
-                 background:radial-gradient(circle,rgba(255,214,110,.35),rgba(255,214,110,0) 70%);
+  .tap-ripple.go{border-color:#f0a000;
+                 background:radial-gradient(circle,rgba(255,180,0,.35),rgba(255,180,0,0) 70%);
                  animation-name:tapripplego}
   @keyframes tapripple  { from{transform:scale(.35);opacity:1} to{transform:scale(1.15);opacity:0} }
   @keyframes tapripplego{ from{transform:scale(.35);opacity:1} to{transform:scale(1.6);opacity:0} }
   @media (prefers-reduced-motion:reduce){
-    .drop-cue{animation:none;opacity:.9}
+    .flash.on,.drop-cue.on{animation:none}
     .tap-ripple,.tap-ripple.go{animation-duration:.01s}
   }
-
-  /* Miss/stuck feedback. Sits in the flow ABOVE the board, never over it, and
-     always occupies its line even when empty - the board must not shift when
-     it appears. visibility (not display) is what keeps that space reserved. */
-  /* Over the board, not above it. Reserving a line in the column so the
-     board could not shift was costing ~30px of permanent dead space between
-     the HUD and the board - for a pill that is empty almost all of the time.
-     Floating it inside the stage reserves nothing and shifts nothing: it is
-     out of flow entirely, so the board cannot move when it appears. */
-  .flashrow{position:absolute;left:10px;right:10px;top:10px;z-index:3;
-            display:flex;justify-content:center;pointer-events:none}
-  .flash{display:block;max-width:100%;
-         /* one line, exactly, always: 22 - 2*1 padding - 2*1 border = 18 = the
-            line box. It can neither wrap nor grow, so the board cannot move.
-            The negative margin eats part of the .app gap back, since the pill
-            is the only thing this row ever holds. */
-         height:22px;line-height:18px;padding:1px 12px;
-         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-         font-size:12.5px;font-weight:650;text-align:center;
-         color:#ffdcaa;background:rgba(28,17,10,.90);
-         border:1px solid rgba(255,170,80,.42);border-radius:999px;
-         box-shadow:0 4px 14px rgba(0,0,0,.45);
-         -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
-         opacity:0;visibility:hidden;
-         transition:opacity .38s ease, visibility 0s linear .38s}
-  .flash.on{opacity:1;visibility:visible;transition:opacity .16s ease, visibility 0s}
 
   /* The stage owns the board's ratio, so its border hugs the canvas exactly
      and no reflow can leave the board sitting off to one side. */
@@ -386,13 +406,16 @@
      also why there is no tablet override here. The board's real
      shape is set in one place, in GameCanvas.
      ============================================================ */
-  .board-slot{flex:1 1 auto;min-height:0;display:flex;
+  /* position:relative for the status pill, which straddles the board's top
+     edge; the 4px margin is the room above that edge it straddles into */
+  .board-slot{flex:1 1 auto;min-height:0;display:flex;position:relative;margin-top:4px;
               align-items:center;justify-content:center;width:0;min-width:100%}
-  .stage{position:relative;border-radius:14px;overflow:hidden;
-         border:1px solid #313a6e;
-         box-shadow:0 18px 48px rgba(0,0,0,.6),
-                    0 0 0 1px rgba(120,160,255,.06),
-                    0 0 34px -6px rgba(70,110,255,.22);
+  /* The outline is a box-shadow ring on top of the 1px border, not a wider
+     border: GameCanvas subtracts exactly 2px for the border when it fits the
+     board, and a thicker one would skew the 3:5 ratio. */
+  .stage{position:relative;border-radius:20px;overflow:hidden;
+         border:1px solid var(--edge);background:var(--bg);
+         box-shadow:0 0 0 2px var(--edge), 0 5px 0 2px var(--edge);
          /* content-box so the 1px border does not skew the board's ratio */
          box-sizing:content-box;aspect-ratio:3 / 5;
          width:calc(100% - 2px);height:auto;max-height:calc(100% - 2px)}
@@ -403,7 +426,7 @@
      to a 190px-wide box on a short window. They also carry the safe area
      themselves, since they sit outside the padded body. */
   .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-           background:rgba(8,10,22,.74);backdrop-filter:blur(4px);
+           background:rgba(60,70,130,.38);backdrop-filter:blur(3px);
            padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
                    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
   /* ============================================================
@@ -421,12 +444,12 @@
      background, border and shadow, so it still reads without
      needing the board darkened underneath it.
      ============================================================ */
-  #overlay{background:rgba(8,10,22,.30);
+  #overlay{background:rgba(60,70,130,.14);
            -webkit-backdrop-filter:none;backdrop-filter:none}
   /* The wheel needs the same treatment for the same reason: its prize FLIES
      to a counter in the HUD, and a 4px blur over the destination makes the
      journey end nowhere. */
-  #spinpanel{background:rgba(8,10,22,.30);
+  #spinpanel{background:rgba(60,70,130,.14);
              -webkit-backdrop-filter:none;backdrop-filter:none}
 
   /* One stacking order, stated once. The wheel must open ON TOP of the
@@ -458,15 +481,16 @@
      scrim, so anything in it is painted behind the tint.
      ============================================================ */
   .confetti{position:fixed;inset:0;z-index:90;pointer-events:none;overflow:hidden}
-  .cfp{position:absolute;top:0;left:0;border-radius:1.5px;will-change:transform,opacity}
+  .cfp{position:absolute;top:0;left:0;border-radius:1.5px;will-change:transform,opacity;
+       box-shadow:0 0 0 1px var(--edge)}
   /* The game's own palette, read straight off the variables so it cannot
      drift from them: the accent gold, the ramp's cyan, the target's green,
      and the ball's white and gold. Nothing here is a new colour. */
   .cfp0{background:var(--accent)}
   .cfp1{background:var(--ramp)}
   .cfp2{background:var(--target)}
-  .cfp3{background:#ffffff}
-  .cfp4{background:#ffc451}
+  .cfp3{background:var(--obstacle)}
+  .cfp4{background:#ffd23f}
 
   /* ============================================================
      THE DANCING BALL
@@ -493,14 +517,14 @@
           /* closest-side, so the gradient ends at the ball's edge rather than
              at the box's corner - the same trap the coin's rim fell into. */
           background:radial-gradient(circle closest-side at 35% 32%,
-                     #ffffff,#fff6dc 50%,#ffc451 100%);
-          box-shadow:0 0 13px rgba(255,170,50,.55), 0 0 30px rgba(255,150,50,.26);
+                     #ffffff,#fff1b8 45%,#ffc53a 100%);
+          box-shadow:0 0 0 2.5px var(--edge);
           /* bottom-centre, so a squash flattens ONTO the floor instead of
              shrinking about the ball's middle and leaving a gap under it */
           transform-origin:50% 100%;
           animation:ballhop .92s infinite}
   .dancershade{position:absolute;left:50%;bottom:1px;width:26px;height:5px;
-               border-radius:50%;background:rgba(255,170,60,.5);filter:blur(1.5px);
+               border-radius:50%;background:rgba(42,35,80,.28);
                transform-origin:50% 50%;animation:ballshade .92s infinite}
 
   /* ------------------------------------------------------------
@@ -516,12 +540,12 @@
      instead of as a mark on its surface.
      ------------------------------------------------------------ */
   .dancer .eye{position:absolute;top:34%;width:3.4px;height:4.4px;border-radius:50%;
-               background:#6b4405}
+               background:var(--edge)}
   .dancer .eye.l{left:26%} .dancer .eye.r{right:26%}
   /* One star: a small, closed, pleased smile - an arc, not a shape. */
   .dancer .mouth{position:absolute;left:50%;top:56%;width:8px;height:3.4px;
                  transform:translateX(-50%);
-                 border-bottom:1.7px solid #6b4405;border-radius:0 0 999px 999px}
+                 border-bottom:1.9px solid var(--edge);border-radius:0 0 999px 999px}
   .dancer .cheek{display:none}
 
   /* Two stars: the same smile, wider and deeper. */
@@ -531,13 +555,13 @@
      thicker arc just reads as a thicker arc, where a solid shape reads as a
      mouth that is actually OPEN. */
   .dancer.joy3 .mouth{width:12.5px;height:7px;top:52%;
-                      background:#6b4405;border:0;border-radius:2px 2px 999px 999px}
+                      background:var(--edge);border:0;border-radius:2px 2px 999px 999px}
   /* and the eyes squeeze shut into two happy arcs */
   .dancer.joy3 .eye{top:33%;width:5px;height:2.6px;background:transparent;
-                    border-top:1.7px solid #6b4405;border-radius:999px 999px 0 0}
+                    border-top:1.9px solid var(--edge);border-radius:999px 999px 0 0}
   .dancer.joy3 .eye.l{left:21%} .dancer.joy3 .eye.r{right:21%}
   .dancer.joy3 .cheek{display:block;position:absolute;top:53%;width:4.5px;height:3px;
-                      border-radius:50%;background:rgba(255,110,85,.42)}
+                      border-radius:50%;background:rgba(255,80,110,.55)}
   .dancer.joy3 .cheek.l{left:8%} .dancer.joy3 .cheek.r{right:8%}
   /* Up fast and decelerating, down accelerating - gravity is the whole of the
      character here, so each half gets its own curve rather than one ease. */
@@ -578,15 +602,15 @@
            background:
              radial-gradient(circle at 36% 28%,rgba(255,255,255,.5) 0 8%,rgba(255,255,255,0) 38%),
              radial-gradient(circle closest-side at 50% 50%,#ffe79c 0 40%,
-                             #b8820c 47% 56%,#ffd45f 63% 87%,#96650a 100%);
-           box-shadow:0 0 10px rgba(255,190,60,.65)}
+                             #d08a00 47% 56%,#ffc62e 63% 87%,#b06c00 100%);
+           box-shadow:0 0 0 2px var(--edge)}
   .flyball{width:17px;height:17px;border-radius:50%;
            background:
              radial-gradient(circle at 31% 25%,rgba(255,255,255,.95) 0 14%,rgba(255,255,255,0) 44%),
-             radial-gradient(circle at 58% 66%,#8f9ab8,#dfe4f2 46%,#ffffff 78%);
-           box-shadow:0 0 11px rgba(200,214,255,.6)}
+             radial-gradient(circle at 58% 66%,#b9bfdc,#eef0fa 46%,#ffffff 78%);
+           box-shadow:0 0 0 2px var(--edge)}
   .flyramp{width:26px;height:8px;border-radius:4px;background:var(--ramp);
-           box-shadow:0 0 12px var(--glow-ramp)}
+           box-shadow:0 0 0 2px var(--edge)}
   /* the counter taking a coin: a quick swell, so the arrival lands on
      something rather than the number just being different afterwards */
   @keyframes cointook{
@@ -598,12 +622,11 @@
   .overlay[hidden]{display:none}
   /* A column: heading and buttons pinned, the long middle scrolls. Without
      this a tall card simply grew past the screen and lost both ends. */
-  .card{background:linear-gradient(180deg,#1d2342,#141830);
-        border:1px solid #3a4374;border-radius:18px;
+  .card{background:var(--panel);
+        border:3px solid var(--edge);border-radius:24px;
         padding:18px;text-align:center;width:100%;max-width:290px;
         max-height:100%;display:flex;flex-direction:column;overflow:hidden;
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.09),
-                   0 20px 54px rgba(0,0,0,.62)}
+        box-shadow:0 6px 0 var(--edge), 0 14px 30px rgba(42,35,80,.25)}
   .card > *{flex:none}
   /* the one scrolling region per card */
   .card .scroll{flex:1 1 auto;min-height:0;overflow-y:auto;
@@ -613,10 +636,10 @@
                 -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent);
                 mask-image:linear-gradient(180deg,#000 calc(100% - 26px),transparent)}
   .card .scroll::-webkit-scrollbar{width:6px}
-  .card .scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:3px}
+  .card .scroll::-webkit-scrollbar-thumb{background:rgba(42,35,80,.25);border-radius:3px}
   .card .scroll::-webkit-scrollbar-track{background:transparent}
-  .card .big{font-family:var(--font-display);font-size:25px;font-weight:800;
-             letter-spacing:-.015em;margin-bottom:4px}
+  .card .big{font-family:var(--font-display);font-size:27px;font-weight:900;
+             letter-spacing:.02em;margin-bottom:4px;color:var(--ink)}
   .card .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
   .card .row{display:flex;gap:8px}
   .card .row + .row{margin-top:8px}
@@ -629,29 +652,30 @@
   .shopcard{max-width:330px;text-align:left}
   .shopcard .big,.shopcard .sub{text-align:center}
   .shopcard .sub{margin-bottom:10px}
-  .coinamt{color:#ffd479;font-weight:800;white-space:nowrap}
-  .coinamt .coin{margin-right:4px}
+  .coinamt{color:var(--gold-ink);font-weight:900;white-space:nowrap}
+  .coinamt .coin{margin-right:6px}
   .shopnote{color:var(--muted);font-size:11.5px;line-height:1.45;margin:0 0 9px}
   .shopcard h4{margin:12px 0 6px;font-size:12px;font-weight:800;letter-spacing:.07em;
-               text-transform:uppercase;color:var(--accent);opacity:.9}
+               text-transform:uppercase;color:var(--muted)}
   .shopcard h4:first-child{margin-top:0}
   /* Three bundles across, each stating its goods over its price. Equal width
      so the cheapest is no easier to hit than the dearest. */
   .buyrow{display:flex;gap:7px;margin:0 0 4px}
   .buybtn{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;
-          gap:3px;padding:9px 4px;border-radius:11px;
-          background:linear-gradient(180deg,#1b2140,#141833);
-          border:1px solid var(--edge);color:var(--ink);font:inherit;cursor:pointer}
-  .buybtn:hover:not(:disabled){border-color:#4a568f}
+          gap:3px;padding:9px 4px;border-radius:16px;
+          background:var(--panel-2);
+          border:var(--line) solid var(--edge);box-shadow:var(--lift);
+          color:var(--ink);font:inherit;cursor:pointer}
+  .buybtn:hover:not(:disabled){filter:brightness(.97)}
   .buybtn b{display:flex;align-items:center;gap:5px;font-size:14px;font-weight:800}
   .buybtn .price{display:flex;align-items:center;gap:4px;
-                 color:#ffd479;font-size:11.5px;font-weight:700}
+                 color:var(--gold-ink);font-size:11.5px;font-weight:800}
   /* The saving, stated on the bundle itself. Green rather than gold: gold is
      what the row COSTS, and a discount printed in the price's own colour is
      read as part of the price. Only the rows that actually save anything
      carry it, so the single stays plain. */
   .buybtn .save{margin-top:1px;font-size:9.5px;font-weight:800;letter-spacing:.02em;
-                color:#5fe0a0;background:rgba(47,217,122,.13);
+                color:#fff;background:#0f7a30;
                 border-radius:999px;padding:1px 6px}
   .buybtn:disabled{opacity:.34;cursor:not-allowed}
 
@@ -660,19 +684,19 @@
   .rewards{display:flex;justify-content:center;gap:8px;margin:2px 0 15px}
   .reward{display:inline-flex;align-items:center;gap:6px;
           padding:6px 12px;border-radius:999px;
-          background:linear-gradient(180deg,#1e2440,#151931);
-          border:1px solid var(--edge);
-          box-shadow:inset 0 1px 0 var(--sheen)}
-  .reward b{font-size:15px;font-weight:800;color:#ffd479;letter-spacing:.01em}
+          background:var(--panel-2);
+          border:2px solid var(--edge);
+          box-shadow:0 2px 0 var(--edge)}
+  .reward b{font-size:15px;font-weight:900;color:var(--gold-ink);letter-spacing:.01em}
   /* the number wears its mark's colour, so the pair reads as one thing */
-  #ov-balls b{color:#dfe4f2}
+  #ov-balls b{color:var(--ink)}
   .infocard{max-width:340px;text-align:left}
   .infocard .big{text-align:center}
   /* The ad may look like the recommended action, but declining it must be
      just as easy to hit: same box, same type, same reach. */
   #btn-nb-close{flex:1}
-  .win .big{color:#7dffb4;text-shadow:0 0 22px rgba(47,217,122,.55)}
-  .lose .big{color:#ff8792;text-shadow:0 0 22px rgba(255,77,94,.45)}
+  .win .big{color:var(--target)}
+  .lose .big{color:var(--obstacle)}
 
   /* ============================================================
      SETTINGS ROWS
@@ -685,43 +709,48 @@
      ============================================================ */
   .setrows{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px}
   .setrow{display:flex;width:100%;align-items:center;gap:11px;text-align:left;
-          padding:11px 13px;border-radius:12px;
-          background:linear-gradient(180deg,#1b2140,#141833);
-          border:1px solid var(--edge);color:var(--ink);font:inherit;cursor:pointer}
-  .setrow:hover:not(:disabled){border-color:#4a568f}
+          padding:11px 13px;border-radius:16px;
+          background:var(--panel-2);
+          border:var(--line) solid var(--edge);box-shadow:var(--lift);
+          color:var(--ink);font:inherit;cursor:pointer}
+  .setrow:hover:not(:disabled){filter:brightness(.97)}
   .setlabel{flex:1 1 auto;min-width:0}
-  .setlabel b{display:block;font-size:13.5px;font-weight:700}
+  .setlabel b{display:block;font-size:13.5px;font-weight:800}
   .setlabel .d{display:block;color:var(--muted);font-size:11.5px;line-height:1.35}
   .setrow em{flex:none;font-style:normal;font-size:11.5px;font-weight:700;
              color:var(--muted);letter-spacing:.02em;font-variant-numeric:tabular-nums}
   .seticon{width:17px;height:17px;flex:none;display:grid;place-items:center;
-           font-size:13px;font-weight:800;font-style:normal;color:#c9d2f5}
+           font-size:13px;font-weight:900;font-style:normal;color:var(--ink)}
   /* the wheel row when a spin is waiting: the same gold the gear is wearing */
-  .setrow.ready{border-color:#7a6320;
-                background:linear-gradient(180deg,#2a2416,#181630)}
-  .setrow.ready em{color:#ffd479}
+  .setrow.ready{background:#ffe7a3}
+  .setrow.ready .d{color:var(--ink)}
+  .setrow.ready em{color:var(--gold-ink)}
   .setrow.off .seticon{opacity:.45}
 
-  button{font:inherit;font-weight:650;color:var(--ink);
-         background:linear-gradient(180deg,#2a3157,#1c2140);
-         border:1px solid #39416e;border-radius:12px;padding:11px 12px;cursor:pointer;
+  /* a fixed line box: the primary button is set in the display face, and its
+     height must not drift from a plain button's with the font's metrics - the
+     ad offer and its decline have to be exactly the same size to hit */
+  button{font:inherit;font-weight:800;color:var(--ink);line-height:20px;
+         background:var(--panel);
+         border:var(--line) solid var(--edge);border-radius:16px;padding:11px 10px;cursor:pointer;
          flex:1;letter-spacing:.005em;
-         box-shadow:inset 0 1px 0 var(--sheen), 0 2px 6px rgba(0,0,0,.35);
+         box-shadow:var(--lift);
          transition:filter .12s, transform .07s ease, box-shadow .12s}
-  button:hover:not(:disabled){filter:brightness(1.16)}
+  button:hover:not(:disabled){filter:brightness(.96)}
   /* a real press: the button gets smaller and its shadow collapses under it,
      so the finger feels like it moved something */
-  button:active:not(:disabled){transform:scale(.968);
-         box-shadow:inset 0 2px 5px rgba(0,0,0,.4)}
+  button:active:not(:disabled){transform:scale(.968) translateY(2px);
+         box-shadow:0 1px 0 var(--edge)}
   button:disabled{opacity:.34;cursor:not-allowed;box-shadow:none}
   button[hidden]{display:none}
-  .primary{background:linear-gradient(180deg,#5d9bff 0%,#3d76ec 52%,#2a5cd4 100%);
-           border-color:#7cb0ff;color:#fff;font-weight:750;
-           box-shadow:inset 0 1px 0 rgba(255,255,255,.28),
-                      0 3px 10px rgba(0,0,0,.4),
-                      0 0 20px -3px rgba(90,150,255,.65)}
-  .primary:active:not(:disabled){box-shadow:inset 0 2px 6px rgba(0,20,60,.45),
-                      0 0 14px -4px rgba(90,150,255,.6)}
+  /* The one bold colour in the chrome. A deeper blue than the ramp so white
+     text on it clears 4.5:1, with a gloss band for the toy-plastic read. */
+  .primary{background-color:#1273d6;
+           background-image:linear-gradient(180deg,rgba(255,255,255,.28) 0 42%,rgba(255,255,255,0) 42%);
+           color:#fff;font-weight:900;font-family:var(--font-display);
+           letter-spacing:.04em;
+           box-shadow:var(--lift)}
+  .primary:active:not(:disabled){box-shadow:0 1px 0 var(--edge)}
   @media (prefers-reduced-motion:reduce){ button:active:not(:disabled){transform:none} }
   /* One decision, two repairs. Drop takes every pixel the other two do not
      need, and is tall enough to be the obvious thing to hit; Undo and Clear
@@ -734,38 +763,39 @@
 
   /* swatches, shared by the info panel's entries */
   .sw{width:15px;height:15px;flex:none;display:block}
-  .sw.ob{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ff8a94,#e0303f);
-         box-shadow:0 0 9px rgba(255,77,94,.6)}
-  .sw.tg{border-radius:50%;background:radial-gradient(circle,rgba(47,217,122,.45),rgba(47,217,122,.08));
-         border:2px solid var(--target);box-shadow:0 0 9px rgba(47,217,122,.55)}
+  .sw.ob{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ff8a97,var(--obstacle));
+         box-shadow:0 0 0 2px var(--edge)}
+  .sw.tg{border-radius:50%;background:radial-gradient(circle,var(--target) 0 30%,#fff 31% 55%,#5fd67c 56%);
+         box-shadow:0 0 0 2px var(--edge)}
   .sw.rp{height:6px;width:18px;border-radius:3px;background:var(--ramp);
-         transform:rotate(-20deg);box-shadow:0 0 9px var(--glow-ramp)}
-  .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall)}
-  .sw.bl{border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#ffd98a);
-         box-shadow:0 0 9px rgba(255,201,60,.7)}
-  .sw.bs{border-radius:50%;background:radial-gradient(circle,rgba(90,255,215,.5),rgba(40,190,160,.15));
-         border:2px dashed #5affd7;box-shadow:0 0 9px rgba(90,255,215,.55)}
-  .sw.bk{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffd7a8,#a8551c);
-         box-shadow:0 0 9px rgba(255,168,96,.55)}
+         transform:rotate(-20deg);box-shadow:0 0 0 2px var(--edge)}
+  .sw.wl{height:6px;width:18px;border-radius:3px;background:var(--wall);
+         box-shadow:0 0 0 2px var(--edge)}
+  .sw.bl{border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#ffc53a);
+         box-shadow:0 0 0 2px var(--edge)}
+  .sw.bs{border-radius:50%;background:radial-gradient(circle,#7af0d0,#14b28e);
+         box-shadow:0 0 0 2px var(--edge)}
+  .sw.bk{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffd7a8,#c0671f);
+         box-shadow:0 0 0 2px var(--edge)}
   .sw.wd{height:11px;border-radius:3px;
-         background:linear-gradient(90deg,rgba(150,200,255,.12),rgba(150,200,255,.5));
-         border:1px solid rgba(160,205,255,.5)}
-  .sw.sl{height:11px;border-radius:3px;background:rgba(190,235,255,.3);
-         border:1px solid rgba(200,240,255,.6)}
-  .sw.pt{border-radius:50%;background:radial-gradient(circle,hsla(285,100%,80%,.6),hsla(285,80%,45%,.15));
-         border:2px dashed hsl(285,100%,80%);box-shadow:0 0 9px hsla(285,100%,70%,.6)}
+         background:linear-gradient(90deg,#e3f0ff,#8cc0ff);
+         border:2px solid var(--edge)}
+  .sw.sl{height:11px;border-radius:3px;background:#bfeaff;
+         border:2px solid var(--edge)}
+  .sw.pt{border-radius:50%;background:radial-gradient(circle,hsl(285,100%,85%),hsl(285,70%,55%));
+         box-shadow:0 0 0 2px var(--edge)}
   /* Fire: same danger family as .sw.ob, and pointedly not the same shape. The
      obstacle swatch is a smooth lit sphere; this one is a teardrop with a
      white-hot tip, so the legend shows the difference the board does. */
   .sw.fr{border-radius:50% 50% 50% 50% / 60% 60% 40% 40%;
          background:linear-gradient(180deg,#fff0c0 0%,#ffc451 22%,#ff6a1e 52%,#e0281f 78%,#8e1219 100%);
-         box-shadow:0 0 10px rgba(255,110,40,.75)}
+         box-shadow:0 0 0 2px var(--edge)}
   /* Moving target: the target's own green, with the travel stated as arrows
      either side rather than as a second colour. */
-  .sw.mt{border-radius:50%;background:radial-gradient(circle,rgba(47,217,122,.45),rgba(47,217,122,.08));
-         box-shadow:0 0 0 1.5px rgba(47,217,122,.9) inset,
-                    -7px 0 0 -5px rgba(47,217,122,.8), 7px 0 0 -5px rgba(47,217,122,.8)}
-  .sw.st{background:#ffc451;box-shadow:0 0 9px rgba(255,201,60,.7);
+  .sw.mt{border-radius:50%;background:radial-gradient(circle,var(--target) 0 30%,#fff 31% 55%,#5fd67c 56%);
+         box-shadow:0 0 0 2px var(--edge),
+                    -8px 0 0 -5px var(--edge), 8px 0 0 -5px var(--edge)}
+  .sw.st{background:#ffc53a;filter:drop-shadow(0 0 0.6px var(--edge)) drop-shadow(0 0 0.6px var(--edge));
          clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
   /* the text swaps between one and two lines as you play; reserving the tall
      state keeps the stage - and therefore the board - perfectly still */
@@ -774,7 +804,7 @@
      and later in the file, so it reset that auto too and the hint sat flush
      against the left edge of .app while the HUD, board and controls stayed
      centred - the one row in the column that was off-axis. */
-  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin-block:0;
+  .hint{color:var(--ink);font-size:12.5px;font-weight:700;text-align:center;margin-block:0;
         flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
   /* a phone has no height to spare - drop the reference text, keep the controls */
   /* The legend now lists only what is on the current board, so it is short
@@ -813,10 +843,9 @@
   .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;
         align-content:start}
   .grid button{flex:none;padding:10px 0;font-size:13px;font-variant-numeric:tabular-nums}
-  .grid button.done{border-color:#2fd97a;color:#8dffbe}
-  .grid button.cur{background:linear-gradient(180deg,#5d9bff,#2f6ae0);border-color:#7cb0ff;
-                   box-shadow:0 0 16px -3px rgba(90,150,255,.7)}
-  .grid button.done{box-shadow:inset 0 0 12px -4px rgba(47,217,122,.5)}
+  .grid button{border-radius:12px;border-width:2px;box-shadow:0 2px 0 var(--edge)}
+  .grid button.done{background:#d6f5de;color:#0f6b2b}
+  .grid button.cur{background:#1273d6;color:#fff}
   .grid button:disabled{opacity:.3}
 
   /* ============================================================
@@ -883,7 +912,9 @@
     .title{flex-direction:row;align-items:baseline;gap:6px}
     .title .lvnum{font-size:11px}
     .title .lvname{font-size:14.5px}
-    .flash{height:19px;line-height:15px;font-size:12px}
-    .flashrow{top:8px}
+    .flash,.drop-cue{height:21px;line-height:15px;padding:2px 12px;font-size:11.5px}
+    /* the gap here is 6px, not 8: a little more room above the board edge so
+       the pill does not touch the chips' drop shadow */
+    .board-slot{margin-top:7px}
     .iconbtn,.iconbtn.gear{width:27px;height:27px}
   }

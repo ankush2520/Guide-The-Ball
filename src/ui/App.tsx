@@ -20,7 +20,7 @@ import { GameProvider, useGame } from '../core/GameContext';
 import { GameCanvas } from './GameCanvas';
 import { Hud } from './Hud';
 import { Controls } from './Controls';
-import { Flash } from './Flash';
+import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
 import { LevelSelect } from './LevelSelect';
 import { NoBallsPanel } from './NoBallsPanel';
@@ -139,7 +139,7 @@ function Game() {
            onPointerDown={e => { if (e.target === e.currentTarget) controller.drop(); }}>
         <Hud onOpenLevels={() => open('levels')}
              onOpenSettings={() => open('settings')} />
-        <GameCanvas><Flash /></GameCanvas>
+        <GameCanvas><Status /></GameCanvas>
         <Controls />
       </div>
 

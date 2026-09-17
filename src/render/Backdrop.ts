@@ -9,6 +9,7 @@
    ============================================================ */
 import { H, BOARD } from '../physics/constants';
 import type { Country } from '../levels/types';
+import { isLightSky } from './palette';
 
 export class Backdrop {
   private canvas = document.createElement('canvas');
@@ -34,11 +35,15 @@ export class Backdrop {
     c.fillStyle = g;
     c.fillRect(0, 0, W, H);
 
-    /* a cool wash spilling in from above the ceiling - the ball falls out of
-       the light and into the dark, which is what sells the board as deep */
+    const light = isLightSky(country.sky[1]);
+
+    /* a wash spilling in from above the ceiling. On a night board it is the
+       cool light the ball falls out of; on a day board it is plain sunlight,
+       white, so the top of the board glows rather than tints. */
+    const wash = light ? '255,255,255' : country.wash;
     const top = c.createRadialGradient(W * 0.5, -H * 0.10, 0, W * 0.5, -H * 0.10, H * 0.75);
-    top.addColorStop(0, `rgba(${country.wash},.22)`);
-    top.addColorStop(1, `rgba(${country.wash},0)`);
+    top.addColorStop(0, `rgba(${wash},${light ? '.70' : '.22'})`);
+    top.addColorStop(1, `rgba(${wash},0)`);
     c.fillStyle = top;
     c.fillRect(0, 0, W, H);
 
@@ -50,12 +55,14 @@ export class Backdrop {
     }
 
     /* vignette: pulls the eye to the middle of the board and hides the fact
-       that the gradient above has to end somewhere */
+       that the gradient above has to end somewhere. Black at 60% on a light
+       sky just greys it, so a day board is framed in its own blue instead,
+       and much more gently. */
     const vig = c.createRadialGradient(W / 2, H * 0.46, H * 0.28,
                                        W / 2, H * 0.46, H * 0.80);
     vig.addColorStop(0,   'rgba(0,0,0,0)');
-    vig.addColorStop(0.7, 'rgba(0,0,0,.26)');
-    vig.addColorStop(1,   'rgba(0,0,0,.60)');
+    vig.addColorStop(0.7, light ? `rgba(${country.wash},.10)` : 'rgba(0,0,0,.26)');
+    vig.addColorStop(1,   light ? `rgba(${country.wash},.26)` : 'rgba(0,0,0,.60)');
     c.fillStyle = vig;
     c.fillRect(0, 0, W, H);
   }

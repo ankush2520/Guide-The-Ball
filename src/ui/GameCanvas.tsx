@@ -93,6 +93,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           stage.style.width = `${Math.round(w)}px`;
           stage.style.height = `${Math.round(w / ratio)}px`;
           slot.parentElement?.style.setProperty('--board-w', `${Math.round(w)}px`);
+          /* the status pill sits on the board's top edge; +2 for the border */
+          slot.parentElement?.style.setProperty('--board-h', `${Math.round(w / ratio) + 2}px`);
         }
       }
       controller.notifyRampsChanged();
@@ -248,10 +250,6 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   };
 
   const step = controller.tutorialStep();
-  /* The drop has no button any more, so the board has to say how it is done.
-     Only while planning with nothing selected - a selected ramp has its own
-     instructions, and during a drop there is nothing to tap for. */
-  const showCue = controller.phase === 'plan' && controller.selected < 0;
 
   return (
     <div className="board-slot">
@@ -273,13 +271,11 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           Skip
         </button>
       )}
-      {/* board-level chrome: the flash. Out of flow and pointer-transparent,
-          so it can neither move the board nor swallow a drag across it. */}
-      {showCue && (
-        <div className="drop-cue" id="drop-cue">Touch or click on screen to drop ball</div>
-      )}
-      {children}
     </div>
+      {/* board-level chrome: the status pill. In the SLOT, not the stage, so
+          it can straddle the board's top edge - the stage clips its contents
+          to the board. Out of flow and pointer-transparent. */}
+      {children}
     </div>
   );
 }

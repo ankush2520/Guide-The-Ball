@@ -12,10 +12,16 @@
    red still hurts, green is still the target, blue is still
    yours, in every country.
 
-   `sky` runs top to bottom and always ends near-black - the ball
-   falls out of the light and into the dark, which is what sells
-   the board as deep. `wash` is the overhead light spill and the
+   `sky` runs top to bottom. A night sky ends near-black - the ball
+   falls out of the light and into the dark. A DAY sky (light by
+   luminance, see isLightSky) gets the toon treatment instead:
+   sunlight from above, clouds rather than stars, and a vignette
+   in its own colour. `wash` is the overhead light spill and the
    grid, used at low alpha. `accent` recolours the UI chrome.
+
+   Verdholm is the first day sky, the prototype for the toon
+   reskin. The other thirteen are still night skies and will be
+   repainted once that look is signed off.
    ============================================================ */
 import type { Country } from './types';
 
@@ -32,10 +38,14 @@ import type { Country } from './types';
    countries hold 1-50; the ten still to be authored queue up behind them in
    plan order, and each drops into the next free block as it lands. */
 export const COUNTRIES: Country[] = [
-  /* Verdholm is frozen: hand-designed levels, and the palette the whole
-     game's contrast was originally tuned against. */
+  /* Verdholm's levels are frozen and hand-designed. Its palette was the
+     night navy the game's contrast was first tuned against; it is now the
+     toon day sky, pale blue into lavender. The obstacle red, ramp blue,
+     target's dark green and wall grey each clear 3:1 against all three stops
+     (tightest: wall grey at 3.06:1 on the top stop), and the ink outline
+     around every shape clears 11:1. */
   { id: 1, name: 'Verdholm', from: 1,   to: 20,  mechanic: 'ramps only - the fundamentals',
-    sky: ['#1a2048', '#101433', '#06081a'], wash: '104,146,255', accent: '#ffc93c' },
+    sky: ['#d3edff', '#e4f3ff', '#f2ecff'], wash: '90,130,210', accent: '#ffb400' },
 
   /* Deep maroon into burnt orange. The warmest accent in the early game, so
      a booster's green-cyan chevron still reads as the one cool thing on the

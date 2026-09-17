@@ -1,10 +1,11 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Segment } from '../levels/types';
 import { WALL_HT } from '../physics/constants';
+import { INK, WALL } from '../render/palette';
 
 /* A level wall is structural and dead, and must not read as something the
-   player placed: no bloom, a seat of shadow under it, and a lengthwise
-   gradient so it looks extruded rather than drawn. */
+   player placed: flat stone grey, no gloss streak, a hard shadow seat under
+   it, and a darker inner line so it reads as a slab rather than a bar. */
 export class Wall extends Entity<Segment> {
   readonly kind: EntityKind = 'wall';
 
@@ -15,17 +16,18 @@ export class Wall extends Entity<Segment> {
     ctx.beginPath();
     ctx.moveTo(s.x1, s.y1);
     ctx.lineTo(s.x2, s.y2);
-    ctx.strokeStyle = 'rgba(0,0,0,.45)';
-    ctx.lineWidth = WALL_HT * 2 + 7; ctx.stroke();
-    const g = ctx.createLinearGradient(s.x1, s.y1, s.x2, s.y2);
-    g.addColorStop(0,   '#aeb9cf');
-    g.addColorStop(0.5, '#7f8ba6');
-    g.addColorStop(1,   '#aeb9cf');
-    ctx.strokeStyle = g;
+    const ow = 3;
+    ctx.save();
+    ctx.translate(0, 4);
+    ctx.strokeStyle = 'rgba(42,35,80,.22)';
+    ctx.lineWidth = WALL_HT * 2 + ow * 2; ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = WALL_HT * 2 + ow * 2; ctx.stroke();
+    ctx.strokeStyle = WALL.light;
     ctx.lineWidth = WALL_HT * 2; ctx.stroke();
-    ctx.globalAlpha = 0.30;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.strokeStyle = WALL.dark;
+    ctx.lineWidth = 1.6; ctx.stroke();
     ctx.restore();
   }
 }

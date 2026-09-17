@@ -25,7 +25,7 @@ export class Trail {
     if (this.pts.length < 2) return;
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#ffd479';
+    ctx.strokeStyle = '#ffb400';
     for (let i = 1; i < this.pts.length; i++) {
       const k = i / this.pts.length;         // 0 at the tail, 1 at the ball
       ctx.globalAlpha = k * k * 0.5;

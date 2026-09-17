@@ -1,5 +1,6 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Circle } from '../levels/types';
+import { INK, OBSTACLE, outlineFor } from '../render/palette';
 
 /* A sphere, lit from the upper left. Every round thing on this board agrees
    about where the light is, which is most of what stops a canvas game looking
@@ -11,25 +12,31 @@ export class Obstacle extends Entity<Circle> {
   draw({ ctx }: DrawContext): void {
     const o = this.def;
     ctx.save();
-    const bloom = ctx.createRadialGradient(o.x, o.y, o.r * 0.8, o.x, o.y, o.r * 1.65);
-    bloom.addColorStop(0, 'rgba(255,77,94,.32)');
-    bloom.addColorStop(1, 'rgba(255,77,94,0)');
-    ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.65, 0, Math.PI * 2); ctx.fill();
+    const ow = outlineFor(o.r);
+    // a hard shadow seat, offset down - the sticker lifted off the board
+    ctx.fillStyle = 'rgba(42,35,80,.20)';
+    ctx.beginPath(); ctx.arc(o.x, o.y + 5, o.r + ow / 2, 0, Math.PI * 2); ctx.fill();
 
     const body = ctx.createRadialGradient(o.x - o.r * 0.34, o.y - o.r * 0.40, o.r * 0.05,
                                           o.x, o.y, o.r);
-    body.addColorStop(0,    '#ffa7ae');
-    body.addColorStop(0.42, '#ff4d5e');
-    body.addColorStop(1,    '#a81c2b');
+    body.addColorStop(0,    OBSTACLE.light);
+    body.addColorStop(0.45, OBSTACLE.base);
+    body.addColorStop(1,    OBSTACLE.dark);
     ctx.fillStyle = body;
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
 
-    // rim light along the shaded edge, then the dark inner ring it always had
-    ctx.strokeStyle = 'rgba(255,190,196,.45)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 0.8, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(60,0,10,.32)'; ctx.lineWidth = 4;
+    // the dark inner ring it always had, then the ink outline over the edge
+    ctx.strokeStyle = 'rgba(90,0,20,.28)'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = INK; ctx.lineWidth = ow;
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.stroke();
+
+    // the toy-plastic gloss: a hard white highlight, high and left
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.ellipse(o.x - o.r * 0.38, o.y - o.r * 0.42, o.r * 0.24, o.r * 0.14,
+                -0.7, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }

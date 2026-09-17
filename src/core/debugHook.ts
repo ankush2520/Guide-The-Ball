@@ -18,6 +18,7 @@ import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
 import { CAPTURE_MS } from '../render/constants';
 import { DEL_OFF, DEL_R, DEL_GRAB } from '../managers/LevelManager';
+import * as PAL from '../render/palette';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
          STARTING_COINS, BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
@@ -65,6 +66,11 @@ const physics = {
        button the moment either one is retuned. */
     DEL_OFF, DEL_R, DEL_GRAB,
   },
+  /* The canvas palette, so the suite can hold the toon reskin to its own
+     contrast rules rather than to a comment. */
+  PALETTE: { INK: PAL.INK, OBSTACLE: PAL.OBSTACLE, TARGET: PAL.TARGET,
+             RAMP: PAL.RAMP, WALL: PAL.WALL, BALL: PAL.BALL },
+  isLightSky: (hex: string) => PAL.isLightSky(hex),
   MECH: {
     SPEED_CAP: C.SPEED_CAP, SLIP_REST: C.SLIP_REST, PORTAL_CD: C.PORTAL_CD,
     STAR_R: C.STAR_R, WIND_CAP: C.WIND_CAP, RESTITUTION: C.RESTITUTION,

@@ -1,6 +1,7 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Circle } from '../levels/types';
 import { targetAt } from '../levels/target';
+import { INK, TARGET } from '../render/palette';
 
 /* A bullseye portal. Concentric rings, a pulsing core and a few drifting
    motes, so it reads as "land here" and stays alive even before the ball is
@@ -29,58 +30,59 @@ export class Target extends Entity<Circle> {
     ctx.save();
     ctx.translate(c.x, c.y);
 
-    // soft halo
-    const halo = ctx.createRadialGradient(0, 0, c.r * 0.15, 0, 0, c.r * 1.55);
-    halo.addColorStop(0,    `rgba(47,217,122,${0.30 + pulse * 0.16})`);
-    halo.addColorStop(0.55, 'rgba(47,217,122,0.10)');
-    halo.addColorStop(1,    'rgba(47,217,122,0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * 1.55, 0, Math.PI * 2); ctx.fill();
+    const ring = (r: number, fill: string, ow = 3) => {
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.lineWidth = ow; ctx.strokeStyle = INK; ctx.stroke();
+    };
 
-    // outer ring - dashed and fixed; nothing here rotates
+    // soft halo, breathing
+    const halo = ctx.createRadialGradient(0, 0, c.r * 0.6, 0, 0, c.r * 1.5);
+    halo.addColorStop(0, `rgba(47,201,90,${0.22 + pulse * 0.14})`);
+    halo.addColorStop(1, 'rgba(47,201,90,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(0, 0, c.r * 1.5, 0, Math.PI * 2); ctx.fill();
+
+    /* A bullseye: a pale outer pad, a white band, a solid green centre. Every
+       band carries the ink line, so the goal is a hard-edged shape rather
+       than a glow - which is what kept it readable on the dark board and
+       would not on a light one. */
+    ring(c.r, 'rgba(127,227,154,.55)', 3);
+
+    // the outer ring's dashes - fixed; nothing here rotates
     ctx.save();
-    ctx.strokeStyle = 'rgba(47,217,122,.95)';
+    ctx.strokeStyle = TARGET.dark;
     ctx.lineWidth = 3;
-    ctx.setLineDash([11, 8]);
-    ctx.beginPath(); ctx.arc(0, 0, c.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath(); ctx.arc(0, 0, c.r * 0.84, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
+
+    ring(c.r * 0.62, '#ffffff', 2.5);
+    ring(c.r * (0.36 + pulse * 0.04), TARGET.base, 2.5);
 
     // breathing pulse ring: expands outward and fades, then repeats
     const bk = (clock % TARGET_PULSE_S) / TARGET_PULSE_S;
-    ctx.strokeStyle = `rgba(120,255,180,${(1 - bk) * 0.5})`;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(0, 0, c.r * (0.55 + bk * 0.75), 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(23,150,61,${(1 - bk) * 0.6})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, c.r * (0.62 + bk * 0.7), 0, Math.PI * 2); ctx.stroke();
 
-    // middle ring
-    ctx.strokeStyle = 'rgba(47,217,122,.55)';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * 0.66, 0, Math.PI * 2); ctx.stroke();
-
-    // inner ring + pulsing core, as a gradient so the mouth looks like a well
-    // rather than a sticker
-    const well = ctx.createRadialGradient(0, 0, 0, 0, 0, c.r * 0.66);
-    well.addColorStop(0,    'rgba(47,217,122,.34)');
-    well.addColorStop(0.65, 'rgba(47,217,122,.13)');
-    well.addColorStop(1,    'rgba(20,120,70,.05)');
-    ctx.fillStyle = well;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * 0.66, 0, Math.PI * 2); ctx.fill();
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(47,217,122,.9)';
-    ctx.shadowBlur = 10 + pulse * 14;
-    ctx.fillStyle = `rgba(120,255,180,${0.75 + pulse * 0.25})`;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * (0.20 + pulse * 0.05), 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
+    // gloss on the centre
+    ctx.fillStyle = 'rgba(255,255,255,.8)';
+    ctx.beginPath();
+    ctx.ellipse(-c.r * 0.12, -c.r * 0.14, c.r * 0.10, c.r * 0.06, -0.7, 0, Math.PI * 2);
+    ctx.fill();
 
     // motes sit at FIXED angles and breathe in and out along their radius -
     // radial drift, never an orbit
     for (let i = 0; i < TARGET_MOTES; i++) {
       const a = i * (Math.PI * 2 / TARGET_MOTES) + 0.4;
       const rr = c.r * 1.18 + Math.sin(clock * 1.5 + i * 1.9) * (c.r * 0.14);
-      ctx.fillStyle = `rgba(150,255,195,${0.28 + 0.34 * (0.5 + 0.5 * Math.sin(clock * 2 + i))})`;
-      ctx.beginPath(); ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(clock * 2 + i));
+      ctx.fillStyle = TARGET.base;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
     }
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -93,7 +95,7 @@ export class Target extends Entity<Circle> {
       const kk = k - i * 0.16;
       if (kk <= 0 || kk >= 1) continue;
       ctx.save();
-      ctx.strokeStyle = `rgba(120,255,180,${(1 - kk) * 0.85})`;
+      ctx.strokeStyle = `rgba(23,150,61,${(1 - kk) * 0.9})`;
       ctx.lineWidth = 3 * (1 - kk) + 0.5;
       ctx.beginPath();
       ctx.arc(cx, cy, c.r * (0.5 + kk * 1.5), 0, Math.PI * 2);

@@ -15,9 +15,11 @@ import { BOARD } from '../physics/constants';
 import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
-import { Ramp } from '../entities/Ramp';
+import { Ramp, RAMP_STYLE } from '../entities/Ramp';
 import { Backdrop } from './Backdrop';
 import { drawStarfield } from './Starfield';
+import { drawClouds } from './Clouds';
+import { BALL, INK, OBSTACLE, RAMP, isLightSky } from './palette';
 import { Trail } from './Trail';
 import { ParticleSystem } from './Particles';
 import { drawSeg, roundRect } from './primitives';
@@ -121,7 +123,10 @@ export class Renderer {
     this.resize(s.country);
 
     ctx.drawImage(this.backdrop.image, BOARD.x0, 0, BOARD.w, H);
-    drawStarfield(ctx, s.clock);
+    /* the ambient layer follows the sky: clouds on a daytime board, the old
+       drifting stars on the countries that are still night */
+    if (isLightSky(s.country.sky[1])) drawClouds(ctx, s.clock);
+    else drawStarfield(ctx, s.clock);
 
     const g = { ctx, clock: s.clock, broken: s.broken, got: s.got,
                 simT: s.simT, level: s.level };
@@ -137,7 +142,7 @@ export class Renderer {
     }
 
     /* ramps - the player's own entities, drawn above the board furniture */
-    for (const r of s.ramps) drawSeg(ctx, r, '#3ec8ff', RAMP_HT, 'rgba(62,200,255,.55)');
+    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
     if (s.draft) new Ramp(s.draft, -1).drawDraft(ctx);
 
     if (s.phase === 'plan' && s.selected >= 0 && s.selected < s.ramps.length)
@@ -160,12 +165,13 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,.22)';
-    ctx.lineWidth = RAMP_HT * 2 + 12;
+    ctx.strokeStyle = 'rgba(255,210,63,.75)';
+    ctx.lineWidth = RAMP_HT * 2 + 16;
     ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
-    // dashed outline, so selection survives on top of a same-coloured ramp
-    ctx.strokeStyle = 'rgba(255,255,255,.85)';
-    ctx.lineWidth = 1.5;
+    drawSeg(ctx, seg, RAMP_HT, RAMP_STYLE);
+    // dashed line down the bar, so selection survives on top of a same-coloured ramp
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
     ctx.setLineDash([7, 5]);
     ctx.lineDashOffset = -(s.clock * 22) % 12;    // a slow crawl: it is "live"
     ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
@@ -175,14 +181,16 @@ export class Renderer {
     for (const [ex, ey] of ends) {
       ctx.beginPath(); ctx.arc(ex, ey, s.handleR, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff'; ctx.fill();
-      ctx.lineWidth = 2.5; ctx.strokeStyle = '#1b6fa8'; ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
     }
 
     const del = s.deleteButtonAt(seg);
+    ctx.fillStyle = 'rgba(42,35,80,.22)';
+    ctx.beginPath(); ctx.arc(del.x, del.y + 4, s.delR + 1.5, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(del.x, del.y, s.delR, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff4d5e'; ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
-    ctx.lineCap = 'round'; ctx.lineWidth = 2.6; ctx.strokeStyle = '#ffffff';
+    ctx.fillStyle = OBSTACLE.base; ctx.fill();
+    ctx.lineWidth = 3.5; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.lineCap = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = '#ffffff';
     const k = s.delR * 0.42;
     ctx.beginPath();
     ctx.moveTo(del.x - k, del.y - k); ctx.lineTo(del.x + k, del.y + k);
@@ -206,14 +214,14 @@ export class Renderer {
     // the ramp it would leave behind, so the gesture explains its own result
     ctx.globalAlpha = a * 0.34;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#3ec8ff';
+    ctx.strokeStyle = RAMP.base;
     ctx.lineWidth = RAMP_HT * 2;
     ctx.beginPath(); ctx.moveTo(TUT_A.x, TUT_A.y); ctx.lineTo(hx, hy); ctx.stroke();
 
     // the path the finger is taking
     ctx.globalAlpha = a * 0.5;
-    ctx.strokeStyle = 'rgba(255,255,255,.75)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
     ctx.setLineDash([5, 6]);
     ctx.beginPath(); ctx.moveTo(TUT_A.x, TUT_A.y); ctx.lineTo(TUT_B.x, TUT_B.y); ctx.stroke();
     ctx.setLineDash([]);
@@ -221,27 +229,27 @@ export class Renderer {
     // where it started
     ctx.globalAlpha = a * 0.6;
     ctx.beginPath(); ctx.arc(TUT_A.x, TUT_A.y, 4.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill();
+    ctx.fillStyle = INK; ctx.fill();
 
     // the fingertip: a soft press-ring around a solid dot
     ctx.globalAlpha = a * 0.32;
     ctx.beginPath(); ctx.arc(hx, hy, 19, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.fillStyle = RAMP.light; ctx.fill();
     ctx.globalAlpha = a;
     ctx.beginPath(); ctx.arc(hx, hy, 10.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,.96)'; ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(30,60,110,.9)'; ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
 
     // the label, above the mime and clear of it
-    ctx.globalAlpha = 0.92;
-    ctx.font = '600 19px ui-sans-serif, system-ui, -apple-system, sans-serif';
+    ctx.globalAlpha = 1;
+    ctx.font = '800 19px "SF Pro Rounded", ui-rounded, ui-sans-serif, system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     const label = 'Drag to place a ramp.';
     const ly = TUT_A.y - 34, lw = ctx.measureText(label).width;
-    ctx.fillStyle = 'rgba(13,16,34,.78)';
-    roundRect(ctx, (TUT_A.x + TUT_B.x) / 2 - lw / 2 - 13, ly - 20, lw + 26, 30, 15);
-    ctx.fill();
-    ctx.fillStyle = '#e9ecff';
+    roundRect(ctx, (TUT_A.x + TUT_B.x) / 2 - lw / 2 - 14, ly - 21, lw + 28, 32, 16);
+    ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = INK;
     ctx.fillText(label, (TUT_A.x + TUT_B.x) / 2, ly);
     ctx.restore();
   }
@@ -249,9 +257,9 @@ export class Renderer {
   private drawSpawnMarker(lv: Level): void {
     const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,.28)';
+    ctx.strokeStyle = 'rgba(42,35,80,.45)';
     ctx.setLineDash([4, 6]);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.moveTo(lv.spawn.x, lv.spawn.y + 14);
     ctx.lineTo(lv.spawn.x, lv.spawn.y + 78);
@@ -297,13 +305,14 @@ export class Renderer {
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // amber bloom around it, as a gradient rather than shadowBlur
-    const bloom = ctx.createRadialGradient(bx, by, rad * 0.45, bx, by, rad * 3.4);
-    bloom.addColorStop(0,   'rgba(255,196,74,.42)');
-    bloom.addColorStop(0.5, 'rgba(255,150,50,.13)');
-    bloom.addColorStop(1,   'rgba(255,150,50,0)');
+    /* A soft warm glow, much smaller than the old amber bloom: on a light
+       board a wide halo just muddies the sky. The ink outline is what finds
+       the ball now. */
+    const bloom = ctx.createRadialGradient(bx, by, rad * 0.8, bx, by, rad * 2.2);
+    bloom.addColorStop(0, 'rgba(255,180,0,.30)');
+    bloom.addColorStop(1, 'rgba(255,180,0,0)');
     ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(bx, by, rad * 3.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by, rad * 2.2, 0, Math.PI * 2); ctx.fill();
 
     ctx.translate(bx, by);
     const q = s.squash.amt;
@@ -313,14 +322,28 @@ export class Renderer {
       ctx.rotate(Math.atan2(s.squash.ny, s.squash.nx));
       ctx.scale(1 - q, 1 + q * 0.55);
     }
-    /* white-hot at the highlight falling off to gold: the legend still calls
-       this a white ball, and it still is - the amber lives in the falloff */
+    /* white at the highlight falling off to gold: the legend still calls this
+       a white ball, and it still is - the gold lives in the falloff. The
+       outline is drawn INSIDE the squash transform, so it deforms with the
+       ball on impact rather than staying a rigid circle around it. */
     const core = ctx.createRadialGradient(-rad * 0.30, -rad * 0.34, rad * 0.05, 0, 0, rad);
-    core.addColorStop(0,   '#ffffff');
-    core.addColorStop(0.5, '#fff6dc');
-    core.addColorStop(1,   '#ffc451');
+    core.addColorStop(0,   BALL.hi);
+    core.addColorStop(0.45, BALL.mid);
+    core.addColorStop(1,   BALL.edge);
     ctx.fillStyle = core;
     ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = Math.max(1, rad * 0.26);
+    ctx.strokeStyle = INK; ctx.stroke();
+    ctx.restore();
+
+    /* the gloss is painted after the squash is undone, so the light stays
+       high and left however the ball is flattened */
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.beginPath();
+    ctx.ellipse(bx - rad * 0.34, by - rad * 0.38, rad * 0.26, rad * 0.16, -0.7, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }

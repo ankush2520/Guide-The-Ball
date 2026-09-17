@@ -13,7 +13,7 @@
    subscribes to a version counter and re-reads whatever it needs.
    ============================================================ */
 import type { GameBus, Phase } from '../core/events';
-import { LevelManager } from './LevelManager';
+import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
 import { RewardManager } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
@@ -30,8 +30,8 @@ const STEP_MS = STEP_MS_DEFAULT;
 const FLASH_MS = 2600;
 
 const HIT_COLOR: Record<string, string> = {
-  ramp: '#3ec8ff', wall: '#c3ccdd', obstacle: '#ff6b78',
-  breakable: '#ffb066', booster: '#7dffd4', portal: '#d8a0ff',
+  ramp: '#1680f0', wall: '#5b6188', obstacle: '#f0223f',
+  breakable: '#e0761c', booster: '#14b28e', portal: '#a54bd6',
 };
 
 /* The mechanics tips. The game is plan-first, so a new mechanic is taught the
@@ -275,7 +275,7 @@ export class GameController {
     this.setPhase('capture');
     this.capture = { t: 0, bx: b.x, by: b.y, cx: c.x, cy: c.y };
     // the same particle helper, pointed straight up and fanned all the way round
-    this.renderer.particles.burst(b.x, b.y, 0, -1, '#7dffb4', 14, 3.0, Math.PI, 420);
+    this.renderer.particles.burst(b.x, b.y, 0, -1, '#2fc95a', 14, 3.0, Math.PI, 420);
     this.bus.emit('ball:captured', { level: this.levels.level });
   }
 
@@ -467,8 +467,11 @@ export class GameController {
       captureMs: CAPTURE_MS,
       squash: this.squash,
       deleteButtonAt: (s: Segment) => this.levels.deleteButtonAt(s),
-      handleR: 7,
-      delR: 12,
+      /* read from the same constants the hit-test uses: these were once
+         literals, and the × was resized for the finger while still being
+         painted at its old size */
+      handleR: HANDLE_R,
+      delR: DEL_R,
       tutorial: { step: this.tutorialStep(), t: this.tutHand.t },
     };
   }

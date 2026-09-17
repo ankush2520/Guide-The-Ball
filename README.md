@@ -67,8 +67,9 @@ country is a **city**.
 **Verdholm (levels 1-20) is hand-designed and frozen** - the mechanics below
 are written so that a level with none of them runs the identical code path,
 and the harness output for Verdholm is byte-for-byte what it was before they
-existed. Its palette is frozen too: it is what the game's contrast was
-originally tuned against.
+existed. Its palette was the night navy the game's contrast was first tuned
+against; it is now the first **toon day sky** (see below), the prototype for
+reskinning the other thirteen.
 
 `COUNTRIES[]` in [src/levels/countries.data.ts](src/levels/countries.data.ts)
 gives each country a level range, a name, a mechanic and a palette. A country
@@ -81,7 +82,7 @@ place.
 
 | # | Country | Levels | Mechanic | Backdrop |
 |---|---|---|---|---|
-| 1 | Verdholm | 1-20 | ramps only | the original navy — frozen |
+| 1 | Verdholm | 1-20 | ramps only | toon day sky: pale blue into lavender |
 | 2 | Solmesa | 21-30 | boosters | deep maroon into burnt orange |
 | 3 | Windemere | 31-40 | wind zones | muted sage-teal |
 | 4 | Frostvale | 41-50 | slippery zones | navy into ice-blue, whiter glow |
@@ -99,6 +100,34 @@ place.
 Every entity clears a 3:1 contrast ratio against every country's backdrop; the
 tightest is the red obstacle on Needlecrest at 3.68:1, which is the price of
 that country being deliberately the lightest in the set.
+
+### The toon look
+
+The game is being reskinned from dark space and neon to a bright cartoon
+style: white and cream "sticker" panels on a pale sky, and a thick dark ink
+outline (`--edge` in CSS, `INK` in
+[src/render/palette.ts](src/render/palette.ts)) around every shape that
+matters — the ball, ramps, obstacles, target, walls, and every card, chip and
+button. The outline, not a glow, is what separates a thing from the board.
+
+The two sides share one palette: the CSS tokens in `:root` and
+`palette.ts` hold the same values, and changing one means changing the other.
+The triad keeps its meaning and only gets louder — candy red `#f0223f`, grass
+green (`#17963d` rings, `#2fc95a` centre), sky blue `#1680f0`.
+
+A country is drawn in the toon style when its `sky` is light
+(`isLightSky`): white sunlight from above, drifting clouds and twinkles
+([src/render/Clouds.ts](src/render/Clouds.ts)) instead of the star field, and a
+vignette in its own colour instead of black. So far only **Verdholm** has a day
+sky; the other thirteen are still night skies with the new chrome around them,
+and get repainted once the Verdholm look is signed off. On a day sky the red,
+the ramp blue, the target's dark green and the wall grey each clear 3:1
+against every stop, and the ink outline clears 11:1; section 8b of
+`tests/play.test.mjs` enforces both.
+
+Type is still system fonts only: the rounded, heavy look comes from weight,
+spacing and `ui-rounded` where the platform has it, not from a bundled
+webfont.
 
 ### City names are derived, not written
 
