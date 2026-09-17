@@ -1107,6 +1107,33 @@ check(afterDismiss.sel === -1 && afterDismiss.balls === bBefore && afterDismiss.
       'the tap that clears a selection does not also drop',
       `balls ${bBefore} -> ${afterDismiss.balls}, phase ${afterDismiss.phase}`);
 
+/* the board has to say how the drop is done, since no button does */
+check(await page.locator('#drop-cue').isVisible(), 'the drop cue is on the board while planning');
+check((await page.locator('#drop-cue').textContent()) === 'Touch or click on screen to drop ball',
+      'and it says how to drop');
+await mouseTap(box, { x:(seg.x1+seg.x2)/2, y:(seg.y1+seg.y2)/2 });
+check(await page.locator('#drop-cue').count() === 0, 'it steps aside while a ramp is selected');
+await mouseTap(box, { x:60, y:120 });            // dismisses, does not drop
+
+/* Out of ramps, a press cannot become a drag, so the drop fires on the press
+   itself - no waiting for the finger to lift. */
+await mouseDrag(box, { x:150, y:520 }, { x:250, y:590 });
+check((await page.evaluate(() => window.__gtb.state())).ramps.length === 2, 'the budget is spent');
+const pressAt = P(box, { x:60, y:120 });
+const bPress = await page.evaluate(() => window.__gtb.ballInfo().balls);
+await page.mouse.move(pressAt.x, pressAt.y);
+await page.mouse.down();
+const onPress = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
+                                             phase: window.__gtb.state().phase,
+                                             ripple: !!document.querySelector('.tap-ripple.go') }));
+await page.mouse.up();
+check(onPress.balls === bPress - 1 && onPress.phase !== 'plan',
+      'with no ramps left the drop fires on the press, before the release',
+      `balls ${bPress} -> ${onPress.balls}, phase ${onPress.phase}`);
+check(onPress.ripple, 'and the press is answered with a ripple where it landed');
+check(await page.locator('#drop-cue').count() === 0, 'the cue is gone while the ball falls');
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+
 /* the × is a real touch target now - 2.5x what it was */
 check(C.DEL_R === 30 && C.DEL_OFF === 50,
       'the × is drawn at 2.5x its old radius', `r=${C.DEL_R} off=${C.DEL_OFF}`);
@@ -1557,7 +1584,7 @@ await page.evaluate(() => {
 });
 let before = await ballsNow();
 await dropBall();
-check(before - (await ballsNow()) === 1, 'a Drop Ball press costs exactly one ball',
+check(before - (await ballsNow()) === 1, 'a drop costs exactly one ball',
   `${before} -> ${await ballsNow()}`);
 check((await page.locator('#ball-count').textContent()) === String(await ballsNow()),
   'the HUD chip follows immediately, on the press');
@@ -1607,7 +1634,7 @@ check((await ballsNow()) === before, 'and so is Next after a win',
   `${before} -> ${await ballsNow()}`);
 check((await page.evaluate(() => window.__gtb.state())).levelIndex === 1, 'which advanced a level');
 
-/* --- at zero, Drop Ball turns into the way to get more --- */
+/* --- at zero, the drop tap turns into the way to get more --- */
 await page.evaluate(() => {
   const g = window.__gtb;
   g.setBalls(0); g.setLevel(0); g.setSeed(9);
@@ -2073,7 +2100,7 @@ check(joint.balls === 0, 'set up: out of balls with a spin available');
 await dropBall();
 await page.waitForTimeout(200);
 check(await page.locator('#noballs').isVisible(),
-  'pressing Drop Ball at zero raises the stop screen');
+  'tapping to drop at zero raises the stop screen');
 
 /* the wheel is reachable FROM the stop screen. It used to be reachable
    because this screen only covered the board; now that it covers the
@@ -2193,7 +2220,7 @@ check(landing.phase === 'plan' && landing.level === 1,
 check(!landing.overlay && !landing.select && !landing.noballs && !landing.spin,
   'with no title screen, menu or modal in the way');
 check(landing.boardVisible && landing.dropReady,
-  'the board is live and Drop Ball is usable on the very first frame - zero clicks');
+  'the board is live and droppable on the very first frame - zero clicks');
 /* the tutorial is a mimed hint on the board, not a gate */
 check((await page.evaluate(() => window.__gtb.state().tutorial.step)) === 1,
   'the first-run tutorial is showing');

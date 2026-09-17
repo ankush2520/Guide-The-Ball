@@ -131,9 +131,12 @@ function Game() {
 
           target === currentTarget is the whole guard: it fires only for the
           column's own background, never for a tap that reached the HUD, the
-          board or a panel, all of which own their own handling. */}
+          board or a panel, all of which own their own handling.
+
+          On the press, not the release: nothing can be drawn out here, so the
+          press cannot turn into a drag and there is no reason to wait. */}
       <div className="app"
-           onPointerUp={e => { if (e.target === e.currentTarget) controller.drop(); }}>
+           onPointerDown={e => { if (e.target === e.currentTarget) controller.drop(); }}>
         <Hud onOpenLevels={() => open('levels')}
              onOpenSettings={() => open('settings')} />
         <GameCanvas><Flash /></GameCanvas>

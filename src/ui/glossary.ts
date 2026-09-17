@@ -59,6 +59,6 @@ export const GLOSSARY: GlossaryEntry[] = [
     long: 'Fixed level scenery guarding the target. It bounces the ball the same predictable way ' +
           'your ramps do - it just is not yours to move.' },
   { cls: 'bl', has: () => true, name: 'Ball',
-    long: 'Falls from the marker at the top the instant you press Drop Ball. Gravity does the ' +
+    long: 'Falls from the marker at the top the instant you tap empty board. Gravity does the ' +
           'rest; you never steer it directly.' },
 ];

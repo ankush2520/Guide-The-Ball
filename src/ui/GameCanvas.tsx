@@ -20,7 +20,37 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
      be read as a tap-to-drop when the finger comes up. Set only by case 3 of
      onPointerDown; cleared at the start of every gesture so a release can
      never be judged against a stale one. */
-  const tap = useRef<{ x: number; y: number; canDrop: boolean } | null>(null);
+  const tap = useRef<{ x: number; y: number; canDrop: boolean;
+                       ripple: HTMLElement | null } | null>(null);
+
+  /* Below this, in board units, a press-and-release is a tap rather than a
+     drag. The board is 480 wide against ~265-370 CSS px, so 10 units is about
+     6 CSS px - under a finger's own wobble, and far under MIN_RAMP, so no
+     gesture that draws a real ramp can be mistaken for a tap. */
+  const TAP_SLOP = 10;
+
+  /* ============================================================
+     PRESS FEEDBACK
+
+     A tap can only be told from the start of a ramp drag once
+     the finger lifts, so the drop waits for the release - about
+     120ms of a normal tap. The old Drop Ball button waited just
+     as long but lit up the instant it was touched; a bare board
+     gave nothing back, and that silence read as lag. The ripple
+     answers the touch itself, at the spot it landed.
+     ============================================================ */
+  const ripple = (e: React.PointerEvent): HTMLElement | null => {
+    const stage = host.current;
+    if (!stage) return null;
+    const r = stage.getBoundingClientRect();
+    const el = document.createElement('span');
+    el.className = 'tap-ripple';
+    el.style.left = `${e.clientX - r.left}px`;
+    el.style.top = `${e.clientY - r.top}px`;
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+    stage.appendChild(el);
+    return el;
+  };
   useGameVersion();                       // re-render for the Skip button
 
   /* Mount the canvas and run the loop for as long as it is on screen. */
@@ -160,8 +190,17 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           would cost a ball the player never meant to spend. */
     const hadSelection = controller.selected >= 0;
     if (hadSelection) { controller.selected = -1; controller.notifyRampsChanged(); }
-    tap.current = { x: p.x, y: p.y, canDrop: !hadSelection };
-    if (!levels.canPlaceRamp) return;
+
+    if (!levels.canPlaceRamp) {
+      /* No ramp left to draw, so this press cannot become a drag - there is
+         nothing to wait for. Drop on the touch itself rather than the
+         release. This is also the usual moment a player drops: ramps placed,
+         budget spent. */
+      if (!hadSelection) { ripple(e)?.classList.add('go'); controller.drop(); }
+      return;
+    }
+    tap.current = { x: p.x, y: p.y, canDrop: !hadSelection,
+                    ripple: hadSelection ? null : ripple(e) };
     controller.draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
   };
 
@@ -180,14 +219,12 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     if (!d) return;
     const p = levels.truncate({ x: d.x1, y: d.y1 }, toBoard(e));
     d.x2 = p.x; d.y2 = p.y;
+    const t = tap.current;
+    if (t?.ripple && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > TAP_SLOP) {
+      t.ripple.remove(); t.ripple = null;       // it is a ramp, not a drop
+    }
     e.preventDefault();
   };
-
-  /* Below this, in board units, a press-and-release is a tap rather than a
-     drag. The board is 480 wide against ~265-370 CSS px, so 10 units is about
-     6 CSS px - under a finger's own wobble, and far under MIN_RAMP, so no
-     gesture that draws a real ramp can be mistaken for a tap. */
-  const TAP_SLOP = 10;
 
   const endDraft = () => {
     const t = tap.current;
@@ -202,14 +239,19 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       controller.notifyRampsChanged();
     }
 
-    /* A tap on empty board drops the ball. `d` is absent when the board is out
-       of ramps, and then the press could only ever have been a tap. */
-    if (!t || !t.canDrop) return;
-    const moved = d ? Math.hypot(d.x2 - d.x1, d.y2 - d.y1) : 0;
-    if (moved <= TAP_SLOP) controller.drop();
+    /* A tap on empty board drops the ball. */
+    if (!t || !t.canDrop || !d) return;
+    if (Math.hypot(d.x2 - d.x1, d.y2 - d.y1) <= TAP_SLOP) {
+      t.ripple?.classList.add('go');
+      controller.drop();
+    }
   };
 
   const step = controller.tutorialStep();
+  /* The drop has no button any more, so the board has to say how it is done.
+     Only while planning with nothing selected - a selected ramp has its own
+     instructions, and during a drop there is nothing to tap for. */
+  const showCue = controller.phase === 'plan' && controller.selected < 0;
 
   return (
     <div className="board-slot">
@@ -233,6 +275,9 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       )}
       {/* board-level chrome: the flash. Out of flow and pointer-transparent,
           so it can neither move the board nor swallow a drag across it. */}
+      {showCue && (
+        <div className="drop-cue" id="drop-cue">Touch or click on screen to drop ball</div>
+      )}
       {children}
     </div>
     </div>
