@@ -46,6 +46,7 @@ try {
 
   await run('node', ['tests/play.test.mjs'], { GTB_URL: URL });
   await run('node', ['tests/smoke.test.mjs'], { GTB_URL: URL });
+  await run('node', ['tests/layout.test.mjs'], { GTB_URL: URL });
 
   console.log('\nALL SUITES PASSED\n');
 } catch (err) {

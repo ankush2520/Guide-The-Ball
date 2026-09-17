@@ -13,7 +13,8 @@
     "test:mech": "node tests/mechanics.mjs",
     "test:board": "node tests/board.test.mjs",
     "test:ui": "node tests/play.test.mjs",
-    "test:smoke": "node tests/smoke.test.mjs"
+    "test:smoke": "node tests/smoke.test.mjs",
+    "test:layout": "node tests/layout.test.mjs"
   },
   "devDependencies": {
     "@types/matter-js": "^0.20.2",

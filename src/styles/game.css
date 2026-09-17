@@ -730,7 +730,12 @@
          clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
   /* the text swaps between one and two lines as you play; reserving the tall
      state keeps the stage - and therefore the board - perfectly still */
-  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:0;
+  /* margin-BLOCK, not margin. The shared chrome rule above centres this row
+     with margin-inline:auto; a plain `margin:0` here is the same specificity
+     and later in the file, so it reset that auto too and the hint sat flush
+     against the left edge of .app while the HUD, board and controls stayed
+     centred - the one row in the column that was off-axis. */
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin-block:0;
         flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
   .controls{flex:none}
   /* a phone has no height to spare - drop the reference text, keep the controls */
