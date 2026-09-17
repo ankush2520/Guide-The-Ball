@@ -1178,18 +1178,30 @@ check(afterDismiss.sel === -1 && afterDismiss.balls === bBefore && afterDismiss.
 check(await page.locator('#drop-cue').isVisible(), 'the drop cue is on the board while planning');
 check((await page.locator('#drop-cue').textContent()).trim() === 'Touch or click on screen to drop ball',
       'and it says how to drop');
-/* On the board's top EDGE: centred on the frame, and clear of the ball's
-   start marker below it (every spawn is at y=40, its ring from y=27). */
+/* A caption along the board's bottom edge: inside the frame, centred on
+   it, plain text (no fill), and clear of every level's target. */
 const cueBox = await page.locator('#drop-cue').boundingBox();
 const stageBox = await page.locator('.stage').boundingBox();
-const spawnRingTop = await page.evaluate(() => {
+const cue = await page.evaluate(() => {
   const g = window.__gtb, cv = document.querySelector('canvas#board').getBoundingClientRect();
-  return cv.top + (g.LEVELS[g.state().levelIndex].spawn.y - g.CONSTS.BALL_R - 4) * cv.height / g.CONSTS.H;
+  const low = Math.max(...g.LEVELS.map(l => l.target.y + l.target.r * 0.5));
+  const cs = getComputedStyle(document.getElementById('drop-cue'));
+  return { targetBottom: cv.top + low * cv.height / g.CONSTS.H,
+           bg: cs.backgroundColor, border: cs.borderTopStyle, opacity: +cs.opacity };
 });
-check(Math.abs(cueBox.y + cueBox.height / 2 - stageBox.y) <= 2,
-      'and it sits on the board\'s top edge', `pill centre ${(cueBox.y + cueBox.height / 2).toFixed(1)} vs edge ${stageBox.y.toFixed(1)}`);
-check(cueBox.y + cueBox.height <= spawnRingTop,
-      'clear of where the ball starts', `pill bottom ${(cueBox.y + cueBox.height).toFixed(1)} vs marker ${spawnRingTop.toFixed(1)}`);
+const stageBottom = stageBox.y + stageBox.height;
+check(cueBox.y + cueBox.height <= stageBottom && stageBottom - (cueBox.y + cueBox.height) <= 12,
+      'and it sits as a caption along the board\'s bottom edge',
+      `caption bottom ${(cueBox.y + cueBox.height).toFixed(1)} vs board bottom ${stageBottom.toFixed(1)}`);
+check(Math.abs((cueBox.x + cueBox.width / 2) - (stageBox.x + stageBox.width / 2)) <= 2,
+      'centred on the board');
+check(cue.bg === 'rgba(0, 0, 0, 0)' && cue.border === 'none' && cue.opacity < 0.7,
+      'plain, quiet text - no pill behind it', `bg ${cue.bg}, border ${cue.border}, opacity ${cue.opacity}`);
+/* A handful of levels put a target's bottom rim into the caption's band.
+   Faint text may pass over that rim, but never over the target's heart. */
+check(cueBox.y >= cue.targetBottom,
+      'and it never covers more than the lower rim of any target',
+      `caption top ${cueBox.y.toFixed(1)} vs lowest target half-radius ${cue.targetBottom.toFixed(1)}`);
 await mouseTap(box, { x:(seg.x1+seg.x2)/2, y:(seg.y1+seg.y2)/2 });
 check(await page.locator('#drop-cue').isHidden(), 'it steps aside while a ramp is selected');
 await mouseTap(box, { x:60, y:120 });            // dismisses, does not drop

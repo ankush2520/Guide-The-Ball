@@ -319,48 +319,45 @@
   .tut-skip[hidden]{display:none}
 
   /* ============================================================
-     THE STATUS PILL AND THE TAP RIPPLE
+     THE STATUS CAPTION AND THE TAP RIPPLE
 
-     One slot on the board's top edge holds either the flash (a
-     miss, a tip) or the drop cue - never both; Status.tsx decides
-     which from the same state in the same render, and says why
-     the slot straddles the frame rather than sitting on the board
-     or under it.
+     One caption slot along the board's bottom edge, the way a
+     Reel or a Short lays its subtitles over the video. It holds
+     either the flash (a miss, a tip) or the drop cue - never
+     both; Status.tsx decides which from the same state in the
+     same render.
 
-     Both pills are the same fixed box, and switching is
-     visibility only: no crossfade, so there is no frame with one
-     fading out under the other, and nothing in the column moves.
-     The pill may be WIDER than the board (up to the HUD's width):
-     on a narrow landscape board it reads as a ribbon across the
-     frame rather than truncating the cue.
+     Plain text only - no pill, no fill, no outline - and kept
+     quiet on purpose: the board is the thing to look at. The
+     soft white halo is only there so the words stay legible when
+     they pass over a ramp or a cloud.
+
+     Switching is visibility only, so there is no frame with one
+     line fading out under the other, and nothing in the column
+     moves.
      ============================================================ */
   .status{position:absolute;z-index:5;left:50%;
-          top:calc(50% - var(--board-h, 0px) / 2);
-          transform:translate(-50%,-50%);
+          top:calc(50% + var(--board-h, 0px) / 2 - 6px);
+          transform:translate(-50%,-100%);
           display:grid;place-items:center;pointer-events:none;
           width:max-content;
-          max-width:max(calc(var(--board-w, 100%) - 24px), min(100vw - 20px, 300px))}
+          max-width:calc(var(--board-w, 100%) - 24px)}
   .status > *{grid-area:1 / 1}
   .flash,.drop-cue{display:block;max-width:100%;
          /* one line, exactly, always: it can neither wrap nor grow */
-         height:26px;line-height:20px;padding:2px 14px;
+         height:18px;line-height:18px;padding:0 4px;
          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-         font-size:12.5px;font-weight:800;text-align:center;
-         color:var(--ink);border:1px solid var(--edge);border-radius:999px;
-         box-shadow:0 0 0 1.5px var(--edge), 0 3px 0 1.5px var(--edge);
+         font-size:12px;font-weight:600;text-align:center;letter-spacing:.01em;
+         color:var(--ink);
+         text-shadow:0 0 3px rgba(255,255,255,.95), 0 0 6px rgba(255,255,255,.7);
          visibility:hidden}
-  .flash{background:var(--panel)}
-  /* the call to action is the yellow one */
-  .drop-cue{background:#ffd23f;font-family:var(--font-display);
-            font-weight:900;letter-spacing:.02em}
-  /* each pops in as it takes the slot; the cue then keeps a slow bob, since
-     it is the only instruction for the game's one action */
-  .flash.on{visibility:visible;animation:statuspop .22s cubic-bezier(.3,1.6,.6,1)}
-  .drop-cue.on{visibility:visible;
-               animation:statuspop .22s cubic-bezier(.3,1.6,.6,1),
-                         cuebob 1.6s ease-in-out .22s infinite}
-  @keyframes statuspop{ from{transform:scale(.7)} to{transform:scale(1)} }
-  @keyframes cuebob{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+  /* the flash is news, so it reads a touch firmer than the standing cue */
+  .flash{opacity:.78}
+  .drop-cue{opacity:.5}
+  .status.on-dark .flash,.status.on-dark .drop-cue{color:#fff;
+         text-shadow:0 1px 2px rgba(0,0,0,.8), 0 0 6px rgba(0,0,0,.5)}
+  .flash.on,.drop-cue.on{visibility:visible;animation:captionin .25s ease-out}
+  @keyframes captionin{ from{transform:translateY(3px)} to{transform:none} }
 
   /* Answers the touch at the spot it landed, the instant it lands. `.go` is a
      press that became a drop: brighter, and a little further out. */
@@ -406,8 +403,8 @@
      also why there is no tablet override here. The board's real
      shape is set in one place, in GameCanvas.
      ============================================================ */
-  /* position:relative for the status pill, which straddles the board's top
-     edge; the 4px margin is the room above that edge it straddles into */
+  /* position:relative for the status caption, which is placed against the
+     board's bottom edge; the 4px margin keeps the board's ring off the HUD */
   .board-slot{flex:1 1 auto;min-height:0;display:flex;position:relative;margin-top:4px;
               align-items:center;justify-content:center;width:0;min-width:100%}
   /* The outline is a box-shadow ring on top of the 1px border, not a wider
@@ -912,9 +909,9 @@
     .title{flex-direction:row;align-items:baseline;gap:6px}
     .title .lvnum{font-size:11px}
     .title .lvname{font-size:14.5px}
-    .flash,.drop-cue{height:21px;line-height:15px;padding:2px 12px;font-size:11.5px}
-    /* the gap here is 6px, not 8: a little more room above the board edge so
-       the pill does not touch the chips' drop shadow */
+    .flash,.drop-cue{height:16px;line-height:16px;font-size:11px}
+    /* the gap here is 6px, not 8: a little more room so the board's ring
+       does not touch the chips' drop shadow */
     .board-slot{margin-top:7px}
     .iconbtn,.iconbtn.gear{width:27px;height:27px}
   }

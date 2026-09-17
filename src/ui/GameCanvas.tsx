@@ -93,7 +93,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           stage.style.width = `${Math.round(w)}px`;
           stage.style.height = `${Math.round(w / ratio)}px`;
           slot.parentElement?.style.setProperty('--board-w', `${Math.round(w)}px`);
-          /* the status pill sits on the board's top edge; +2 for the border */
+          /* the status caption sits along the board's bottom edge; +2 for the border */
           slot.parentElement?.style.setProperty('--board-h', `${Math.round(w / ratio) + 2}px`);
         }
       }
@@ -272,9 +272,9 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
         </button>
       )}
     </div>
-      {/* board-level chrome: the status pill. In the SLOT, not the stage, so
-          it can straddle the board's top edge - the stage clips its contents
-          to the board. Out of flow and pointer-transparent. */}
+      {/* board-level chrome: the status caption. In the SLOT, not the stage,
+          so it is placed from the same --board-h the fit publishes. Out of
+          flow and pointer-transparent. */}
       {children}
     </div>
   );
