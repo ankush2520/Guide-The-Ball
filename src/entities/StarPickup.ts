@@ -1,6 +1,7 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { StarDef } from '../levels/types';
 import { STAR_R } from '../physics/constants';
+import { INK } from '../render/palette';
 
 /* Optional gold pickups. Stars are SCENERY to the physics - they never touch
    the trajectory - so collecting them is a pure side-objective. Dimmed to an
@@ -19,8 +20,8 @@ export class StarPickup extends Entity<StarDef> {
     ctx.translate(st.x, st.y);
     if (!taken) {
       const bloom = ctx.createRadialGradient(0, 0, 1, 0, 0, STAR_R * 1.8);
-      bloom.addColorStop(0, `rgba(255,214,120,${0.34 + tw * 0.18})`);
-      bloom.addColorStop(1, 'rgba(255,214,120,0)');
+      bloom.addColorStop(0, `rgba(255,190,40,${0.30 + tw * 0.18})`);
+      bloom.addColorStop(1, 'rgba(255,190,40,0)');
       ctx.fillStyle = bloom;
       ctx.beginPath(); ctx.arc(0, 0, STAR_R * 1.8, 0, Math.PI * 2); ctx.fill();
     }
@@ -34,12 +35,13 @@ export class StarPickup extends Entity<StarDef> {
     }
     ctx.closePath();
     if (taken) {
-      ctx.strokeStyle = 'rgba(255,214,120,.32)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(42,35,80,.30)'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
     } else {
       const grad = ctx.createLinearGradient(0, -STAR_R, 0, STAR_R);
-      grad.addColorStop(0, '#fff6d2'); grad.addColorStop(1, '#ffc451');
+      grad.addColorStop(0, '#ffe680'); grad.addColorStop(1, '#ffb000');
       ctx.fillStyle = grad; ctx.fill();
-      ctx.strokeStyle = 'rgba(120,80,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
     }
     ctx.restore();
   }

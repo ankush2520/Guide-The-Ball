@@ -16,14 +16,13 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
         <div className="big">How to play</div>
         <div className="info scroll" id="info-body">
           <h4>The basics</h4>
-          <p>Drag anywhere on the board to draw a ramp, then press <b>Drop Ball</b>.
-             You never steer the ball - you set the board up beforehand and watch
-             it play out.</p>
-          <p>Tap a ramp you have placed to select it: drag either end to reshape it,
-             drag the middle to move it, or hit the <b>&times;</b> to delete it.
-             <b> Undo</b> and <b>Clear</b> work on the whole set. Missing costs you
-             nothing but the ball - your ramps stay put so the next go is an
-             adjustment, not a rebuild.</p>
+          <p>Tap the big <b>+</b> at the top to put a ramp on the board, then tap
+             empty board to drop the ball. The bag beside it holds your items. You never steer the
+             ball - you set the board up beforehand and watch it play out.</p>
+          <p>Tap a ramp you have placed to select it: drag it to move it, drag
+             either end to turn it, or hit the <b>&times;</b> to take it back.
+             Missing costs you nothing but the ball - your ramps stay put so the
+             next go is an adjustment, not a rebuild.</p>
 
           <h4>On the board</h4>
           {GLOSSARY.map(g => (

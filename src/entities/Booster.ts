@@ -16,25 +16,25 @@ export class Booster extends Entity<BoosterDef> {
     const pulse = 0.5 + 0.5 * Math.sin(clock * 3.4 + z.x * 0.05);
     ctx.save();
     const bloom = ctx.createRadialGradient(z.x, z.y, z.r * 0.3, z.x, z.y, z.r * 1.7);
-    bloom.addColorStop(0, `rgba(64,232,190,${0.28 + pulse * 0.12})`);
-    bloom.addColorStop(1, 'rgba(64,232,190,0)');
+    bloom.addColorStop(0, `rgba(30,200,160,${0.18 + pulse * 0.10})`);
+    bloom.addColorStop(1, 'rgba(30,200,160,0)');
     ctx.fillStyle = bloom;
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r * 1.7, 0, Math.PI * 2); ctx.fill();
 
     const body = ctx.createRadialGradient(z.x, z.y, 0, z.x, z.y, z.r);
-    body.addColorStop(0, 'rgba(150,255,225,.30)');
-    body.addColorStop(1, 'rgba(40,190,160,.10)');
+    body.addColorStop(0, 'rgba(170,245,225,.75)');
+    body.addColorStop(1, 'rgba(60,205,170,.45)');
     ctx.fillStyle = body;
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
 
-    ctx.strokeStyle = 'rgba(90,255,215,.85)'; ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#0e8a72'; ctx.lineWidth = 2.8;
     ctx.setLineDash([7, 6]);
     ctx.lineDashOffset = -(clock * 26) % 13;
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
 
     ctx.translate(z.x, z.y); ctx.rotate(a);
-    ctx.strokeStyle = '#dfffe8'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0b6e5b'; ctx.lineWidth = 3.6; ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const L = z.r * 0.62;
     for (let i = 0; i < 2; i++) {

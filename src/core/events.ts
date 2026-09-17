@@ -1,5 +1,6 @@
 /* The game's event vocabulary. One place to read to learn what the game can
    announce - and the compiler enforces that every emit matches its payload. */
+import type { ItemKind } from '../items/items';
 import { EventBus } from './EventBus';
 import type { Level, Vec } from '../levels/types';
 import type { DropResult, HitKind } from '../physics/types';
@@ -44,6 +45,7 @@ export interface GameEvents extends Record<string, unknown> {
   /* ---- ui / teaching ---- */
   'phase:changed':   { phase: Phase };
   'flash':           { text: string };
+  'item:placed':     { kind: ItemKind; index: number };
   'flash:hide':      Record<string, never>;
   'tip:shown':       { key: string; text: string };
 }

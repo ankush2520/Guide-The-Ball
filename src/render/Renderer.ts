@@ -15,21 +15,18 @@ import { BOARD } from '../physics/constants';
 import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
-import { Ramp, RAMP_STYLE } from '../entities/Ramp';
+import { RAMP_STYLE } from '../entities/Ramp';
 import { Backdrop } from './Backdrop';
 import { drawStarfield } from './Starfield';
 import { drawClouds } from './Clouds';
-import { BALL, INK, OBSTACLE, RAMP, isLightSky } from './palette';
+import { BALL, INK, OBSTACLE, isLightSky } from './palette';
 import { Trail } from './Trail';
 import { ParticleSystem } from './Particles';
-import { drawSeg, roundRect } from './primitives';
+import { drawSeg } from './primitives';
 import type { Phase } from '../core/events';
 import type { Country, Segment } from '../levels/types';
 
 export const MAX_SCALE = 2;
-
-/** Where the demo drag is mimed on level 1: a plausible ramp, not the answer. */
-export const TUT_A = { x: 148, y: 292 }, TUT_B = { x: 268, y: 366 };
 
 /** The ball's impact deformation. `amt` is tweened by the game loop; nx/ny is
     the axis it is squashed along, which is whatever surface it just met. */
@@ -42,7 +39,6 @@ export interface RenderState {
   country: Country;
   entities: readonly Entity[];
   ramps: readonly Segment[];
-  draft: Segment | null;
   selected: number;
   phase: Phase;
   clock: number;
@@ -60,9 +56,9 @@ export interface RenderState {
   deleteButtonAt: (s: Segment) => { x: number; y: number };
   handleR: number;
   delR: number;
-  /** Step 1 of the tutorial mimes the drag that places a ramp. `t` is the
-      glide's 0..1 progress, tweened by the controller. */
-  tutorial: { step: number; t: number };
+  /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
+      the board adds only what has to sit ON the board - see drawCoach. */
+  tutorial: { step: string | null };
 }
 
 export class Renderer {
@@ -143,14 +139,12 @@ export class Renderer {
 
     /* ramps - the player's own entities, drawn above the board furniture */
     for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
-    if (s.draft) new Ramp(s.draft, -1).drawDraft(ctx);
 
     if (s.phase === 'plan' && s.selected >= 0 && s.selected < s.ramps.length)
       this.drawSelection(s, s.ramps[s.selected]);
 
     if (s.phase === 'plan') this.drawSpawnMarker(s.level);
-
-    if (s.tutorial.step === 1) this.drawTutorialHand(s.tutorial.t);
+    if (s.tutorial.step) this.drawCoach(s);
 
     /* the comet behind the ball, then the impact sparks over it */
     this.trail.draw(ctx);
@@ -159,11 +153,20 @@ export class Renderer {
     this.drawBall(s);
   }
 
-  /* the ramp being edited: a halo so it reads as picked out from the others,
-     a grip at each end, and the delete button */
+  /* the ramp being edited: the circle its ends turn on, a halo so it reads
+     as picked out from the others, a grip at each end, and the delete button */
   private drawSelection(s: RenderState, seg: Segment): void {
     const ctx = this.ctx;
     ctx.save();
+    // an item is a fixed length, so its ends can only travel round this circle
+    const mx = (seg.x1 + seg.x2) / 2, my = (seg.y1 + seg.y2) / 2;
+    ctx.strokeStyle = 'rgba(42,35,80,.28)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 7]);
+    ctx.beginPath();
+    ctx.arc(mx, my, Math.hypot(seg.x2 - seg.x1, seg.y2 - seg.y1) / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(255,210,63,.75)';
     ctx.lineWidth = RAMP_HT * 2 + 16;
@@ -180,7 +183,7 @@ export class Renderer {
     const ends: [number, number][] = [[seg.x1, seg.y1], [seg.x2, seg.y2]];
     for (const [ex, ey] of ends) {
       ctx.beginPath(); ctx.arc(ex, ey, s.handleR, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff'; ctx.fill();
+      ctx.fillStyle = '#ffd23f'; ctx.fill();
       ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
     }
 
@@ -200,57 +203,41 @@ export class Renderer {
   }
 
 
-  /* Tutorial step 1: mime the drag that places a ramp. Everything here is
-     canvas primitives - no images, and it scales with the board. The demo
-     ramp is a PLAUSIBLE one, deliberately not the answer. */
-  private drawTutorialHand(k: number): void {
+  /* The walkthrough's marks on the board itself. On the intro, a ring
+     pulsing round the target - the thing the bubble is talking about. While
+     aiming, an arrow from the ramp to the column the ball falls down, since
+     the ramp arrives in the middle of the board and the ball does not. */
+  private drawCoach(s: RenderState): void {
     const ctx = this.ctx;
-    // fade in off the start dot, hold, fade out at the end of the glide
-    const a = k < 0.10 ? k / 0.10 : k > 0.86 ? (1 - k) / 0.14 : 1;
-    const hx = TUT_A.x + (TUT_B.x - TUT_A.x) * k;
-    const hy = TUT_A.y + (TUT_B.y - TUT_A.y) * k;
+    const k = 0.5 + 0.5 * Math.sin(s.clock * 4);
     ctx.save();
-
-    // the ramp it would leave behind, so the gesture explains its own result
-    ctx.globalAlpha = a * 0.34;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = RAMP.base;
-    ctx.lineWidth = RAMP_HT * 2;
-    ctx.beginPath(); ctx.moveTo(TUT_A.x, TUT_A.y); ctx.lineTo(hx, hy); ctx.stroke();
-
-    // the path the finger is taking
-    ctx.globalAlpha = a * 0.5;
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 6]);
-    ctx.beginPath(); ctx.moveTo(TUT_A.x, TUT_A.y); ctx.lineTo(TUT_B.x, TUT_B.y); ctx.stroke();
-    ctx.setLineDash([]);
-
-    // where it started
-    ctx.globalAlpha = a * 0.6;
-    ctx.beginPath(); ctx.arc(TUT_A.x, TUT_A.y, 4.5, 0, Math.PI * 2);
-    ctx.fillStyle = INK; ctx.fill();
-
-    // the fingertip: a soft press-ring around a solid dot
-    ctx.globalAlpha = a * 0.32;
-    ctx.beginPath(); ctx.arc(hx, hy, 19, 0, Math.PI * 2);
-    ctx.fillStyle = RAMP.light; ctx.fill();
-    ctx.globalAlpha = a;
-    ctx.beginPath(); ctx.arc(hx, hy, 10.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
-
-    // the label, above the mime and clear of it
-    ctx.globalAlpha = 1;
-    ctx.font = '800 19px "SF Pro Rounded", ui-rounded, ui-sans-serif, system-ui, -apple-system, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    const label = 'Drag to place a ramp.';
-    const ly = TUT_A.y - 34, lw = ctx.measureText(label).width;
-    roundRect(ctx, (TUT_A.x + TUT_B.x) / 2 - lw / 2 - 14, ly - 21, lw + 28, 32, 16);
-    ctx.fillStyle = '#ffffff'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
-    ctx.fillStyle = INK;
-    ctx.fillText(label, (TUT_A.x + TUT_B.x) / 2, ly);
+    if (s.tutorial.step === 'intro') {
+      const t = s.level.target;
+      ctx.strokeStyle = `rgba(255,180,0,${0.55 + 0.4 * k})`;
+      ctx.lineWidth = 5;
+      ctx.setLineDash([10, 8]);
+      ctx.lineDashOffset = -s.clock * 20;
+      ctx.beginPath(); ctx.arc(t.x, t.y, t.r + 16 + k * 6, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (s.tutorial.step === 'aim' && s.ramps.length) {
+      const r = s.ramps[0];
+      const mx = (r.x1 + r.x2) / 2, my = (r.y1 + r.y2) / 2;
+      const tx = s.level.spawn.x, dx = tx - mx;
+      if (Math.abs(dx) > 40) {
+        const dir = Math.sign(dx), y = my - 34;
+        const x0 = mx + dir * 20, x1 = tx - dir * (8 + k * 6);
+        ctx.strokeStyle = 'rgba(255,170,0,.95)';
+        ctx.fillStyle = 'rgba(255,170,0,.95)';
+        ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.setLineDash([2, 10]);
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x1 + dir * 12, y); ctx.lineTo(x1 - dir * 4, y - 10); ctx.lineTo(x1 - dir * 4, y + 10);
+        ctx.closePath(); ctx.fill();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+      }
+    }
     ctx.restore();
   }
 

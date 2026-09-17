@@ -1,31 +1,35 @@
 /* ============================================================
    THE TOP BAR
 
-   Three things, and nothing else: which level you are on, what
-   you have left to spend on it, and the way out to settings.
+   Three columns, and the middle one is the star:
 
-   The level NAME leads. It used to trail its number as muted
-   9pt flavour and was the first thing to be ellipsised; the
-   city is what the player actually recognises a board by, so
-   it now carries the type weight and "Level 12" is the eyebrow.
+     coins  balls  |  [ + ]  |  bag  settings
 
-   The Try counter is gone. It counted something the player has
-   no decision to make about - it is already restated on the win
-   card, where it changes the star rating and therefore matters.
+   THE + BUTTON is the game's one action before the drop, so it
+   is drawn like a character rather than a control: big, round,
+   gold, straddling the bar, breathing and ringing until every
+   ramp this board allows is down. One tap puts a ramp on the
+   board - no popup - and its badge counts what is left. With
+   the level's ramps gone it spends a spare from the drawer; with
+   no spares either it goes quiet and a tap opens the shop.
 
-   The Ramps chip doubles as the spare-ramp button. It is the
-   number a spare changes, so it is the place to spend one; the
-   shop, which is where they are bought, is behind the gear.
+   The bag beside the settings gear is the full inventory. It
+   only holds straight ramps today, but it is where curved ramps
+   and boosters will be picked from.
+
+   The level name no longer lives up here: it is the pill under
+   the board (LevelPill), which opens the level picker.
    ============================================================ */
 import { useEffect, useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 
 interface Props {
-  onOpenLevels: () => void;
   onOpenSettings: () => void;
+  onOpenItems: () => void;
+  onOpenShop: () => void;
 }
 
-export function Hud({ onOpenLevels, onOpenSettings }: Props) {
+export function Hud({ onOpenSettings, onOpenItems, onOpenShop }: Props) {
   const { levels, rewards, controller } = useGame();
   useGameVersion();
   const [, setTick] = useState(0);
@@ -38,43 +42,51 @@ export function Hud({ onOpenLevels, onOpenSettings }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const lv = levels.level;
   /* The gear carries the wheel's state, because a free spin nobody notices
-     is a free spin nobody takes. Behind a gear it needs a louder signal than
-     it did as its own button, not a quieter one. */
+     is a free spin nobody takes. */
   const ready = rewards.spinReady();
-  /* The spare-ramp drawer is only offered while it can actually be used: in
-     planning, with something in it. */
-  const spare = rewards.extraRamps > 0 && controller.phase === 'plan';
+  const planning = controller.phase === 'plan';
+  const left = levels.rampsLeft, spare = rewards.extraRamps;
+  const empty = left <= 0 && spare <= 0;
+  // loud while there is a ramp to place; quiet once the board is set
+  const calling = planning && left > 0;
+  const coached = controller.tutorialStep() === 'add';
+
+  const add = () => {
+    if (empty) { onOpenShop(); return; }
+    controller.placeItem('ramp');
+  };
 
   return (
     <div className="hud">
-      <button className="title" id="level-title" title="Choose a level" onClick={onOpenLevels}>
-        <span className="lvnum">Level {lv.id}</span>
-        <b className="lvname">{levels.cityName}</b>
-      </button>
-      <div className="chips">
+      <div className="chips left">
         <div className="counter coins" title="Coins — spend them in the shop">
           <i className="coin" /><b id="coin-count">{rewards.coins}</b>
         </div>
         <div className={'counter balls' + (rewards.balls <= 0 ? ' empty' : '')} title="Balls left">
           <i className="pip" /><b id="ball-count">{rewards.balls}</b>
         </div>
-        {/* Tappable only while there is a spare to spend and a board to spend
-            it on. A chip that does nothing when pressed is worse than a chip
-            that is plainly not a button. */}
-        {spare ? (
-          <button className="counter ramps spend" id="btn-use-ramp"
-                  title={`Use a spare ramp (${rewards.extraRamps} left)`}
-                  onClick={() => controller.useExtraRamp()}>
-            Ramps <b id="ramps-left">{levels.rampsLeft}</b>
-            <span className="spare">+{rewards.extraRamps}</span>
-          </button>
-        ) : (
-          <div className="counter ramps" title="Ramps left to place">
-            Ramps <b id="ramps-left">{levels.rampsLeft}</b>
-          </div>
-        )}
+      </div>
+
+      <button id="btn-add-ramp"
+              className={'addramp' + (calling ? ' calling' : '') + (empty ? ' empty' : '')
+                         + (coached ? ' coached' : '')}
+              aria-label={empty ? 'No ramps left — get more in the shop'
+                                : `Add a ramp (${left} left${spare ? `, ${spare} spare` : ''})`}
+              title={empty ? 'No ramps left — get more in the shop' : 'Add a ramp'}
+              disabled={!planning}
+              onClick={add}>
+        <span className="plusink"><i className="plus" /></span>
+        <b className="addcount" id="ramps-left">{left}</b>
+        {spare > 0 && <span className="addspare" id="ramps-spare">+{spare}</span>}
+      </button>
+
+      <div className="chips right">
+        <button id="btn-inventory" className="iconbtn bag"
+                title="Items" aria-label="Items"
+                disabled={!planning} onClick={onOpenItems}>
+          <i className="bagicon" />
+        </button>
         <button id="btn-settings" className={'iconbtn gear' + (ready ? ' ready' : ' locked')}
                 title={ready ? 'Settings — a daily spin is ready' : 'Settings'}
                 aria-label="Settings" onClick={onOpenSettings}>

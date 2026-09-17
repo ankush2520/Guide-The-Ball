@@ -283,7 +283,7 @@ therefore built once at boot into `lv.walls` and never rebuilt. The difficulty
 those three levels lost is paid back with tighter ramp budgets and denser
 boards — see the header comments on each. If movement is ever wanted back, the
 constraint it needs is that no waypoint path may cross the region the player
-draws ramps in.
+places ramps in.
 
 Progress (highest level reached) persists in `localStorage` under
 `gtb.progress.v1`; blocked storage degrades to "no saving", never a crash.
@@ -418,11 +418,54 @@ The star for coming in under budget is judged against `levelBudget` — the
 level's designed number — deliberately. If spares inflated that, fifteen coins
 would buy a third star.
 
-Spending is **explicit**: the Ramps chip in the HUD becomes a button when the
-drawer has something in it, and one tap moves one ramp from drawer to board.
-It is spent at the tap, not at the drop. The alternative — silently consuming
-inventory as you draw past the budget — moves a balance the player did not ask
-to move.
+Spending is **explicit**: once the level's own ramps are gone, tapping + (or
+Ramp in the inventory) moves one spare from the drawer onto the board, and
+both show the spare count before they are tapped. It is spent at the tap, not at the
+drop.
+
+## Items and the inventory
+
+Ramps are not drawn. The big gold **+** in the centre of the top bar puts a
+ramp on the board in one tap — in the middle and already selected — and its
+badge counts what this level has left (a gold `+N` shows spares). It pulses
+while there is a ramp to place, goes still once they are all down, and with
+no spares left either it greys out and opens the shop. The small **bag**
+beside the settings gear opens the full inventory (`InventoryPanel`), which is
+where future items will be picked from.
+
+The level name is a pill directly under the board (`LevelPill`); tapping it
+opens the level picker. On the board a selected ramp can be **moved** (drag it),
+**turned** (drag either end — it pivots on its middle) and **removed** (its ×).
+A tap on empty board drops the ball; a press that slides does not.
+
+Items have a **fixed size**. A straight ramp is always `RAMP_LEN` (120) long —
+the length the level generator proves boards with. `node
+tools/fixed-ramp-sweep.mjs 120` checks all 150 levels with every ramp fixed at
+that length; every one is still winnable. Re-run it before changing
+`RAMP_LEN` or adding an item of another size.
+
+Every kind of item is one row in `src/items/items.ts` plus a case in
+`GameController.itemCount` / `placeItem`. Only the straight ramp exists today;
+curved ramps and placeable boosters are meant to be added the same way. Level
+boosters are still part of the level data for now.
+
+## First-run walkthrough
+
+Level 1, first visit only (`tutorialSeen` in the progress save). A speech
+bubble (`Coach.tsx`) walks through the loop one step at a time, and each step
+waits for the player to actually do it:
+
+| Step | Says | Moves on when |
+|---|---|---|
+| intro | get the ball into the green target (a ring pulses round it) | "Let's go" |
+| add | tap the big + (it pulses faster) | a ramp is placed |
+| aim | drag it under the ball, tilt it by an end (arrow on the board) | the ramp is dragged, or "Done" |
+| drop | tap empty space | the ball is dropped — tutorial complete |
+| retry | your ramp stays put, adjust and go again | "OK" (only after a missed first drop) |
+
+The step is derived from the board each time (`GameController.tutorialStep`),
+so taking the ramp off goes back to "add". The bubble ignores the pointer
+except for its own button, and Skip on the board ends all of it.
 
 ## Daily spin
 
@@ -483,7 +526,7 @@ asked to draw the wheel as well.
     tests/mechanics.mjs     per-mechanic isolation tests
     tests/board.test.mjs    phone vs tablet board, over every level
     tests/play.test.mjs     UI, physics invariants, economy, portal compliance
-    tests/smoke.test.mjs    end-to-end: boots, draws, drags a ramp, drops a ball
+    tests/smoke.test.mjs    end-to-end: boots, renders, drops a ball
     tests/tune.mjs          physics tuning rig
     tests/levels.mjs        per-level design harness
 
@@ -549,8 +592,8 @@ the portal's side rather than matters of taste.
   and collision count come out bit-identical from 60Hz to 240Hz, matching the
   headless simulator to the last decimal.
 - **One click to gameplay** — it is zero. Boot goes straight to the player's
-  current level with no title screen; the first-run tutorial is a mimed hint
-  drawn on the board, not a gate. Keep it that way if a menu is ever added.
+  current level with no title screen; the first-run walkthrough is a
+  bubble over live gameplay that lets every tap through, not a gate. Keep it that way if a menu is ever added.
 - **No custom fullscreen** — the game references no fullscreen API at all.
   The portal owns that control; adding one is prohibited.
 - **Escape / Ctrl+W** — never `preventDefault`-ed, idle or mid-drag. There is
@@ -635,7 +678,7 @@ can only postpone that. `npm run test:board` sweeps 245 ramp layouts across all
 that wins on the phone board still wins on the tablet board, landing on the
 same pixel.** 22,050 runs, 385 of them wins.
 
-The margins are new room to draw ramps in, not new puzzle content: obstacles
+The margins are new room to place ramps in, not new puzzle content: obstacles
 and targets stay in the middle 480px until the levels are re-authored for the
 wider board.
 

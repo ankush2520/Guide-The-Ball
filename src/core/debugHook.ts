@@ -13,6 +13,7 @@
    ============================================================ */
 import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
+import { RAMP_LEN } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
@@ -177,8 +178,7 @@ export function installGameHook(s: GameServices): void {
                     /* step 2 used to be signalled by a pulsing Drop Ball
                        button; there is no button now, so the step itself is
                        the signal and `step` above already carries it */
-                    dropPulsing: false,
-                    handT: c.tutHand.t },
+                    dropPulsing: false },
         infoOpen: !!document.getElementById('infopanel'),
         settingsOpen: !!document.getElementById('settingspanel'),
         infoText: document.getElementById('info-body')?.textContent ?? '',
@@ -291,12 +291,16 @@ export function installGameHook(s: GameServices): void {
     setLevel: (i: number) => c.setLevel(i),
     select: (i: number) => { c.selected = i; c.notifyRampsChanged(); },
     skipTutorial: () => c.tutorialSkip(),
+    tutorialNext: () => c.tutorialNext(),
+    /** Take an item from the inventory, exactly as the popup does. */
+    placeItem: (kind: 'ramp' = 'ramp') => c.placeItem(kind),
+    RAMP_LEN,
     drop: () => c.drop(),
     clock: () => c.clock,
 
     reset() {
       levels.clearRamps();
-      c.ball = null; c.draft = null; c.tries = 0;
+      c.ball = null; c.tries = 0;
       c.selected = -1; c.dragging = null; c.lastResult = null; c.winCard = null;
       c.renderer.trail.clear();
       c.renderer.particles.clear();

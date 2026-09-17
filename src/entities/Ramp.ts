@@ -27,10 +27,4 @@ export class Ramp extends Entity<Segment> {
     drawSeg(ctx, this.def, RAMP_HT, RAMP_STYLE);
   }
 
-  /** The in-progress drag: no shadow yet, and see-through until it is long
-      enough to keep. */
-  drawDraft(ctx: CanvasRenderingContext2D): void {
-    drawSeg(ctx, this.def, RAMP_HT, { fill: RAMP.base, shine: null, outline: 2.5,
-                                      alpha: this.isValid ? 1 : 0.4 });
-  }
 }

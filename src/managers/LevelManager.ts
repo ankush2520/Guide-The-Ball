@@ -17,14 +17,15 @@ import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
-import { MIN_RAMP, MAX_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
+import { MIN_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
+import { RAMP_LEN } from '../items/items';
 
 /** How close a finger has to be to grab a ramp or one of its controls.
     Board coordinates throughout, so a grab radius means the same thing
     whatever size the canvas is being displayed at. The board is 480 wide and
     shows at roughly 265 CSS px on a phone, so these are about half their
     value under a fingertip. */
-export const HANDLE_R = 7;
+export const HANDLE_R = 10;
 export const GRAB_R   = 20;
 export const PICK_PAD = 12;
 /* The × is the ONLY way to remove a ramp now that the Undo and Clear buttons
@@ -111,13 +112,26 @@ export class LevelManager {
 
   /* ---------------- ramp editing ---------------- */
 
-  /** Keep a new ramp inside MAX_RAMP by shortening it, never by refusing the
-      drag - a gesture that silently does nothing reads as a broken control. */
-  truncate(from: { x: number; y: number }, to: { x: number; y: number }) {
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const len = Math.hypot(dx, dy);
-    if (len <= MAX_RAMP) return to;
-    return { x: from.x + dx / len * MAX_RAMP, y: from.y + dy / len * MAX_RAMP };
+  /** Put a new ramp on the board from the inventory, and return its index
+      (or -1 if the budget is spent).
+
+      It lands in the middle of the board, a little tilted so it reads as a
+      ramp rather than a shelf. If a ramp already sits there it steps down
+      and then up the board until it has room, so a second ramp never lands
+      exactly on top of the first and hides it. */
+  placeRamp(): number {
+    if (!this.canPlaceRamp) return -1;
+    const cx = (BOARD.x0 + BOARD.x1) / 2, a = 20 * Math.PI / 180;
+    const hx = Math.cos(a) * RAMP_LEN / 2, hy = Math.sin(a) * RAMP_LEN / 2;
+    const ys = [360, 450, 270, 540, 180, 630];
+    const free = (y: number) => this.ramps.every(r =>
+      Math.hypot((r.x1 + r.x2) / 2 - cx, (r.y1 + r.y2) / 2 - y) > 70);
+    const y = ys.find(free) ?? ys[this.ramps.length % ys.length];
+    /* Listed right-to-left, which puts its × ABOVE it (deleteButtonAt takes
+       the normal on the left of x1->x2). The space below the ramp is then
+       free for the walkthrough's bubble, clear of the ball's drop line. */
+    this.ramps.push({ x1: cx + hx, y1: y + hy, x2: cx - hx, y2: y - hy });
+    return this.ramps.length - 1;
   }
 
   addRamp(seg: Segment): boolean {
@@ -128,7 +142,6 @@ export class LevelManager {
   }
 
   removeRamp(i: number): void { if (i >= 0 && i < this.ramps.length) this.ramps.splice(i, 1); }
-  undoRamp(): void { this.ramps.pop(); }
   clearRamps(): void { this.ramps = []; }
 
   /** The nearest ramp to a tap, or -1. */
@@ -143,23 +156,22 @@ export class LevelManager {
 
   rampAt(i: number): Segment | undefined { return this.ramps[i]; }
 
-  /* Move one end of a ramp, keeping the segment inside the length limits the
-     drawing tool enforces - an edited ramp must stay a ramp you could have
-     drawn by hand. */
-  moveRampEnd(i: number, which: 1 | 2, p: { x: number; y: number }): void {
+  /* Turn a ramp by one of its ends. The ramp pivots on its own middle and
+     keeps its length: an item is a fixed size, so dragging an end points it
+     rather than stretching it. A finger right on the pivot has no direction,
+     so it leaves the ramp alone. Then the whole thing is nudged back inside
+     the board, in case the turn swung an end over the edge. */
+  rotateRamp(i: number, which: 1 | 2, p: { x: number; y: number }): void {
     const s = this.ramps[i];
     if (!s) return;
-    const ax = which === 1 ? s.x2 : s.x1, ay = which === 1 ? s.y2 : s.y1;
-    let q = this.truncate({ x: ax, y: ay }, p);
-    const dx = q.x - ax, dy = q.y - ay;
-    const len = Math.hypot(dx, dy);
-    if (len < MIN_RAMP) {
-      // too close to the anchor: push it back out along the same heading
-      const a = len > 1e-6 ? Math.atan2(dy, dx) : -Math.PI / 2;
-      q = { x: clamp(ax + Math.cos(a) * MIN_RAMP, BOARD.x0, BOARD.x1),
-            y: clamp(ay + Math.sin(a) * MIN_RAMP, 0, H) };
-    }
-    if (which === 1) { s.x1 = q.x; s.y1 = q.y; } else { s.x2 = q.x; s.y2 = q.y; }
+    const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2;
+    const dx = p.x - mx, dy = p.y - my;
+    if (Math.hypot(dx, dy) < MIN_RAMP / 2) return;
+    const half = Math.hypot(s.x2 - s.x1, s.y2 - s.y1) / 2;
+    const a = Math.atan2(dy, dx) + (which === 1 ? Math.PI : 0);
+    const ux = Math.cos(a) * half, uy = Math.sin(a) * half;
+    s.x1 = mx - ux; s.y1 = my - uy; s.x2 = mx + ux; s.y2 = my + uy;
+    this.moveRampBy(i, 0, 0);
   }
 
   /** Slide a whole ramp, clamped so neither end can leave the board. */

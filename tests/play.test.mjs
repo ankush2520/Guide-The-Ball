@@ -44,8 +44,8 @@ const topUp = () => page.evaluate(() => window.__gtb.setBalls(999));
 /* Drop Ball, Undo and Clear are gone: the drop is a tap on empty board and a
    ramp is removed with its own ×. Sections that merely need a ball dropped go
    through the same entry point the tap reaches, rather than re-deriving a safe
-   empty spot on every level. The GESTURE itself - tap drops, drag draws - is
-   tested in its own section below. */
+   empty spot on every level. The GESTURE itself - a tap drops, a slide does
+   not - is tested in its own section below. */
 const dropBall = (pg = page) => pg.evaluate(() => window.__gtb.drop());
 await topUp();
 
@@ -121,9 +121,30 @@ check(await page.locator('#overlay').isHidden(), 'no overlay on a fresh board');
 check((await page.locator('#level-title').textContent()).includes('Verdholm I'),
   'level 1 title shows its city name', await page.locator('#level-title').textContent());
 check(await page.locator('#btn-settings').isVisible(),
-  'the settings gear is on the HUD, and is the only icon on it');
-check(await page.locator('.hud .iconbtn').count() === 1,
-  'the wheel, the info panel and the mute are behind it rather than beside it');
+  'the settings gear is on the HUD');
+check(await page.locator('.hud .iconbtn').count() === 2 && await page.locator('.hud #btn-inventory.iconbtn').count() === 1,
+  'beside only the bag - the wheel, the info panel and the mute are behind the gear');
+/* the level name moved under the board, to give the bar to the + */
+const pillGeo = await page.evaluate(() => {
+  const p = document.getElementById('level-title').getBoundingClientRect();
+  const b = document.querySelector('.stage').getBoundingClientRect();
+  const h = document.querySelector('.hud').getBoundingClientRect();
+  return { gap: p.top - b.bottom, inHud: p.top < h.bottom,
+           centred: Math.abs((p.left + p.right) / 2 - (b.left + b.right) / 2) };
+});
+check(!pillGeo.inHud && pillGeo.gap >= 0 && pillGeo.gap <= 14 && pillGeo.centred <= 1.5,
+  'the level name is a pill right under the board, centred on it', JSON.stringify(pillGeo));
+/* the + is the bar's centrepiece */
+const addGeo = await page.evaluate(() => {
+  const a = document.getElementById('btn-add-ramp').getBoundingClientRect();
+  const h = document.querySelector('.hud').getBoundingClientRect();
+  const chips = [...document.querySelectorAll('.hud .counter, .hud .iconbtn')].map(e => e.getBoundingClientRect());
+  return { off: Math.abs((a.left + a.right) / 2 - (h.left + h.right) / 2),
+           size: a.width, biggest: Math.max(...chips.map(c => c.height)) };
+});
+check(addGeo.off <= 1.5, 'the + button sits dead centre in the top bar', `${addGeo.off.toFixed(1)}px off`);
+check(addGeo.size >= addGeo.biggest * 1.6, 'and is by far the biggest thing up there',
+  `${addGeo.size}px vs ${addGeo.biggest}px`);
 check(await page.locator('#try-count').count() === 0,
   'and the Try counter is gone - it is on the win card, where it changes the rating');
 check(await page.locator('.legend').count() === 0,
@@ -905,6 +926,8 @@ check(await boardBox() === geoIdle, 'the board is unmoved after the label goes',
    cue must be back the moment it clears. */
 await page.evaluate(() => {
   const g = window.__gtb;
+  // the walkthrough's bubble keeps the caption quiet on level 1; not under test here
+  g.skipTutorial();
   g.reset(); g.setSeed(3);
   g.setRamps([{ x1: 150, y1: 300, x2: 250, y2: 360 }]);
   const vis = id => getComputedStyle(document.getElementById(id)).visibility === 'visible';
@@ -1099,59 +1122,135 @@ check(pal.hues.every(d => d >= 60), 'red, green and blue are at least 60° of hu
       pal.hues.map(d => d.toFixed(0) + '°').join(' '));
 
 /* ---------------------------------------------------------------- */
-section('9. Ramp drawing - mouse and touch');
-await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });   // level 4: 2 ramps
+section('9. Ramps come from the inventory - mouse and touch');
+await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); window.__gtb.setWallet(100, 0); });   // level 4: 2 ramps
 const box = await page.locator('#board').boundingBox();
+const S = () => page.evaluate(() => window.__gtb.state());
+const RAMP_LEN = await page.evaluate(() => window.__gtb.RAMP_LEN);
+const lenOf = r => Math.hypot(r.x2 - r.x1, r.y2 - r.y1);
+const midOf = r => ({ x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2 });
+/** Take a ramp exactly the way a player does: Items, then the Ramp tile. */
+async function addRampUI(){
+  await page.click('#btn-inventory');
+  await page.waitForSelector('#inventorypanel');
+  await page.click('#btn-item-ramp');
+  await page.waitForSelector('#inventorypanel', { state: 'detached' });
+}
 check(await page.locator('#ramps-left').textContent() === '2', 'level 4 shows a budget of 2');
+
+/* ---- the + button: one tap, one ramp, no popup ---- */
+check(await page.locator('#btn-add-ramp.calling').count() === 1, 'the + button is calling while there are ramps to place');
+check((await page.locator('#btn-add-ramp').evaluate(e => getComputedStyle(e).animationName)) !== 'none',
+  'and it is animated');
+await page.click('#btn-add-ramp');
+st = await S();
+check(st.ramps.length === 1 && await page.locator('#inventorypanel').count() === 0,
+  'tapping + places a ramp at once, with no popup');
+check(st.selected === 0 && Math.abs(lenOf(st.ramps[0]) - RAMP_LEN) < 1e-6, 'selected, at the item length');
+check(await page.locator('#ramps-left').textContent() === '1', 'and its badge counts down');
+await page.click('#btn-add-ramp');
+check((await S()).ramps.length === 2 && await page.locator('#ramps-left').textContent() === '0',
+  'a second tap uses the last one');
+check(await page.locator('#btn-add-ramp.calling').count() === 0, 'with the board set it stops calling');
+check(await page.locator('#btn-add-ramp.empty').count() === 1, 'and with no spares either it greys out');
+await page.click('#btn-add-ramp');
+check(await page.locator('#shoppanel').isVisible() && (await S()).ramps.length === 2,
+  'an empty + opens the shop instead of doing nothing');
+await page.click('#btn-shop-close');
+await page.waitForSelector('#shoppanel', { state: 'detached' });
+await page.evaluate(() => window.__gtb.setWallet(100, 1));
+check((await page.locator('#ramps-spare').textContent()) === '+1' && await page.locator('#btn-add-ramp.empty').count() === 0,
+  'a spare in the drawer shows on the + and wakes it');
+await page.click('#btn-add-ramp');
+check((await S()).ramps.length === 3 && (await page.evaluate(() => window.__gtb.spareRamps())) === 0,
+  'and the + spends it');
+await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); window.__gtb.setWallet(100, 0); });
+
+/* drawing is gone: a drag on empty board makes nothing and spends nothing */
+const ballsBeforeDrag = await page.evaluate(() => window.__gtb.ballInfo().balls);
 await mouseDrag(box, { x:150, y:260 }, { x:250, y:330 });
-st = await page.evaluate(() => window.__gtb.state());
-check(st.ramps.length === 1, 'mouse drag creates a ramp');
+await page.waitForTimeout(200);
+st = await S();
+check(st.ramps.length === 0, 'a drag on the board no longer draws a ramp');
+check((await page.evaluate(() => window.__gtb.ballInfo().balls)) === ballsBeforeDrag && st.phase === 'plan',
+      'and, being a slide rather than a tap, it does not drop either');
+
+await page.click('#btn-inventory');
+check(await page.locator('#inventorypanel').isVisible(), 'the Items button opens the inventory');
+check((await page.locator('#item-count-ramp').textContent()) === '×2', 'the ramp tile counts the level budget',
+      await page.locator('#item-count-ramp').textContent());
+await page.click('#btn-item-ramp');
+await page.waitForSelector('#inventorypanel', { state: 'detached' });
+st = await S();
+check(st.ramps.length === 1, 'tapping the ramp tile places a ramp');
+check(await page.locator('#inventorypanel').count() === 0, 'and closes the popup');
+check(st.selected === 0, 'the new ramp arrives selected, ready to move');
+check(Math.abs(lenOf(st.ramps[0]) - RAMP_LEN) < 1e-6, 'at the fixed item length', `${lenOf(st.ramps[0]).toFixed(1)}`);
+const bd0 = await page.evaluate(() => window.__gtb.board());
+check(Math.abs(midOf(st.ramps[0]).x - (bd0.x0 + bd0.x1) / 2) < 1 && Math.abs(midOf(st.ramps[0]).y - C.H * 0.45) < 1,
+      'in the middle of the board', JSON.stringify(midOf(st.ramps[0])));
 check(await page.locator('#ramps-left').textContent() === '1', 'counter drops to 1');
-const ballsBeforeShort = await page.evaluate(() => window.__gtb.ballInfo().balls);
-await mouseDrag(box, { x:300, y:430 }, { x:308, y:436 });
-st = await page.evaluate(() => window.__gtb.state());
-check(st.ramps.length === 1, 'a too-short drag draws no ramp');
-/* ...and it is under the tap slop, so it reads as a TAP - which is the drop
-   gesture now. That is the intended trade: 10 board units is ~6 CSS px, well
-   under a finger's wobble and far under MIN_RAMP, so nothing that was trying
-   to be a ramp lands here. */
-await page.waitForTimeout(250);
-check((await page.evaluate(() => window.__gtb.ballInfo().balls)) === ballsBeforeShort - 1,
-      'a drag that short is a tap, and a tap drops');
-await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+check((await page.evaluate(() => window.__gtb.ballInfo().balls)) === ballsBeforeDrag, 'placing spends no ball');
+
+await addRampUI();
+st = await S();
+const gap = Math.hypot(midOf(st.ramps[0]).x - midOf(st.ramps[1]).x, midOf(st.ramps[0]).y - midOf(st.ramps[1]).y);
+check(st.ramps.length === 2 && gap > 60, 'a second ramp lands clear of the first rather than on it', `${gap.toFixed(0)} apart`);
+check(st.selected === 1, 'and it is the one selected');
+
+/* budget spent, drawer empty: the tile says so and does nothing */
+await page.click('#btn-inventory');
+check(await page.locator('#btn-item-ramp').isDisabled(), 'with nothing left the ramp tile is disabled');
+check((await page.locator('#item-count-ramp').textContent()) === '×0', 'and reads ×0');
+await page.click('#btn-inv-close');
+await page.waitForSelector('#inventorypanel', { state: 'detached' });
+
+/* with a spare in the drawer, the tile spends it */
+await page.evaluate(() => window.__gtb.setWallet(100, 2));
+await page.click('#btn-inventory');
+check(await page.locator('#btn-item-ramp').isEnabled(), 'a spare in the drawer re-enables the tile');
+check((await page.locator('#inventorypanel .itemspare').textContent()) === '+2 spare', 'and the tile shows it');
+await page.click('#btn-item-ramp');
+await page.waitForSelector('#inventorypanel', { state: 'detached' });
+st = await S();
+check(st.ramps.length === 3 && (await page.evaluate(() => window.__gtb.spareRamps())) === 1,
+      'tapping it then spends one spare onto the board', `${st.ramps.length} ramps, ${await page.evaluate(() => window.__gtb.spareRamps())} spare`);
+await page.evaluate(() => window.__gtb.setWallet(100, 0));
+
+/* the × on a selected ramp takes it back. setLevel, not just reset: the
+   spare spent above belongs to this board until the level is left. */
 await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });
-await topUp();
-
-/* Undo is gone; the × on a selected ramp is the only way to remove one, so
-   that is what has to work here. Select it, then tap its ×. */
-await mouseDrag(box, { x:150, y:260 }, { x:250, y:330 });
-st = await page.evaluate(() => window.__gtb.state());
-await mouseTap(box, { x:(st.ramps[0].x1+st.ramps[0].x2)/2, y:(st.ramps[0].y1+st.ramps[0].y2)/2 });
-check((await page.evaluate(() => window.__gtb.state())).selected === 0, 'tapping a ramp selects it');
+await addRampUI();
+st = await S();
 await mouseTap(box, delBtn(st.ramps[0]));
-check((await page.evaluate(() => window.__gtb.state())).ramps.length === 0, 'its × removes the ramp');
+check((await S()).ramps.length === 0, 'its × removes the ramp');
+check(await page.locator('#ramps-left').textContent() === '2', 'and the slot returns to the counter');
 
+/* the whole flow by touch */
 const cdp = await context.newCDPSession(page);
-await touchDrag(cdp, box, { x:140, y:280 }, { x:240, y:350 });
-check((await page.evaluate(() => window.__gtb.state())).ramps.length === 1, 'touch drag creates a ramp');
+const itemsBtn = await page.locator('#btn-inventory').boundingBox();
+const touchAt = async (x, y) => {
+  await cdp.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[{x, y}] });
+  await cdp.send('Input.dispatchTouchEvent', { type:'touchEnd',   touchPoints:[] });
+};
+await touchAt(itemsBtn.x + itemsBtn.width / 2, itemsBtn.y + itemsBtn.height / 2);
+await page.waitForSelector('#inventorypanel');
+const tile = await page.locator('#btn-item-ramp').boundingBox();
+await touchAt(tile.x + tile.width / 2, tile.y + tile.height / 2);
+await page.waitForSelector('#inventorypanel', { state: 'detached' });
+check((await S()).ramps.length === 1, 'the inventory works by touch');
 
 section('9b. Tap to drop - the gesture that replaced the Drop Ball button');
 await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });
 await topUp();
 let g = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
                                      phase: window.__gtb.state().phase }));
-/* a DRAG draws a ramp and must NOT spend a ball */
-await mouseDrag(box, { x:150, y:260 }, { x:250, y:330 });
-let g2 = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
-                                      ramps: window.__gtb.state().ramps.length }));
-check(g2.ramps === 1 && g2.balls === g.balls,
-      'a drag draws a ramp and spends no ball', `balls ${g.balls} -> ${g2.balls}`);
 
 /* a TAP on empty board drops */
 await mouseTap(box, { x:60, y:120 });
 await page.waitForTimeout(250);
-g2 = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
-                                  phase: window.__gtb.state().phase }));
+let g2 = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
+                                      phase: window.__gtb.state().phase }));
 check(g2.balls === g.balls - 1 && g2.phase !== 'plan',
       'a tap on empty board drops the ball', `balls ${g.balls} -> ${g2.balls}, phase ${g2.phase}`);
 
@@ -1160,10 +1259,9 @@ await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });
 await topUp();
 /* a tap that only DISMISSES a selection must not cost a ball: the player was
    putting the ramp down, not asking for a drop */
-await mouseDrag(box, { x:150, y:260 }, { x:250, y:330 });
-const seg = (await page.evaluate(() => window.__gtb.state())).ramps[0];
-await mouseTap(box, { x:(seg.x1+seg.x2)/2, y:(seg.y1+seg.y2)/2 });
-check((await page.evaluate(() => window.__gtb.state())).selected === 0, 'the ramp is selected');
+await addRampUI();
+const seg = (await S()).ramps[0];
+check((await S()).selected === 0, 'the ramp is selected');
 const bBefore = await page.evaluate(() => window.__gtb.ballInfo().balls);
 await mouseTap(box, { x:60, y:120 });
 await page.waitForTimeout(200);
@@ -1202,26 +1300,32 @@ check(cue.bg === 'rgba(0, 0, 0, 0)' && cue.border === 'none' && cue.opacity < 0.
 check(cueBox.y >= cue.targetBottom,
       'and it never covers more than the lower rim of any target',
       `caption top ${cueBox.y.toFixed(1)} vs lowest target half-radius ${cue.targetBottom.toFixed(1)}`);
-await mouseTap(box, { x:(seg.x1+seg.x2)/2, y:(seg.y1+seg.y2)/2 });
+await mouseTap(box, midOf(seg));
 check(await page.locator('#drop-cue').isHidden(), 'it steps aside while a ramp is selected');
 await mouseTap(box, { x:60, y:120 });            // dismisses, does not drop
 
-/* Out of ramps, a press cannot become a drag, so the drop fires on the press
-   itself - no waiting for the finger to lift. */
-await mouseDrag(box, { x:150, y:520 }, { x:250, y:590 });
-check((await page.evaluate(() => window.__gtb.state())).ramps.length === 2, 'the budget is spent');
+/* A slide on empty board is not a tap - most often it is a finger that just
+   missed the ramp it meant to drag - so it spends nothing. */
+const bSlide = await page.evaluate(() => window.__gtb.ballInfo().balls);
+await mouseDrag(box, { x:60, y:120 }, { x:140, y:180 });
+await page.waitForTimeout(200);
+check((await page.evaluate(() => window.__gtb.ballInfo().balls)) === bSlide && (await S()).phase === 'plan',
+      'a slide on empty board does not drop');
+
+/* The press is answered at once with a ripple; the drop lands on release. */
 const pressAt = P(box, { x:60, y:120 });
 const bPress = await page.evaluate(() => window.__gtb.ballInfo().balls);
 await page.mouse.move(pressAt.x, pressAt.y);
 await page.mouse.down();
-const onPress = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
-                                             phase: window.__gtb.state().phase,
-                                             ripple: !!document.querySelector('.tap-ripple.go') }));
+const onPress = await page.evaluate(() => ({ phase: window.__gtb.state().phase,
+                                             ripple: !!document.querySelector('.tap-ripple') }));
 await page.mouse.up();
-check(onPress.balls === bPress - 1 && onPress.phase !== 'plan',
-      'with no ramps left the drop fires on the press, before the release',
-      `balls ${bPress} -> ${onPress.balls}, phase ${onPress.phase}`);
-check(onPress.ripple, 'and the press is answered with a ripple where it landed');
+await page.waitForTimeout(100);
+const onRelease = await page.evaluate(() => ({ balls: window.__gtb.ballInfo().balls,
+                                               phase: window.__gtb.state().phase }));
+check(onPress.ripple && onPress.phase === 'plan', 'the press is answered with a ripple where it landed');
+check(onRelease.balls === bPress - 1 && onRelease.phase !== 'plan',
+      'and the release drops', `balls ${bPress} -> ${onRelease.balls}, phase ${onRelease.phase}`);
 check(await page.locator('#drop-cue').isHidden(), 'the cue is gone while the ball falls');
 await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
 
@@ -1255,120 +1359,121 @@ await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });
 await topUp();
 
 /* ---------------------------------------------------------------- */
-section('10. Budget, clear, and lock during the drop');
-await touchDrag(cdp, box, { x:140, y:430 }, { x:240, y:500 });
-await touchDrag(cdp, box, { x:140, y:560 }, { x:240, y:630 });
-st = await page.evaluate(() => window.__gtb.state());
+section('10. Budget, removal, and lock during the drop');
+await page.evaluate(() => window.__gtb.setWallet(100, 0));
+for (let i = 0; i < 3; i++) await page.evaluate(() => window.__gtb.placeItem('ramp'));
+st = await S();
 check(st.ramps.length === 2, "ramp budget caps at this level's maxBlocks", `got ${st.ramps.length}`);
 check(await page.locator('#ramps-left').textContent() === '0', 'counter reads 0');
-/* Clear is gone too: ramps come off one at a time, each by its own ×. */
+/* ramps come off one at a time, each by its own × */
 for (let i = 0; i < 2; i++) {
-  const cur = (await page.evaluate(() => window.__gtb.state())).ramps[0];
-  await mouseTap(box, { x:(cur.x1+cur.x2)/2, y:(cur.y1+cur.y2)/2 });
+  const cur = (await S()).ramps[0];
+  await mouseTap(box, midOf(cur));
   await mouseTap(box, delBtn(cur));
 }
-check((await page.evaluate(() => window.__gtb.state())).ramps.length === 0,
-      'every ramp can be taken off with its ×');
+check((await S()).ramps.length === 0, 'every ramp can be taken off with its ×');
 await dropBall();
-const locked = await page.evaluate(() => {
-  const before = window.__gtb.state().ramps.length;
-  const c = document.getElementById('board'), r = c.getBoundingClientRect();
-  const ev = (t,x,y) => c.dispatchEvent(new PointerEvent(t,{bubbles:true,pointerId:1,clientX:r.left+x,clientY:r.top+y}));
-  ev('pointerdown',40,100); ev('pointermove',160,200); ev('pointerup',160,200);
-  return { before, after: window.__gtb.state().ramps.length };
-});
-check(locked.after === locked.before, 'layout is locked once the ball drops');
+check(await page.locator('#btn-inventory').isDisabled(), 'the bag is disabled while the ball falls');
+check(await page.locator('#btn-add-ramp').isDisabled(), 'and so is the +');
+check((await page.evaluate(() => window.__gtb.placeItem('ramp'))) === false && (await S()).ramps.length === 0,
+      'and nothing can be placed mid-drop');
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
 
-section('10b. Editing a placed ramp');
+section('10b. Moving and turning a placed ramp');
 await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });  // level 4: 2 ramps
-await mouseDrag(box, { x:150, y:280 }, { x:260, y:350 });
-st = await page.evaluate(() => window.__gtb.state());
-const placed = st.ramps[0];
-check(st.ramps.length === 1 && st.selected === -1, 'a freshly drawn ramp starts unselected');
+await topUp();
+await addRampUI();
+st = await S();
+check(st.selected === 0, 'a placed ramp starts selected');
 
-/* --- select by tapping the ramp body --- */
-await mouseTap(box, { x:(placed.x1+placed.x2)/2, y:(placed.y1+placed.y2)/2 });
-st = await page.evaluate(() => window.__gtb.state());
-check(st.selected === 0, 'tapping a placed ramp selects it', `selected=${st.selected}`);
-
-/* --- drag an ENDPOINT: the stored position must actually change --- */
+/* --- drag an END: the ramp turns on its middle and keeps its length --- */
 const before2 = { ...st.ramps[0] };
-await mouseDrag(box, { x:before2.x2, y:before2.y2 }, { x:before2.x2 - 70, y:before2.y2 + 55 });
-st = await page.evaluate(() => window.__gtb.state());
+const m2 = midOf(before2);
+await mouseDrag(box, { x:before2.x2, y:before2.y2 }, { x:m2.x + 10, y:m2.y + 90 });
+st = await S();
 const after2 = st.ramps[0];
-const movedEnd = Math.hypot(after2.x2-before2.x2, after2.y2-before2.y2);
-const anchorHeld = Math.hypot(after2.x1-before2.x1, after2.y1-before2.y1);
 const angBefore = Math.atan2(before2.y2-before2.y1, before2.x2-before2.x1)*180/Math.PI;
 const angAfter  = Math.atan2(after2.y2-after2.y1, after2.x2-after2.x1)*180/Math.PI;
-console.log(`  endpoint drag: (${before2.x2.toFixed(0)},${before2.y2.toFixed(0)}) -> ` +
-  `(${after2.x2.toFixed(0)},${after2.y2.toFixed(0)}); angle ${angBefore.toFixed(0)}° -> ${angAfter.toFixed(0)}°`);
-check(movedEnd > 40, "dragging a handle moves that end of the ramp", `moved ${movedEnd.toFixed(1)}px`);
-check(anchorHeld < 1e-6, 'the other end stays put', `drifted ${anchorHeld.toFixed(3)}px`);
-check(Math.abs(angAfter - angBefore) > 15, 'which rotates the ramp',
+console.log(`  end drag: angle ${angBefore.toFixed(0)}° -> ${angAfter.toFixed(0)}°`);
+check(Math.abs(angAfter - angBefore) > 30, 'dragging an end turns the ramp',
   `${Math.abs(angAfter-angBefore).toFixed(0)}° of rotation`);
-const lenAfter = Math.hypot(after2.x2-after2.x1, after2.y2-after2.y1);
-check(lenAfter >= C.MIN_RAMP - 1e-6 && lenAfter <= C.MAX_RAMP + 1e-6,
-  'an edited ramp stays inside the drawable length limits', `${lenAfter.toFixed(1)}px`);
+check(Math.abs(lenOf(after2) - RAMP_LEN) < 1e-6, 'without stretching it', `${lenOf(after2).toFixed(3)}`);
+const pivot = Math.hypot(midOf(after2).x - m2.x, midOf(after2).y - m2.y);
+check(pivot < 1e-6, 'it pivots on its own middle', `middle drifted ${pivot.toFixed(3)}`);
+const endDir = Math.atan2(after2.y2 - m2.y, after2.x2 - m2.x) * 180 / Math.PI;
+const want = Math.atan2(90, 10) * 180 / Math.PI;
+check(Math.abs(endDir - want) < 2, 'and the dragged end points where the finger went',
+  `${endDir.toFixed(1)}° vs ${want.toFixed(1)}°`);
+/* the other end works too */
+await mouseDrag(box, { x:after2.x1, y:after2.y1 }, { x:m2.x - 90, y:m2.y });
+const after2b = (await S()).ramps[0];
+check(Math.abs(after2b.y1 - m2.y) < 1 && after2b.x1 < m2.x && Math.abs(lenOf(after2b) - RAMP_LEN) < 1e-6,
+  'dragging the other end turns it too', JSON.stringify(after2b));
 
 /* --- drag the MIDDLE: translates without changing angle or length --- */
-const before3 = { ...st.ramps[0] };
-const mid3 = { x:(before3.x1+before3.x2)/2, y:(before3.y1+before3.y2)/2 };
+const before3 = { ...after2b };
+const mid3 = midOf(before3);
 await mouseDrag(box, mid3, { x: mid3.x + 55, y: mid3.y + 45 });
-st = await page.evaluate(() => window.__gtb.state());
+st = await S();
 const after3 = st.ramps[0];
 const d1 = Math.hypot(after3.x1-before3.x1, after3.y1-before3.y1);
 const d2 = Math.hypot(after3.x2-before3.x2, after3.y2-before3.y2);
-const lenB = Math.hypot(before3.x2-before3.x1, before3.y2-before3.y1);
-const lenA = Math.hypot(after3.x2-after3.x1, after3.y2-after3.y1);
-check(d1 > 40 && Math.abs(d1-d2) < 1e-6, 'dragging the middle translates the whole ramp',
+check(d1 > 40 && Math.abs(d1-d2) < 1e-6, 'dragging the middle moves the whole ramp',
   `both ends moved ${d1.toFixed(1)}px`);
-check(Math.abs(lenA-lenB) < 1e-6, 'a translation changes neither length nor angle');
+check(Math.abs(lenOf(after3) - lenOf(before3)) < 1e-6, 'a move changes neither length nor angle');
+
+/* --- a turn near the edge is pulled back onto the board --- */
+await page.evaluate(() => window.__gtb.setRamps([{ x1: 20, y1: 400, x2: 140, y2: 400 }]));
+await page.evaluate(() => window.__gtb.select(0));
+await mouseDrag(box, { x:140, y:400 }, { x:80, y:300 });
+const edge = (await S()).ramps[0];
+const bdE = await page.evaluate(() => window.__gtb.board());
+check(Math.min(edge.x1, edge.x2) >= bdE.x0 - 1e-6 && Math.max(edge.y1, edge.y2) <= C.H,
+      'a turn that swings an end off the board is nudged back on', JSON.stringify(edge));
 
 /* --- tapping empty board space deselects --- */
-await mouseTap(box, { x:60, y:700 });
-check((await page.evaluate(() => window.__gtb.state())).selected === -1,
-  'tapping empty board space deselects');
+await mouseTap(box, { x:420, y:720 });
+check((await S()).selected === -1, 'tapping empty board space deselects');
 
-/* --- the x button deletes just that ramp and frees its slot --- */
-await mouseDrag(box, { x:120, y:560 }, { x:230, y:620 });      // a second ramp
-st = await page.evaluate(() => window.__gtb.state());
-check(st.ramps.length === 2, 'two ramps placed', `${st.ramps.length}`);
-check(await page.locator('#ramps-left').textContent() === '0', 'budget is spent');
+/* --- tapping an unselected ramp selects it, and can go straight on to a drag --- */
+await page.evaluate(() => { window.__gtb.reset(); });
+await addRampUI(); await addRampUI();
+await mouseTap(box, { x:420, y:720 });
+st = await S();
 const keep = JSON.stringify(st.ramps[1]);
-await mouseTap(box, { x:(st.ramps[0].x1+st.ramps[0].x2)/2, y:(st.ramps[0].y1+st.ramps[0].y2)/2 });
-st = await page.evaluate(() => window.__gtb.state());
-check(st.selected === 0, 'the first ramp is selected for deletion');
+await mouseTap(box, midOf(st.ramps[0]));
+check((await S()).selected === 0, 'tapping a placed ramp selects it');
 await mouseTap(box, delBtn(st.ramps[0]));
-st = await page.evaluate(() => window.__gtb.state());
-check(st.ramps.length === 1, 'the x button removes exactly one ramp', `${st.ramps.length} left`);
+st = await S();
+check(st.ramps.length === 1, 'the × removes exactly one ramp', `${st.ramps.length} left`);
 check(JSON.stringify(st.ramps[0]) === keep, 'the other ramp is untouched');
 check(st.selected === -1, 'selection clears after a delete');
 check(await page.locator('#ramps-left').textContent() === '1', 'the freed slot returns to the counter');
-await mouseDrag(box, { x:300, y:420 }, { x:400, y:480 });
-check((await page.evaluate(() => window.__gtb.state())).ramps.length === 2,
-  'the freed slot can be drawn into again');
+await addRampUI();
+check((await S()).ramps.length === 2, 'the freed slot can be used again');
 
 /* --- and all of it works on touch --- */
 await page.evaluate(() => { window.__gtb.reset(); });
-await touchDrag(cdp, box, { x:150, y:280 }, { x:260, y:350 });
-st = await page.evaluate(() => window.__gtb.state());
-const t0 = { ...st.ramps[0] };
-await touchTap(cdp, box, { x:(t0.x1+t0.x2)/2, y:(t0.y1+t0.y2)/2 });
-check((await page.evaluate(() => window.__gtb.state())).selected === 0, 'touch tap selects a ramp');
-await touchDrag(cdp, box, { x:t0.x1, y:t0.y1 }, { x:t0.x1-60, y:t0.y1+45 });
-st = await page.evaluate(() => window.__gtb.state());
-check(Math.hypot(st.ramps[0].x1-t0.x1, st.ramps[0].y1-t0.y1) > 30,
-  'touch drag moves an endpoint');
-await touchTap(cdp, box, delBtn(st.ramps[0]));
-st = await page.evaluate(() => window.__gtb.state());
-check(st.ramps.length === 0 && st.selected === -1, 'touch tap on x deletes the ramp');
+await page.evaluate(() => window.__gtb.placeItem('ramp'));
+const t0 = { ...(await S()).ramps[0] };
+await touchDrag(cdp, box, { x:t0.x1, y:t0.y1 }, { x:(t0.x1+t0.x2)/2, y:(t0.y1+t0.y2)/2 + 90 });
+st = await S();
+check(Math.hypot(st.ramps[0].x1-t0.x1, st.ramps[0].y1-t0.y1) > 30 && Math.abs(lenOf(st.ramps[0]) - RAMP_LEN) < 1e-6,
+  'touch drag on an end turns the ramp');
+await touchTap(cdp, box, { x:420, y:720 });
+check((await S()).selected === -1, 'a touch tap on empty board deselects');
+const t1 = (await S()).ramps[0];
+await touchTap(cdp, box, midOf(t1));
+check((await S()).selected === 0, 'touch tap selects a ramp');
+await touchTap(cdp, box, delBtn(t1));
+st = await S();
+check(st.ramps.length === 0 && st.selected === -1, 'touch tap on × deletes the ramp');
 check(await page.locator('#ramps-left').textContent() === '2', 'counter restored after touch delete');
 
 /* --- editing is locked once the ball is in flight --- */
-await touchDrag(cdp, box, { x:150, y:280 }, { x:260, y:350 });
-await page.evaluate(() => window.__gtb.select(0));
+await page.evaluate(() => window.__gtb.placeItem('ramp'));
 await dropBall();
-st = await page.evaluate(() => window.__gtb.state());
+st = await S();
 check(st.selected === -1, 'dropping the ball clears any selection');
 const midLocked = await page.evaluate(() => {
   const g = window.__gtb, r = g.state().ramps[0];
@@ -1450,60 +1555,93 @@ const tbox = await page.locator('#board').boundingBox();
 const tut = () => page.evaluate(() => window.__gtb.state().tutorial);
 
 let T = await tut();
-check(T.step === 1, 'a brand-new player lands on step 1', `step=${T.step}`);
+const coach = () => page.evaluate(() => document.getElementById('coach')?.dataset.step ?? null);
+check(T.step === 'intro', 'a brand-new player lands on the intro', `step=${T.step}`);
 check(T.seen === false, 'the tutorialSeen flag starts unset');
 check(await page.locator('#btn-skip').isVisible(), 'Skip is offered');
-check(T.step === 1, 'step 2 has not been reached yet', `step=${T.step}`);
+check((await coach()) === 'intro' && (await page.locator('#coach').textContent()).includes('target'),
+  'a bubble says what the game is about', await page.locator('#coach .coach-title').textContent());
+check((await page.locator('#coach').evaluate(e => getComputedStyle(e).pointerEvents)) === 'none',
+  'and the bubble never swallows a tap meant for the board');
+check((await page.locator('#drop-cue').textContent()) === '' || await page.locator('#drop-cue').isHidden(),
+  'the caption stays quiet while the bubble is talking');
+await page.click('#btn-coach-next');
 
-/* the mimed drag has to actually be animating, not a static picture */
-const h1 = (await tut()).handT;
-await page.waitForTimeout(420);
-const h2 = (await tut()).handT;
-check(h1 !== h2, 'the demo fingertip is animating', `${h1.toFixed(3)} -> ${h2.toFixed(3)}`);
+/* add: the + button is what the bubble points at */
+T = await tut();
+check(T.step === 'add' && (await coach()) === 'add', 'next it points at the + button', `step=${T.step}`);
+check(await page.locator('#btn-add-ramp.coached').count() === 1, 'which calls even louder');
+const addBox = await page.locator('#btn-add-ramp').boundingBox();
+const bubbleBox = await page.locator('#coach').boundingBox();
+check(bubbleBox.y > addBox.y + addBox.height - 1 &&
+      bubbleBox.x < addBox.x + addBox.width && bubbleBox.x + bubbleBox.width > addBox.x,
+  'with the bubble right under it');
+await page.click('#btn-add-ramp');
 
-/* placing a ramp anywhere - NOT on the demo path - must satisfy step 1 */
-await mouseDrag(tbox, { x:300, y:250 }, { x:400, y:330 });
+/* aim: drag the ramp, and the step completes */
 T = await tut();
 check((await page.evaluate(() => window.__gtb.state().ramps.length)) === 1, 'a ramp went down');
-check(T.step === 2, 'step 1 clears the moment a ramp is placed', `step=${T.step}`);
-/* There is no Drop Ball button to highlight any more, so step 2 is carried
-   by the hint alone - which now has to teach the gesture, not a button. */
+check(T.step === 'aim' && (await coach()) === 'aim', 'then it asks for the ramp to be aimed', `step=${T.step}`);
+check(await page.locator('#btn-add-ramp.coached').count() === 0, 'and the + stops being pointed at');
+const aimR = (await page.evaluate(() => window.__gtb.state())).ramps[0];
+const aimM = { x:(aimR.x1+aimR.x2)/2, y:(aimR.y1+aimR.y2)/2 };
+const aimBubble = await page.locator('#coach').boundingBox();
+const aimScreen = P(tbox, aimM);
+check(aimBubble.y > aimScreen.y, 'its bubble sits below the ramp, off the ball\'s drop line');
+/* a tap on the ramp is not an adjustment */
+await mouseTap(tbox, aimM);
+check((await tut()).step === 'aim', 'merely tapping the ramp does not count as aiming it');
+await mouseDrag(tbox, aimM, { x: 150, y: 300 });
+T = await tut();
+check(T.step === 'drop' && (await coach()) === 'drop', 'moving it does', `step=${T.step}`);
+check((await page.evaluate(() => window.__gtb.state().selected)) === -1,
+  'and the ramp is put down, so the next tap is the drop');
+/* There is no Drop Ball button to highlight any more, so the drop step is
+   carried by the bubble and the hint - both have to teach the tap. */
 check((await page.locator('#hint').textContent()) === 'Tap anywhere to drop the ball.',
-  'step 2 teaches the tap');
+  'the drop step teaches the tap');
 check(T.seen === false, 'the flag stays unset until the ball is dropped');
 
-/* taking that ramp off again must send the mime back, and restart it */
+/* taking that ramp off again sends the player back to the bag */
 const tutRamp = (await page.evaluate(() => window.__gtb.state())).ramps[0];
 await mouseTap(tbox, { x:(tutRamp.x1+tutRamp.x2)/2, y:(tutRamp.y1+tutRamp.y2)/2 });
 await mouseTap(tbox, delBtn(tutRamp));
 T = await tut();
-check(T.step === 1, 'removing the ramp returns to step 1', `step=${T.step}`);
-const h3 = (await tut()).handT;
-await page.waitForTimeout(420);
-check((await tut()).handT !== h3, 'the mime restarts after the ramp comes off');
+check(T.step === 'add', 'removing the ramp returns to the + step', `step=${T.step}`);
+check(await page.locator('#btn-add-ramp.coached').count() === 1, 'and the + is pointed at again');
+await page.click('#btn-add-ramp');
+check((await tut()).step === 'aim', 'and a new ramp has to be aimed again');
+await page.click('#btn-coach-next');
+check((await tut()).step === 'drop', "the bubble's Done button also completes the aim step");
 
-await mouseDrag(tbox, { x:300, y:250 }, { x:400, y:330 });
+/* the tutorial's drop: a straight miss, from a known seed */
+await page.evaluate(() => { window.__gtb.setSeed(1); window.__gtb.setRamps([{ x1: 420, y1: 200, x2: 440, y2: 300 }]); });
 await dropBall();
 T = await tut();
-check(T.step === 0, 'the tutorial ends when the ball is dropped', `step=${T.step}`);
+check(T.step === null, 'the tutorial ends when the ball is dropped', `step=${T.step}`);
 check(T.seen === true, 'tutorialSeen is set on completion');
+/* a miss on that first drop gets one more word of encouragement */
+await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
+check((await tut()).step === 'retry' && (await coach()) === 'retry',
+  'a missed first drop is followed by a retry nudge');
 check(await page.locator('#btn-skip').isHidden(), 'Skip goes away with it');
+await page.click('#btn-coach-next');
+check((await tut()).step === null && (await coach()) === null, 'and OK dismisses it for good');
 const savedFlag = await page.evaluate(() => JSON.parse(localStorage.getItem('gtb.progress.v1')||'{}'));
 check(savedFlag.tutorialSeen === true, 'the flag is persisted alongside `highest`',
   JSON.stringify(savedFlag));
 check(tutErrors.length === 0, 'no page errors during the tutorial', tutErrors.join(' | '));
 
 /* --- and it must never come back --- */
-await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
 await topUp();
 T = await tut();
-check(T.step === 0, 'a reload does NOT bring the tutorial back', `step=${T.step}`);
+check(T.step === null, 'a reload does NOT bring the tutorial back', `step=${T.step}`);
 check(await page.locator('#btn-skip').isHidden(), 'Skip stays gone after a reload');
-check((await tut()).step === 0, 'no tutorial step is re-armed after a reload');
+check((await tut()).step === null, 'no tutorial step is re-armed after a reload');
 await page.evaluate(() => { window.__gtb.setLevel(0); window.__gtb.reset(); });
-check((await tut()).step === 0, 'replaying level 1 does not resurrect it');
+check((await tut()).step === null, 'replaying level 1 does not resurrect it');
 
 /* --- step 3: the just-in-time obstacle tip, on the first obstacle ever --- */
 await page.evaluate(() => {
@@ -1525,10 +1663,11 @@ await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !!window.__gtb);
 await topUp();
-check((await tut()).step === 1, 'a cleared save brings the tutorial back');
+check((await tut()).step === 'intro', 'a cleared save brings the tutorial back');
 await page.locator('#btn-skip').click();
 T = await tut();
-check(T.step === 0 && T.seen === true, 'Skip marks it seen immediately');
+check(T.step === null && T.seen === true, 'Skip marks it seen immediately');
+check(await page.locator('#coach').count() === 0, 'and the bubble goes with it');
 check(T.obstacleTipSeen === true, 'Skip also suppresses the obstacle tip');
 check(await page.locator('#btn-skip').isHidden(), 'Skip removes itself');
 
@@ -2332,8 +2471,8 @@ check(!landing.overlay && !landing.select && !landing.noballs && !landing.spin,
   'with no title screen, menu or modal in the way');
 check(landing.boardVisible && landing.dropReady,
   'the board is live and droppable on the very first frame - zero clicks');
-/* the tutorial is a mimed hint on the board, not a gate */
-check((await page.evaluate(() => window.__gtb.state().tutorial.step)) === 1,
+/* the tutorial is a hint on the board, not a gate */
+check((await page.evaluate(() => window.__gtb.state().tutorial.step)) === 'intro',
   'the first-run tutorial is showing');
 check(landing.dropReady, 'and it does not block play - it is a hint, not a gate');
 await topUp();
@@ -2388,8 +2527,8 @@ const onboard = await page.evaluate(() => {
            // means no overlay is open at all
            onCanvas: !document.querySelector('.overlay:not([hidden])') };
 });
-check(onboard.step === 1 && onboard.onCanvas,
-  'onboarding happens in gameplay, drawn on the board - not on a splash screen');
+check(onboard.step === 'intro' && onboard.onCanvas,
+  'onboarding happens in gameplay, on the board itself - not on a splash screen');
 check(onboard.skipShown, 'and it is skippable');
 check(onboard.playable, 'and never blocks play while it is up');
 await topUp();

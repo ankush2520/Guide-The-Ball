@@ -56,7 +56,7 @@ for (const [name, width, height] of SIZES) {
 
   const rows = await page.evaluate(() => {
     const vw = window.innerWidth;
-    return ['.hud', '.stage', '.hint', '.status'].flatMap(sel => {
+    return ['.hud', '.stage', '.hint', '.status', '.levelpill', '#btn-add-ramp'].flatMap(sel => {
       const el = document.querySelector(sel);
       /* .hint is dropped by a max-height rule on short windows */
       if (!el || !el.getClientRects().length) return [];

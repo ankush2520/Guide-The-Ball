@@ -1,4 +1,4 @@
-/* End-to-end smoke: does the rebuilt app actually boot, draw, and play? */
+/* End-to-end smoke: does the rebuilt app actually boot, render, and play? */
 import { chromium } from 'playwright';
 
 const URL = process.env.GTB_URL || 'http://localhost:4173/';
@@ -41,23 +41,19 @@ const painted = await page.evaluate(() => {
 });
 chk(painted > 0, 'the board is rendering', `${painted} sampled non-black pixels`);
 
-/* Draw a ramp with a real drag, then drop the ball. */
+/* Add a ramp with the big +, then drop the ball. */
 const box = await page.locator('canvas#board').boundingBox();
 const at = (bx, by) => ({ x: box.x + (bx / 480) * box.width, y: box.y + (by / 800) * box.height });
-const p1 = at(120, 300), p2 = at(300, 380);
-await page.mouse.move(p1.x, p1.y);
-await page.mouse.down();
-await page.mouse.move((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, { steps: 6 });
-await page.mouse.move(p2.x, p2.y, { steps: 6 });
-await page.mouse.up();
+const rampsBefore = Number(await page.textContent('#ramps-left'));
+await page.click('#btn-add-ramp');
+const rampsLeft = Number(await page.textContent('#ramps-left'));
+chk(rampsLeft === rampsBefore - 1, 'the + placed a ramp', `ramps left: ${rampsBefore} -> ${rampsLeft}`);
 
-const rampsLeft = await page.textContent('.counter:has-text("Ramps") b');
-chk(Number(rampsLeft) >= 0, 'the drag placed a ramp', `ramps left: ${rampsLeft}`);
-
-/* The Drop Ball button is gone: the drop is a tap on empty board. Tapped well
-   away from the ramp just drawn, so it reads as a drop and not as selecting
-   that ramp. */
+/* The drop is a tap on empty board. The new ramp arrives selected, so the
+   first tap only puts it down; the second is the drop. */
 const tapAt = at(60, 120);
+await page.mouse.click(tapAt.x, tapAt.y);
+await page.waitForTimeout(150);
 await page.mouse.click(tapAt.x, tapAt.y);
 await page.waitForTimeout(400);
 const hint = await page.textContent('.hint');

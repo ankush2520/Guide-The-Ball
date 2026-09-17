@@ -19,9 +19,11 @@
    in its own colour. `wash` is the overhead light spill and the
    grid, used at low alpha. `accent` recolours the UI chrome.
 
-   Verdholm is the first day sky, the prototype for the toon
-   reskin. The other thirteen are still night skies and will be
-   repainted once that look is signed off.
+   Every country is now a day sky. Verdholm was the prototype;
+   the other thirteen follow it, each keeping its old hue as a
+   pastel. Every stop is pale enough that the wall grey and the
+   target's dark green still clear 3:1 on it (the test suite
+   checks every day sky), which is why none of them go deeper.
    ============================================================ */
 import type { Country } from './types';
 
@@ -47,68 +49,68 @@ export const COUNTRIES: Country[] = [
   { id: 1, name: 'Verdholm', from: 1,   to: 20,  mechanic: 'ramps only - the fundamentals',
     sky: ['#d3edff', '#e4f3ff', '#f2ecff'], wash: '90,130,210', accent: '#ffb400' },
 
-  /* Deep maroon into burnt orange. The warmest accent in the early game, so
-     a booster's green-cyan chevron still reads as the one cool thing on the
-     board. */
+  /* Apricot into cream - a warm morning. The booster's teal chevron is still
+     the one cool thing on the board. */
   { id: 2, name: 'Solmesa', from: 21,  to: 30,  mechanic: 'boosters',
-    sky: ['#5c1622', '#3a1a12', '#140805'], wash: '255,150,80',  accent: '#ff9a4d' },
+    sky: ['#ffe5d6', '#ffeedd', '#fff5e6'], wash: '230,130,80', accent: '#ff8a3d' },
 
-  /* Near-black with fire above it. Breakables are already orange, so the
-     country leans red to keep them distinguishable. */
+  /* Rose-coral heat haze. Breakables are orange and fire is orange-red, so the
+     sky stays pink rather than orange to keep both distinguishable. */
   { id: 6, name: 'Emberkeep', from: 31,  to: 40,  mechanic: 'breakable blocks + fire',
-    sky: ['#4a1008', '#280a06', '#0a0202'], wash: '255,110,60',  accent: '#ff6a3a' },
+    sky: ['#ffe4de', '#ffe9e2', '#fff3ea'], wash: '230,100,70', accent: '#ff5a2e' },
 
   /* Crisp white-blue-grey, and the cleanest board in the game by design: a
      precision country should have the least to look at. */
   { id: 10, name: 'Needlecrest', from: 41,  to: 50, mechanic: 'precision spike + moving targets',
-    sky: ['#33404f', '#212b36', '#0b0f14'], wash: '215,230,245', accent: '#dbe7f5' },
+    sky: ['#e6ebf2', '#f0f3f7', '#f8f9fb'], wash: '110,135,170', accent: '#5f8cc4' },
 
-  /* Muted sage-teal - low chroma on purpose, because wind streaks are the
+  /* Soft sage-mint - low chroma on purpose, because wind streaks are the
      thing that should be moving here. */
   { id: 3, name: 'Windemere', from: 51,  to: 60,  mechanic: 'wind zones',
-    sky: ['#243a35', '#16241f', '#070d0b'], wash: '150,200,180', accent: '#9fd8bf' },
+    sky: ['#d6f0e6', '#e5f6ee', '#f1faf5'], wash: '80,165,135', accent: '#2fb584' },
 
-  /* Navy into ice-blue with a whiter wash, so a slippery sheet reads as part
-     of the country rather than an object dropped onto it. */
+  /* Icy cyan into snow-white, pushed greener than Verdholm's sky blue so the
+     two never read alike. */
   { id: 4, name: 'Frostvale', from: 61,  to: 70,  mechanic: 'slippery zones',
-    sky: ['#152e4e', '#0e2036', '#040a14'], wash: '200,235,255', accent: '#dff2ff' },
+    sky: ['#d2f1f7', '#e3f7fa', '#f4fcfd'], wash: '90,180,215', accent: '#27b0e0' },
 
-  /* Violet backdrop, gold accent: the two-colour split is the point, because
-     portals come in pairs. */
+  /* Lilac settling into warm sandstone: the two-colour split is the point,
+     because portals come in pairs. */
   { id: 5, name: 'Zunmara Ruins', from: 71,  to: 80,  mechanic: 'portals',
-    sky: ['#3a1f5c', '#33253a', '#0c0714'], wash: '230,190,255', accent: '#ffd479' },
+    sky: ['#f0e5fb', '#f1e6fb', '#fbf3e3'], wash: '150,100,215', accent: '#f5a623' },
 
-  /* Deep indigo-black - the darkest country, so a gold pickup star is the
-     brightest thing on screen. */
+  /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,
+     strongest thing on screen. */
   { id: 7, name: 'Nocturne Sands', from: 81,  to: 90,  mechanic: 'collectible stars',
-    sky: ['#1e1a44', '#131029', '#05040f'], wash: '150,140,255', accent: '#b0a6ff' },
+    sky: ['#e8e8fb', '#ece8f7', '#fbf0dc'], wash: '120,110,215', accent: '#7c6cf0' },
 
-  /* Magenta into cyan: deliberately the most saturated palette in the game,
-     and the moment two mechanics start combining. */
+  /* Pink into lilac into aqua: the most saturated sky in the set, for the
+     moment two mechanics start combining. */
   { id: 8, name: 'Neonaka', from: 91,  to: 100,  mechanic: 'two mechanics combined',
-    sky: ['#450f52', '#1a1442', '#07040f'], wash: '255,70,220',  accent: '#3ff0ff' },
+    sky: ['#fbe2f7', '#eee7fb', '#d7f6fb'], wash: '225,70,195', accent: '#12bcd6' },
 
-  /* Teal-turquoise, pushed bluer than Cascadia so the two never read alike. */
+  /* Shallow-water turquoise, pushed bluer than Cascadia so the two never read
+     alike. */
   { id: 9, name: 'Coralis Deep', from: 101, to: 110, mechanic: 'three mechanics combined',
-    sky: ['#0b333f', '#072430', '#020c11'], wash: '70,220,235',  accent: '#3fdcea' },
+    sky: ['#cff3f3', '#dff8f6', '#effcfa'], wash: '40,175,185', accent: '#16aebf' },
 
-  /* Deep green-blue, kept greener than Coralis Deep. */
+  /* Fresh leaf-green mist, kept greener than Coralis Deep. */
   { id: 11, name: 'Cascadia Falls', from: 111, to: 120, mechanic: 'long chained boards',
-    sky: ['#153d33', '#0d2724', '#040e0c'], wash: '120,225,170', accent: '#77e0a8' },
+    sky: ['#d9f3dc', '#e7f8e6', '#f3fbef'], wash: '75,175,105', accent: '#35b865' },
 
-  /* Steel-grey with a single orange spark. Dense boards and few ramps, so
-     the palette stays flat and lets the geometry carry it. */
+  /* Brushed steel warming at the floor, with a single orange spark. Dense
+     boards and few ramps, so the palette stays flat and lets the geometry
+     carry it. */
   { id: 12, name: 'Ironvale', from: 121, to: 130, mechanic: 'high density, fewer ramps',
-    sky: ['#3a4048', '#252a31', '#0a0c0f'], wash: '180,195,210', accent: '#ff8a3c' },
+    sky: ['#e9eaec', '#eceef1', '#f6f1ea'], wash: '125,135,150', accent: '#ff7a2a' },
 
-  /* Soft lavender under a gold accent - the last country before the finale,
-     and the only warm-on-cool pairing in the set. */
+  /* Sunrise pink-lavender under a gold accent - the last country before the
+     finale, and the only warm-on-cool pairing in the set. */
   { id: 13, name: 'Aerith Heights', from: 131, to: 140, mechanic: 'master combos',
-    sky: ['#3a3055', '#272038', '#0b0814'], wash: '205,190,255', accent: '#f2d48a' },
+    sky: ['#f7e4f7', '#f7e8f5', '#fff4ea'], wash: '195,125,205', accent: '#e0a82e' },
 
-  /* Cosmic black, gold and white. Reserved: nothing else in the game uses a
-     near-neutral dark with a pure gold wash, so arriving here looks like
-     arriving somewhere. */
+  /* Golden hour: the only all-gold sky, reserved so that arriving here looks
+     like arriving somewhere. */
   { id: 14, name: 'The Zenith', from: 141, to: 150, mechanic: 'finale',
-    sky: ['#1c1a18', '#12100c', '#040303'], wash: '255,220,160', accent: '#ffe6b0' },
+    sky: ['#fbecc4', '#fdf3d8', '#fffaee'], wash: '225,175,85', accent: '#eba800' },
 ];

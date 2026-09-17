@@ -25,6 +25,7 @@ import { TERMINAL_VY } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import type { Level, Segment } from '../levels/types';
+import type { ItemKind } from '../items/items';
 
 const STEP_MS = STEP_MS_DEFAULT;
 const FLASH_MS = 2600;
@@ -54,6 +55,28 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
     text: 'Gold stars are optional pickups.' },
 ];
 
+/* ============================================================
+   THE FIRST-RUN WALKTHROUGH
+
+   Level 1 only, one step at a time, each step waiting for the
+   player to actually do the thing it asks:
+
+     intro  - what the game is: get the ball into the target
+     add    - tap the big + to put a ramp down
+     aim    - drag the ramp under the ball, turn it by an end
+     drop   - tap empty board to drop
+     retry  - (only if that first drop missed) your ramp stayed,
+              nudge it and go again
+
+   The step is DERIVED from the board every time it is asked -
+   no ramp means "add" again even after it was passed - with
+   three small flags for what the board cannot tell us: the
+   intro was read, the ramp has been adjusted, and the first
+   drop missed. Nothing here blocks play; Coach.tsx draws the
+   bubble and Skip ends all of it.
+   ============================================================ */
+export type TutStep = 'intro' | 'add' | 'aim' | 'drop' | 'retry';
+
 /** What a finished level shows on the win card. */
 export interface WinCard {
   stars: number; note: string; bonus: number; coins: number;
@@ -67,8 +90,12 @@ export class GameController {
      ball class - see PhysicsEngine. */
   ball: BallState | null = null;
   capture: CaptureState | null = null;
-  draft: Segment | null = null;
   selected = -1;
+  private tutIntroDone = false;
+  private tutAdjusted = false;
+  private tutRetry = false;
+  /** Set on the walkthrough's own drop, so a miss knows to coach a retry. */
+  private tutDropping = false;
   dragging: { mode: 'p1' | 'p2' | 'move'; ix: number; lx: number; ly: number } | null = null;
   /** Forces a seed, for tests and the solver. null means a fresh random one. */
   seedOverride: number | null = null;
@@ -79,11 +106,6 @@ export class GameController {
 
   readonly squash: Squash = { amt: 0, nx: 0, ny: -1 };
   readonly tweens = new TweenSystem();
-
-  /* The mimed drag on level 1. Both halves - the glide and the beat between
-     loops - ride the same tween helper the bounce juice uses. */
-  readonly tutHand = { t: 0, gap: 0 };
-  private tutLooping = false;
 
   clock = 0;
   private acc = 0;
@@ -125,6 +147,34 @@ export class GameController {
     this.showFlash(`Extra ramp added - ${left} left in your drawer.`);
     this.changed();
     return true;
+  }
+
+  /** How many of an item the inventory can hand out right now: what is left
+      of this level's budget, plus the spares in the drawer, which are spent
+      automatically once the level's own ramps run out. */
+  itemCount(kind: ItemKind): { left: number; spare: number } {
+    switch (kind) {
+      case 'ramp': return { left: this.levels.rampsLeft, spare: this.rewards.extraRamps };
+    }
+  }
+
+  /** Take one item out of the inventory and put it on the board, selected,
+      so the very next drag moves it. Returns false when there is nothing to
+      give or the board is not in planning. */
+  placeItem(kind: ItemKind): boolean {
+    if (this.phase !== 'plan') return false;
+    switch (kind) {
+      case 'ramp': {
+        if (!this.levels.canPlaceRamp && !this.useExtraRamp()) return false;
+        const ix = this.levels.placeRamp();
+        if (ix < 0) return false;
+        this.selected = ix;
+        this.dragging = null;
+        this.bus.emit('item:placed', { kind, index: ix });
+        this.notifyRampsChanged();
+        return true;
+      }
+    }
   }
 
   /** Matter builds a world per drop; let the engine tear it down. */
@@ -236,10 +286,12 @@ export class GameController {
        button tells a player they are stuck without telling them what to do
        about it, so the press opens the way to get more instead. */
     if (this.rewards.balls <= 0) { this.bus.emit('balls:empty', {}); this.changed(); return; }
-    // steps 1 and 2 have both happened: a ramp went down, and this is the tap
-    if (this.tutorialStep() === 2) this.tutorialDone();
+    // the walkthrough's last step is this very tap
+    this.tutDropping = this.tutorialStep() === 'drop';
+    if (this.tutDropping) this.tutorialDone();
+    this.tutRetry = false;
 
-    this.draft = null; this.capture = null; this.dragging = null; this.selected = -1;
+    this.capture = null; this.dragging = null; this.selected = -1;
     this.hideFlash();
     const seed = this.seedOverride !== null
       ? this.seedOverride : (Math.random() * 0x7fffffff) | 0;
@@ -285,8 +337,9 @@ export class GameController {
      rebuild. No overlay, no button to dismiss. */
   private missed(result: DropResult): void {
     this.lastResult = result;
+    if (this.tutDropping) { this.tutRetry = true; this.tutDropping = false; }
     this.releaseBall();
-    this.capture = null; this.draft = null;
+    this.capture = null;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.squash.amt = 0; this.seenHit = 0; this.seenBroke = 0;
     this.setPhase('plan');
@@ -333,8 +386,9 @@ export class GameController {
 
   setLevel(i: number): void {
     this.levels.setLevel(i);
+    this.tutRetry = false; this.tutDropping = false;
     this.releaseBall();
-    this.capture = null; this.draft = null;
+    this.capture = null;
     this.selected = -1; this.dragging = null; this.lastResult = null;
     this.winCard = null;
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
@@ -348,7 +402,6 @@ export class GameController {
       this.rewards.saveProgress();
     }
     this.teachNewMechanics();
-    this.syncTutorial();
   }
 
   nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
@@ -370,25 +423,36 @@ export class GameController {
 
   /* ---------------- teaching ---------------- */
 
-  tutorialStep(): 0 | 1 | 2 {
-    if (this.rewards.tutorialSeen || this.levels.levelIndex !== 0 || this.phase !== 'plan')
-      return 0;
-    return this.levels.rampsUsed === 0 ? 1 : 2;
+  tutorialStep(): TutStep | null {
+    if (this.levels.levelIndex !== 0 || this.phase !== 'plan') return null;
+    if (this.tutRetry) return 'retry';
+    if (this.rewards.tutorialSeen) return null;
+    if (!this.tutIntroDone) return 'intro';
+    if (this.levels.rampsUsed === 0) return 'add';
+    if (!this.tutAdjusted) return 'aim';
+    return 'drop';
   }
 
-  /** One loop of the mimed drag, then a beat, then again. */
-  private tutHandLoop = (): void => {
-    if (this.tutorialStep() !== 1) { this.tutLooping = false; return; }  // player moved on
-    this.tutLooping = true;
-    this.tweens.add(this.tutHand, 't', 0, 1, 1400, Ease.inOutQuad, () => {
-      this.tweens.add(this.tutHand, 'gap', 0, 1, 420, Ease.linear, this.tutHandLoop);
-    });
-  };
+  /** The bubble's own button: "Let's go", "Done", "OK". */
+  tutorialNext(): void {
+    switch (this.tutorialStep()) {
+      case 'intro': this.tutIntroDone = true; break;
+      case 'aim':   this.tutAdjusted = true; this.selected = -1; break;
+      case 'retry': this.tutRetry = false; break;
+      default: return;
+    }
+    this.changed();
+  }
 
-  /** Undoing the first ramp drops back to step 1, so the mime has to be able
-      to restart from wherever the last cycle left it. */
-  syncTutorial(): void {
-    if (this.tutorialStep() === 1 && !this.tutLooping) this.tutHandLoop();
+  /** A drag on a placed ramp just ended. During "aim" that is the lesson
+      done: the ramp is put down so the very next tap on empty board is the
+      drop the next step asks for, rather than a tap that only deselects. */
+  rampAdjusted(): void {
+    if (this.tutorialStep() === 'aim') {
+      this.tutAdjusted = true;
+      this.selected = -1;
+    }
+    this.notifyRampsChanged();
   }
 
   tutorialDone(): void {
@@ -401,6 +465,7 @@ export class GameController {
   /** Skip means skip all of it, the just-in-time obstacle tip included. */
   tutorialSkip(): void {
     this.rewards.tutorialSeen = true;
+    this.tutRetry = false;
     this.rewards.obstacleTipSeen = true;
     for (const t of MECH_TIPS) this.rewards.tipsSeen[t.key] = true;
     this.rewards.saveProgress();
@@ -439,7 +504,11 @@ export class GameController {
 
   /* ---------------- ramp editing, driven by the canvas ---------------- */
 
-  notifyRampsChanged(): void { this.syncTutorial(); this.changed(); }
+  notifyRampsChanged(): void {
+    // the ramp came off: the next one has to be aimed again
+    if (this.levels.rampsUsed === 0) this.tutAdjusted = false;
+    this.changed();
+  }
 
   /* ---------------- what the renderer needs ---------------- */
 
@@ -452,7 +521,6 @@ export class GameController {
       country: this.levels.country,
       entities: this.levels.entities,
       ramps: this.levels.rampSegments,
-      draft: this.draft,
       selected: this.selected,
       phase: this.phase,
       clock: this.clock,
@@ -474,20 +542,30 @@ export class GameController {
          painted at its old size */
       handleR: HANDLE_R,
       delR: DEL_R,
-      tutorial: { step: this.tutorialStep(), t: this.tutHand.t },
+      tutorial: { step: this.tutorialStep() },
     };
+  }
+
+  /** The caption on the board: how to get a ramp on the first visit, how
+      to drop after that. Null when the caption slot should stay empty. */
+  get cue(): string | null {
+    // the walkthrough's bubble does this job while it is up
+    if (this.phase !== 'plan' || this.selected >= 0 || this.tutorialStep()) return null;
+    return 'Touch or click on screen to drop ball';
   }
 
   /** The hint line under the board - a read-only view of state. */
   get hint(): string {
-    if (this.tutorialStep() === 2) return 'Tap anywhere to drop the ball.';
+    const step = this.tutorialStep();
+    if (step === 'intro') return 'Get the ball into the green target.';
+    if (step === 'add') return 'Tap the big + at the top to add a ramp.';
+    if (step === 'aim') return 'Drag the ramp under the ball, and an end to turn it.';
+    if (step === 'drop') return 'Tap anywhere to drop the ball.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
-    if (this.selected >= 0) return 'Drag an end to reshape, the middle to move, × to delete.';
-    if (this.levels.rampsLeft <= 0)
-      return this.rewards.extraRamps > 0
-        ? 'No ramps left — tap Ramps to spend a spare, or tap to drop.'
-        : 'No ramps left — tap a ramp to edit it, or tap empty board to drop.';
-    return 'Drag to draw a ramp. Tap a ramp to edit it, or empty board to drop.';
+    if (this.selected >= 0) return 'Drag the ramp to move it, an end to turn it, × to remove it.';
+    if (this.levels.rampsLeft <= 0 && this.rewards.extraRamps <= 0)
+      return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';
+    return 'Tap + to add a ramp. Tap a ramp to adjust it, or empty board to drop.';
   }
 }

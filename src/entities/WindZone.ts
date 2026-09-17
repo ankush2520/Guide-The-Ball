@@ -19,13 +19,15 @@ export class WindZone extends Entity<WindDef> {
     const dir = horiz ? Math.sign(z.ax || 1) : Math.sign(z.ay || 1);
     const g = horiz ? ctx.createLinearGradient(z.x, 0, z.x + z.w, 0)
                     : ctx.createLinearGradient(0, z.y, 0, z.y + z.h);
-    const a0 = dir > 0 ? 0.02 : 0.13, a1 = dir > 0 ? 0.13 : 0.02;
-    g.addColorStop(0, `rgba(150,200,255,${a0})`);
-    g.addColorStop(1, `rgba(150,200,255,${a1})`);
+    const a0 = dir > 0 ? 0.05 : 0.22, a1 = dir > 0 ? 0.22 : 0.05;
+    g.addColorStop(0, `rgba(120,150,215,${a0})`);
+    g.addColorStop(1, `rgba(120,150,215,${a1})`);
     ctx.fillStyle = g;
     roundRect(ctx, z.x, z.y, z.w, z.h, 10); ctx.fill();
-    ctx.strokeStyle = 'rgba(160,205,255,.22)'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(80,105,170,.45)'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 5]);
     roundRect(ctx, z.x, z.y, z.w, z.h, 10); ctx.stroke();
+    ctx.setLineDash([]);
 
     // streaks: seeded off the zone's own position, so they never jitter
     ctx.lineCap = 'round';
@@ -44,9 +46,9 @@ export class WindZone extends Entity<WindDef> {
         py = z.y + ((t + 1) % 1) * z.h;
         px = z.x + 8 + off * (z.w - 16);
       }
-      ctx.globalAlpha = 0.30;
-      ctx.strokeStyle = '#cfe6ff';
-      ctx.lineWidth = 1.6;
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = '#5a6fae';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(px, py);
       ctx.lineTo(px - (horiz ? len * dir : 0), py - (horiz ? 0 : len * dir));

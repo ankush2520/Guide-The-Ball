@@ -4,6 +4,11 @@
    Adopts the renderer's canvas into the layout and owns every
    pointer gesture on the board.
 
+   Nothing is DRAWN here any more: ramps come out of the
+   inventory popup (InventoryPanel). The board handles only what
+   is already on it - select a ramp, move it, turn it by an end,
+   delete it with its × - and a tap on empty board drops the ball.
+
    All hit-testing is done in BOARD coordinates, so a grab radius
    means the same thing whatever size the canvas is displayed at.
    ============================================================ */
@@ -13,31 +18,34 @@ import { H, RAMP_HT, BOARD } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
 import { DEL_GRAB, PICK_PAD } from '../managers/LevelManager';
 
-export function GameCanvas({ children }: { children?: ReactNode }) {
+/* `children` is painted ON the board (the status caption); `footer` sits
+   directly under it and moves with it (the level pill). */
+export function GameCanvas({ children, footer }: { children?: ReactNode; footer?: ReactNode }) {
   const { canvas, controller, levels } = useGame();
   const host = useRef<HTMLDivElement>(null);
-  /* Where a gesture on EMPTY board began, and whether it is still eligible to
-     be read as a tap-to-drop when the finger comes up. Set only by case 3 of
-     onPointerDown; cleared at the start of every gesture so a release can
-     never be judged against a stale one. */
-  const tap = useRef<{ x: number; y: number; canDrop: boolean;
-                       ripple: HTMLElement | null } | null>(null);
+  /* Where a press on EMPTY board began. It drops the ball only if it comes
+     up as a TAP: a finger that slides - most often one that just missed the
+     ramp it meant to drag - is not a request to spend a ball. Cleared at the
+     start of every gesture so a release can never be judged against a stale
+     one. */
+  const tap = useRef<{ x: number; y: number; ripple: HTMLElement | null } | null>(null);
+  /* Whether the ramp drag in progress has actually moved anything. A tap on a
+     ramp starts a drag too, and only a real move counts as adjusting it. */
+  const dragMoved = useRef(false);
 
-  /* Below this, in board units, a press-and-release is a tap rather than a
-     drag. The board is 480 wide against ~265-370 CSS px, so 10 units is about
-     6 CSS px - under a finger's own wobble, and far under MIN_RAMP, so no
-     gesture that draws a real ramp can be mistaken for a tap. */
-  const TAP_SLOP = 10;
+  /* Beyond this, in board units, a press has become a slide and will not
+     drop. The board is 480 wide against ~265-370 CSS px, so 14 units is
+     about 8-10 CSS px - comfortably over a tap's own wobble. */
+  const TAP_SLOP = 14;
 
   /* ============================================================
      PRESS FEEDBACK
 
-     A tap can only be told from the start of a ramp drag once
-     the finger lifts, so the drop waits for the release - about
-     120ms of a normal tap. The old Drop Ball button waited just
-     as long but lit up the instant it was touched; a bare board
-     gave nothing back, and that silence read as lag. The ripple
-     answers the touch itself, at the spot it landed.
+     A tap can only be told from a slide once the finger lifts,
+     so the drop waits for the release - about 120ms of a normal
+     tap. A bare board gave nothing back in that time, and the
+     silence read as lag. The ripple answers the touch itself,
+     at the spot it landed.
      ============================================================ */
   const ripple = (e: React.PointerEvent): HTMLElement | null => {
     const stage = host.current;
@@ -86,14 +94,18 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       if (stage && slot) {
         const r = slot.getBoundingClientRect();
         const ratio = BOARD.w / H;
+        /* the footer shares the slot's height, so the board gets what it
+           leaves; the gap is the slot's own row gap */
+        const foot = slot.querySelector<HTMLElement>(':scope > .levelrow');
+        const gap = parseFloat(getComputedStyle(slot).rowGap) || 0;
+        const footH = foot ? foot.offsetHeight + gap : 0;
         // -2 for the stage's 1px border, which sits outside the board itself
-        const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2);
+        const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2 - footH);
         const w = Math.min(avW, avH * ratio);
         if (w > 0) {
           stage.style.width = `${Math.round(w)}px`;
           stage.style.height = `${Math.round(w / ratio)}px`;
           slot.parentElement?.style.setProperty('--board-w', `${Math.round(w)}px`);
-          /* the status caption sits along the board's bottom edge; +2 for the border */
           slot.parentElement?.style.setProperty('--board-h', `${Math.round(w / ratio) + 2}px`);
         }
       }
@@ -112,12 +124,12 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   }, [controller]);
 
   /* iOS owns the swipe-from-edge back gesture and touch-action cannot refuse
-     it - only a cancelled touchstart can. And while a ramp is mid-draw the
-     page must not be able to slide out from under it. */
+     it - only a cancelled touchstart can. And while a ramp is being dragged
+     the page must not be able to slide out from under it. */
   useEffect(() => {
     const stop = (e: Event) => e.preventDefault();
     const onTouchMove = (e: TouchEvent) => {
-      if (controller.draft || controller.dragging) e.preventDefault();
+      if (controller.dragging) e.preventDefault();
     };
     canvas.addEventListener('touchstart', stop, { passive: false });
     document.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -145,6 +157,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     if (controller.phase !== 'plan') return;
     const p = toBoard(e);
     tap.current = null;
+    dragMoved.current = false;
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
 
@@ -179,89 +192,65 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       return;
     }
 
-    /* 3. empty board: drop the selection, and start a new ramp if there is room.
-
-          A press here is also how the ball is dropped now that the Drop Ball
-          button is gone - but only if it turns out to be a TAP. That cannot
-          be decided yet: the same press begins a ramp, and only the distance
-          travelled by the time the finger lifts tells the two apart. So the
-          start point is recorded and endDraft() judges it.
-
-          A press that merely dismisses a selection is not eligible. Clearing
-          the selection is what that tap was for, and dropping the ball on it
-          would cost a ball the player never meant to spend. */
-    const hadSelection = controller.selected >= 0;
-    if (hadSelection) { controller.selected = -1; controller.notifyRampsChanged(); }
-
-    if (!levels.canPlaceRamp) {
-      /* No ramp left to draw, so this press cannot become a drag - there is
-         nothing to wait for. Drop on the touch itself rather than the
-         release. This is also the usual moment a player drops: ramps placed,
-         budget spent. */
-      if (!hadSelection) { ripple(e)?.classList.add('go'); controller.drop(); }
+    /* 3. empty board. With a ramp selected, the tap only puts it down -
+          dropping the ball on it would spend a ball the player never meant
+          to. Otherwise it is the drop, decided on release. */
+    if (controller.selected >= 0) {
+      controller.selected = -1; controller.notifyRampsChanged();
       return;
     }
-    tap.current = { x: p.x, y: p.y, canDrop: !hadSelection,
-                    ripple: hadSelection ? null : ripple(e) };
-    controller.draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    tap.current = { x: p.x, y: p.y, ripple: ripple(e) };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    const p = toBoard(e);
     const drag = controller.dragging;
     if (drag) {
-      const p = toBoard(e);
       if (!levels.rampAt(drag.ix)) { controller.dragging = null; return; }
       if (drag.mode === 'move') levels.moveRampBy(drag.ix, p.x - drag.lx, p.y - drag.ly);
-      else levels.moveRampEnd(drag.ix, drag.mode === 'p1' ? 1 : 2, p);
+      else levels.rotateRamp(drag.ix, drag.mode === 'p1' ? 1 : 2, p);
+      if (p.x !== drag.lx || p.y !== drag.ly) dragMoved.current = true;
       drag.lx = p.x; drag.ly = p.y;
       e.preventDefault();
       return;
     }
-    const d = controller.draft;
-    if (!d) return;
-    const p = levels.truncate({ x: d.x1, y: d.y1 }, toBoard(e));
-    d.x2 = p.x; d.y2 = p.y;
     const t = tap.current;
-    if (t?.ripple && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > TAP_SLOP) {
-      t.ripple.remove(); t.ripple = null;       // it is a ramp, not a drop
+    if (t && Math.hypot(p.x - t.x, p.y - t.y) > TAP_SLOP) {
+      t.ripple?.remove();
+      tap.current = null;                   // a slide, not a tap
     }
-    e.preventDefault();
   };
 
-  const endDraft = () => {
+  const endGesture = () => {
     const t = tap.current;
     tap.current = null;
-
-    if (controller.dragging) { controller.dragging = null; controller.notifyRampsChanged(); return; }
-
-    const d = controller.draft;
-    if (d) {
-      levels.addRamp(d);                  // silently refuses anything too short
-      controller.draft = null;
-      controller.notifyRampsChanged();
+    if (controller.dragging) {
+      controller.dragging = null;
+      if (dragMoved.current) controller.rampAdjusted();
+      else controller.notifyRampsChanged();
+      return;
     }
-
-    /* A tap on empty board drops the ball. */
-    if (!t || !t.canDrop || !d) return;
-    if (Math.hypot(d.x2 - d.x1, d.y2 - d.y1) <= TAP_SLOP) {
-      t.ripple?.classList.add('go');
-      controller.drop();
-    }
+    if (!t) return;
+    t.ripple?.classList.add('go');
+    controller.drop();
   };
 
+  // Skip ends the walkthrough; the retry bubble after it has its own OK
   const step = controller.tutorialStep();
+  const skippable = step !== null && step !== 'retry';
 
   return (
     <div className="board-slot">
     <div className="stage" ref={host}
          onPointerDown={onPointerDown}
          onPointerMove={onPointerMove}
-         onPointerUp={e => { endDraft(); e.preventDefault(); }}
+         onPointerUp={e => { endGesture(); e.preventDefault(); }}
          onPointerCancel={() => {
-           controller.draft = null; controller.dragging = null;
+           tap.current?.ripple?.remove(); tap.current = null;
+           controller.dragging = null;
            controller.notifyRampsChanged();
          }}>
-      {step > 0 && (
+      {skippable && (
         /* stopPropagation: the stage's own pointerdown captures the pointer and
            calls preventDefault, which would otherwise swallow this button's
            click before it ever fired */
@@ -271,11 +260,11 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           Skip
         </button>
       )}
-    </div>
-      {/* board-level chrome: the status caption. In the SLOT, not the stage,
-          so it is placed from the same --board-h the fit publishes. Out of
-          flow and pointer-transparent. */}
+      {/* on-board chrome: the status caption. Out of flow and
+          pointer-transparent, so it can never swallow a tap. */}
       {children}
+    </div>
+      {footer}
     </div>
   );
 }

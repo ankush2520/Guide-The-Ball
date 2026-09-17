@@ -1,5 +1,6 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { BreakableDef } from '../levels/types';
+import { INK, outlineFor } from '../render/palette';
 
 /* An obstacle that is visibly cracked, so it never reads as a permanent one.
    Different hue AND different surface, not colour alone - the board has to be
@@ -15,17 +16,16 @@ export class Breakable extends Entity<BreakableDef> {
     const { ctx } = g;
     const o = this.def;
     ctx.save();
-    const bloom = ctx.createRadialGradient(o.x, o.y, o.r * 0.8, o.x, o.y, o.r * 1.5);
-    bloom.addColorStop(0, 'rgba(255,168,96,.22)');
-    bloom.addColorStop(1, 'rgba(255,168,96,0)');
-    ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.5, 0, Math.PI * 2); ctx.fill();
+    const ow = outlineFor(o.r);
+    // the same hard seat shadow the obstacle sits on
+    ctx.fillStyle = 'rgba(42,35,80,.20)';
+    ctx.beginPath(); ctx.arc(o.x, o.y + 5, o.r + ow / 2, 0, Math.PI * 2); ctx.fill();
 
     const body = ctx.createRadialGradient(o.x - o.r * 0.34, o.y - o.r * 0.4, o.r * 0.05,
                                           o.x, o.y, o.r);
-    body.addColorStop(0,    '#ffd7a8');
-    body.addColorStop(0.45, '#e08a3c');
-    body.addColorStop(1,    '#8c4a18');
+    body.addColorStop(0,    '#ffd29a');
+    body.addColorStop(0.45, '#f08a2c');
+    body.addColorStop(1,    '#a8520f');
     ctx.fillStyle = body;
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
 
@@ -39,8 +39,8 @@ export class Breakable extends Entity<BreakableDef> {
       ctx.lineTo(o.x + Math.cos(a + 0.25) * o.r * 0.92, o.y + Math.sin(a + 0.25) * o.r * 0.92);
       ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(255,220,180,.45)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(o.x, o.y, o.r - 0.8, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = INK; ctx.lineWidth = ow;
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 }

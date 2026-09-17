@@ -14,25 +14,25 @@ export class Portal extends Entity<PortalDef> {
     ctx.save();
     ctx.translate(e.x, e.y);
     const bloom = ctx.createRadialGradient(0, 0, e.r * 0.2, 0, 0, e.r * 1.7);
-    bloom.addColorStop(0, `hsla(${hue},100%,72%,.30)`);
-    bloom.addColorStop(1, `hsla(${hue},100%,72%,0)`);
+    bloom.addColorStop(0, `hsla(${hue},90%,62%,.28)`);
+    bloom.addColorStop(1, `hsla(${hue},90%,62%,0)`);
     ctx.fillStyle = bloom;
     ctx.beginPath(); ctx.arc(0, 0, e.r * 1.7, 0, Math.PI * 2); ctx.fill();
 
     const well = ctx.createRadialGradient(0, 0, 0, 0, 0, e.r);
-    well.addColorStop(0,   `hsla(${hue},100%,88%,.55)`);
-    well.addColorStop(0.6, `hsla(${hue},90%,60%,.18)`);
-    well.addColorStop(1,   `hsla(${hue},80%,40%,.05)`);
+    well.addColorStop(0,   `hsla(${hue},100%,96%,.95)`);
+    well.addColorStop(0.6, `hsla(${hue},90%,78%,.70)`);
+    well.addColorStop(1,   `hsla(${hue},85%,60%,.55)`);
     ctx.fillStyle = well;
     ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI * 2); ctx.fill();
 
     ctx.rotate(spin);
-    ctx.strokeStyle = `hsla(${hue},100%,80%,.9)`;
-    ctx.lineWidth = 2.5; ctx.setLineDash([e.r * 0.7, e.r * 0.5]);
+    ctx.strokeStyle = `hsl(${hue},75%,36%)`;
+    ctx.lineWidth = 3; ctx.setLineDash([e.r * 0.7, e.r * 0.5]);
     ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
     ctx.rotate(-spin * 2.2);
-    ctx.strokeStyle = `hsla(${hue},100%,90%,.5)`;
+    ctx.strokeStyle = `hsla(${hue},75%,40%,.6)`;
     ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.arc(0, 0, e.r * 0.6, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
@@ -43,7 +43,7 @@ export class Portal extends Entity<PortalDef> {
       ctx.save();
       ctx.translate(e.x + Math.cos(a) * e.r * 1.15, e.y + Math.sin(a) * e.r * 1.15);
       ctx.rotate(a);
-      ctx.fillStyle = `hsla(${hue},100%,85%,.95)`;
+      ctx.fillStyle = `hsl(${hue},75%,38%)`;
       ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, 5); ctx.lineTo(-5, -5);
       ctx.closePath(); ctx.fill();
       ctx.restore();

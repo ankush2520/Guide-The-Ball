@@ -20,6 +20,7 @@ import { GameProvider, useGame } from '../core/GameContext';
 import { GameCanvas } from './GameCanvas';
 import { Hud } from './Hud';
 import { Controls } from './Controls';
+import { LevelPill } from './LevelPill';
 import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
 import { LevelSelect } from './LevelSelect';
@@ -28,11 +29,13 @@ import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { ShopPanel } from './ShopPanel';
+import { InventoryPanel } from './InventoryPanel';
 import { CoinFlight } from './CoinFlight';
 import { Confetti } from './Confetti';
+import { Coach } from './Coach';
 import { Sound } from '../audio/Sound';
 
-type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop';
+type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items';
 
 function Game() {
   const { bus, levels, controller, rewards } = useGame();
@@ -79,7 +82,7 @@ function Game() {
     const offer = () => {
       if ((window as unknown as Record<string, unknown>).__gtbNoAutoSpin) return;
       if (stackRef.current.length > 0) return;
-      if (controller.phase !== 'plan' || controller.tutorialStep() !== 0) return;
+      if (controller.phase !== 'plan' || controller.tutorialStep() !== null) return;
       if (!rewards.shouldOfferSpin()) return;
       rewards.markSpinOffered();
       open('spin');
@@ -133,16 +136,22 @@ function Game() {
           column's own background, never for a tap that reached the HUD, the
           board or a panel, all of which own their own handling.
 
-          On the press, not the release: nothing can be drawn out here, so the
-          press cannot turn into a drag and there is no reason to wait. */}
+          On the press, not the release: nothing out here can be dragged, so
+          the press cannot turn into anything else and there is no reason to
+          wait. */}
       <div className="app"
            onPointerDown={e => { if (e.target === e.currentTarget) controller.drop(); }}>
-        <Hud onOpenLevels={() => open('levels')}
-             onOpenSettings={() => open('settings')} />
-        <GameCanvas><Status /></GameCanvas>
+        <Hud onOpenSettings={() => open('settings')}
+             onOpenItems={() => open('items')}
+             onOpenShop={() => open('shop')} />
+        <GameCanvas footer={<LevelPill onOpen={() => open('levels')} />}>
+          <Status />
+        </GameCanvas>
         <Controls />
       </div>
 
+      {/* The walkthrough bubble. Over the board, under every panel. */}
+      <Coach hidden={stack.length > 0} />
       <WinOverlay />
       {/* Both of these paint OVER the card rather than inside it. The burst
           sits under the coin flight, because the coins are the payout and the
@@ -158,6 +167,7 @@ function Game() {
                                          onOpenInfo={() => open('info')}
                                          onOpenShop={() => open('shop')}
                                          onOpenSpin={() => open('spin')} />}
+      {has('items')   && <InventoryPanel onClose={close} onShop={() => open('shop')} />}
       {has('shop')    && <ShopPanel    onClose={close} />}
       {has('spin')    && <SpinPanel    onClose={close} />}
       {has('info')    && <InfoPanel    onClose={close} />}

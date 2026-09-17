@@ -90,6 +90,9 @@ export class FireObstacle extends Entity<FireDef> {
     body.addColorStop(1,    '#8e1219');
     ctx.fillStyle = body;
     ctx.fill();
+    // the ink pen, a little lighter than on solid shapes: flame is not a sticker
+    ctx.strokeStyle = 'rgba(42,35,80,.75)'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+    ctx.stroke();
 
     // the ember: the centre is the DARKEST point, the inverse of the obstacle
     const core = ctx.createRadialGradient(o.x, o.y + o.r * 0.12, 0,
@@ -109,7 +112,7 @@ export class FireObstacle extends Entity<FireDef> {
       const k = ((clock * 0.62 + i / SPARKS) % 1);
       const sx = o.x + Math.sin(clock * 2.2 + i * 2.3) * o.r * 0.5;
       const sy = o.y - o.r * 0.5 - k * o.r * 1.7;
-      ctx.fillStyle = `rgba(255,${180 + Math.round(50 * (1 - k))},120,${(1 - k) * 0.75})`;
+      ctx.fillStyle = `rgba(245,${100 + Math.round(60 * (1 - k))},20,${(1 - k) * 0.85})`;
       ctx.beginPath();
       ctx.arc(sx, sy, 1.9 * (1 - k * 0.6), 0, Math.PI * 2);
       ctx.fill();

@@ -12,11 +12,11 @@ export class SlipperyZone extends Entity<SlipperyDef> {
     const z = this.def;
     ctx.save();
     const g = ctx.createLinearGradient(z.x, z.y, z.x, z.y + z.h);
-    g.addColorStop(0, 'rgba(190,235,255,.16)');
-    g.addColorStop(1, 'rgba(120,190,230,.07)');
+    g.addColorStop(0, 'rgba(165,225,250,.55)');
+    g.addColorStop(1, 'rgba(120,195,235,.38)');
     ctx.fillStyle = g;
     roundRect(ctx, z.x, z.y, z.w, z.h, 8); ctx.fill();
-    ctx.strokeStyle = 'rgba(200,240,255,.34)'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(40,140,195,.70)'; ctx.lineWidth = 2;
     roundRect(ctx, z.x, z.y, z.w, z.h, 8); ctx.stroke();
 
     ctx.save();
@@ -25,7 +25,7 @@ export class SlipperyZone extends Entity<SlipperyDef> {
     const sx = z.x - z.w * 0.5 + k * z.w * 2;
     const sh = ctx.createLinearGradient(sx - 30, 0, sx + 30, 0);
     sh.addColorStop(0,   'rgba(255,255,255,0)');
-    sh.addColorStop(0.5, 'rgba(255,255,255,.16)');
+    sh.addColorStop(0.5, 'rgba(255,255,255,.75)');
     sh.addColorStop(1,   'rgba(255,255,255,0)');
     ctx.fillStyle = sh; ctx.fillRect(z.x, z.y, z.w, z.h);
     ctx.restore();

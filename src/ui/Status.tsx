@@ -9,7 +9,8 @@
      mechanic tips. A losing drop used to stop the game behind a
      modal; it now just says what happened here and hands the
      player straight back to planning with their ramps untouched.
-   - the DROP CUE: how to drop, now that no button does.
+   - the CUE: how to drop, now that no button does - or, on the
+     very first board, where the ramps are.
 
    They share the slot and are decided in the SAME render from
    the same state, so they cannot both be up: the flash wins
@@ -35,7 +36,8 @@ export function Status() {
   const { controller } = useGame();
   useGameVersion();
   const flash = controller.flash;
-  const cue = !flash && controller.phase === 'plan' && controller.selected < 0;
+  const text = controller.cue;
+  const cue = !flash && !!text;
   // light text over the night boards, dark over the day ones
   const dark = !isLightSky(countryOf(controller.levels.level.id).sky[1]);
   return (
@@ -44,7 +46,7 @@ export function Status() {
            role="status" aria-live="polite">
         {flash}
       </div>
-      <div id="drop-cue" className={'drop-cue' + (cue ? ' on' : '')}>{DROP_CUE}</div>
+      <div id="drop-cue" className={'drop-cue' + (cue ? ' on' : '')}>{text ?? DROP_CUE}</div>
     </div>
   );
 }
