@@ -54,7 +54,11 @@ await page.mouse.up();
 const rampsLeft = await page.textContent('.counter:has-text("Ramps") b');
 chk(Number(rampsLeft) >= 0, 'the drag placed a ramp', `ramps left: ${rampsLeft}`);
 
-await page.click('button.primary:has-text("Drop Ball")');
+/* The Drop Ball button is gone: the drop is a tap on empty board. Tapped well
+   away from the ramp just drawn, so it reads as a drop and not as selecting
+   that ramp. */
+const tapAt = at(60, 120);
+await page.mouse.click(tapAt.x, tapAt.y);
 await page.waitForTimeout(400);
 const hint = await page.textContent('.hint');
 chk(/Watching|readjust|Replay/.test(hint), 'the drop is running', hint.trim());
