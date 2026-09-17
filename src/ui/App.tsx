@@ -124,7 +124,16 @@ function Game() {
 
   return (
     <>
-      <div className="app">
+      {/* The drop is a tap now, and the board covers almost the whole screen -
+          but not the gaps around it. A tap that lands on the column itself
+          rather than on any of its children drops the ball too, so the
+          gesture does not die in the few pixels beside the board.
+
+          target === currentTarget is the whole guard: it fires only for the
+          column's own background, never for a tap that reached the HUD, the
+          board or a panel, all of which own their own handling. */}
+      <div className="app"
+           onPointerUp={e => { if (e.target === e.currentTarget) controller.drop(); }}>
         <Hud onOpenLevels={() => open('levels')}
              onOpenSettings={() => open('settings')} />
         <GameCanvas><Flash /></GameCanvas>

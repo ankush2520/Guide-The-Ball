@@ -17,6 +17,7 @@ import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physic
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
 import { CAPTURE_MS } from '../render/constants';
+import { DEL_OFF, DEL_R, DEL_GRAB } from '../managers/LevelManager';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
          STARTING_COINS, BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
@@ -59,6 +60,10 @@ const physics = {
     MIN_RAMP: C.MIN_RAMP, MAX_RAMP: C.MAX_RAMP,
     RAMP_HT: C.RAMP_HT, WALL_HT: C.WALL_HT,
     CAPTURE_MS,
+    /* The × that deletes a ramp. Published because the suite has to tap it,
+       and a test that re-derives these from memory silently stops tapping the
+       button the moment either one is retuned. */
+    DEL_OFF, DEL_R, DEL_GRAB,
   },
   MECH: {
     SPEED_CAP: C.SPEED_CAP, SLIP_REST: C.SLIP_REST, PORTAL_CD: C.PORTAL_CD,
@@ -163,8 +168,10 @@ export function installGameHook(s: GameServices): void {
         tutorial: { step: c.tutorialStep(), seen: rewards.tutorialSeen,
                     obstacleTipSeen: rewards.obstacleTipSeen,
                     skipShown: !!document.getElementById('btn-skip'),
-                    dropPulsing: !!document.getElementById('btn-drop')
-                                    ?.classList.contains('tut-pulse'),
+                    /* step 2 used to be signalled by a pulsing Drop Ball
+                       button; there is no button now, so the step itself is
+                       the signal and `step` above already carries it */
+                    dropPulsing: false,
                     handT: c.tutHand.t },
         infoOpen: !!document.getElementById('infopanel'),
         settingsOpen: !!document.getElementById('settingspanel'),
@@ -251,9 +258,10 @@ export function installGameHook(s: GameServices): void {
 
     ballInfo: () => {
       const buy = document.getElementById('btn-buy') as HTMLButtonElement | null;
-      const drop = document.getElementById('btn-drop') as HTMLButtonElement | null;
       return { balls: rewards.balls,
-               dropDisabled: !!drop?.disabled,
+               /* the drop is a tap on the board now: it is refused by phase,
+                  not by a disabled button */
+               dropDisabled: c.phase !== 'plan',
                stopShown: !!document.getElementById('noballs'),
                buyDisabled: buy ? buy.disabled : true,
                buyText: buy ? buy.textContent ?? '' : 'Buy Balls — Coming Soon' };

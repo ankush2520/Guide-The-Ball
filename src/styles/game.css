@@ -89,7 +89,7 @@
      ============================================================ */
   .app{width:min(100%, max(320px, 75svh));height:100%;
        display:flex;flex-direction:column;gap:8px}
-  .hud,.controls,.hint{
+  .hud,.hint{
        width:max(var(--board-w, 100%), min(100%, 300px));margin-inline:auto}
 
   .hud{display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -685,13 +685,12 @@
   @media (prefers-reduced-motion:reduce){ button:active:not(:disabled){transform:none} }
   /* One decision, two repairs. Drop takes every pixel the other two do not
      need, and is tall enough to be the obvious thing to hit; Undo and Clear
-     shrink to their own labels. */
-  .controls{display:flex;gap:7px;align-items:stretch}
-  .controls .primary{flex:1 1 auto;min-width:0;padding:14px 12px;
-                     font-size:16px;font-weight:800;letter-spacing:.01em;
-                     border-radius:13px}
-  .controls .mini{flex:0 0 auto;padding:9px 13px;font-size:12.5px;font-weight:650;
-                  border-radius:11px;color:#c3cbee}
+     shrink to their own labels.
+
+     GONE. The drop is a tap on the board and a ramp is removed with its own
+     ×, so the row below the board no longer exists and the board has its
+     height. Nothing styles `.controls` any more - if an action row ever comes
+     back it needs its width restored in the shared rule near .app too. */
 
   /* swatches, shared by the info panel's entries */
   .sw{width:15px;height:15px;flex:none;display:block}
@@ -737,14 +736,31 @@
      centred - the one row in the column that was off-axis. */
   .hint{color:var(--muted);font-size:12.5px;text-align:center;margin-block:0;
         flex:none;min-height:2.9em;display:flex;align-items:center;justify-content:center}
-  .controls{flex:none}
   /* a phone has no height to spare - drop the reference text, keep the controls */
   /* The legend now lists only what is on the current board, so it is short
      enough to survive further down the height range than the old fixed list.
      Below this it goes, and the first-sight tips carry the teaching instead. */
   /* the board takes the height on a short window; the info panel carries the
      reference material at every size */
-  @media (max-height:620px){ .hint{display:none} }
+  /* ============================================================
+     NO HINT ROW ON A PHONE
+
+     The board is height-driven: it is whatever 3:5 fits in the
+     space the chrome leaves, so every pixel this row costs comes
+     straight off the board. On a 375x667 phone that was the
+     difference between a 301px board and a 327px one - 9% of the
+     play area spent on a line of text.
+
+     It was also the only row in the column whose height CHANGED
+     as you played ("Watching the drop..." is one line, "No ramps
+     left - tap one to edit or delete it, or drop the ball." is
+     two), which resized the board mid-tap.
+
+     The teaching is not lost: the in-board tutorial bubble covers
+     the first-sight tips and the info panel carries the reference
+     material. Kept on desktop, where the height is free.
+     ============================================================ */
+  @media (max-width:520px), (max-height:620px){ .hint{display:none} }
 
   button.title{background:none;border:0;padding:0;flex:0 1 auto;text-align:left;
                box-shadow:none;cursor:pointer;font-size:15.5px;font-weight:800;color:var(--ink)}
@@ -799,6 +815,12 @@
      board height and 0.6px of board width. */
   @media (min-height:720px){
     .app{gap:7px}
+  }
+  /* One line is only an honest reservation where the column is wide enough
+     that the longest hint fits on one. Under ~700px it wraps to two, and a
+     reservation shorter than the content is exactly what made the row - and
+     therefore the board - change size as the text changed. */
+  @media (min-height:720px) and (min-width:700px){
     .hint{min-height:2.1em}
   }
   /* The vertical margin is only worth trimming where it is decoration. On a
@@ -816,8 +838,6 @@
   @media (max-height:520px){
     .app{gap:6px}
     .hud{min-height:28px}
-    .controls .primary{padding:8px 10px;font-size:13.5px}
-    .controls .mini{padding:6px 9px;font-size:12px}
     /* two lines of title is a luxury at this height: the name and its number
        go back on one line so the bar costs the board nothing */
     .title{flex-direction:row;align-items:baseline;gap:6px}

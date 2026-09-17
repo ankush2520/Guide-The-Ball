@@ -475,14 +475,14 @@ export class GameController {
 
   /** The hint line under the board - a read-only view of state. */
   get hint(): string {
-    if (this.tutorialStep() === 2) return 'Tap Drop Ball when ready.';
+    if (this.tutorialStep() === 2) return 'Tap anywhere to drop the ball.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
     if (this.selected >= 0) return 'Drag an end to reshape, the middle to move, × to delete.';
     if (this.levels.rampsLeft <= 0)
       return this.rewards.extraRamps > 0
-        ? 'No ramps left — tap Ramps to spend a spare, or drop the ball.'
-        : 'No ramps left — tap one to edit or delete it, or drop the ball.';
-    return 'Drag on the board to draw a ramp. Tap a ramp to edit it.';
+        ? 'No ramps left — tap Ramps to spend a spare, or tap to drop.'
+        : 'No ramps left — tap a ramp to edit it, or tap empty board to drop.';
+    return 'Drag to draw a ramp. Tap a ramp to edit it, or empty board to drop.';
   }
 }

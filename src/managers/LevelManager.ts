@@ -27,9 +27,23 @@ import { MIN_RAMP, MAX_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
 export const HANDLE_R = 7;
 export const GRAB_R   = 20;
 export const PICK_PAD = 12;
-export const DEL_OFF  = 32;
-export const DEL_R    = 12;
-export const DEL_GRAB = 20;
+/* The × is the ONLY way to remove a ramp now that the Undo and Clear buttons
+   are gone, so it is drawn at 2.5x the size it used to be: DEL_R 12 -> 30,
+   which is ~17-23 CSS px of radius depending on the phone, i.e. a 34-46px
+   target rather than the old 14-18px one.
+
+   DEL_OFF moves with it. The button sits DEL_OFF from the ramp's centre line
+   along the normal, so at the old offset a 30-radius circle would have sat ON
+   the ramp: 50 - 30 leaves the same 20-unit gap the old 32 - 12 did.
+
+   DEL_GRAB is deliberately NOT 2.5x. Scaling it with the rest would put a
+   100-unit-wide invisible target on a 480-wide board, and since the × is
+   tested before the ramp's own grips, it would swallow the drags that reshape
+   and move the selected ramp. 36 keeps a small margin around the visible
+   circle and nothing more. */
+export const DEL_OFF  = 50;
+export const DEL_R    = 30;
+export const DEL_GRAB = 36;
 
 export class LevelManager {
   private index = 0;

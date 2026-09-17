@@ -16,6 +16,11 @@ import { DEL_GRAB, PICK_PAD } from '../managers/LevelManager';
 export function GameCanvas({ children }: { children?: ReactNode }) {
   const { canvas, controller, levels } = useGame();
   const host = useRef<HTMLDivElement>(null);
+  /* Where a gesture on EMPTY board began, and whether it is still eligible to
+     be read as a tap-to-drop when the finger comes up. Set only by case 3 of
+     onPointerDown; cleared at the start of every gesture so a release can
+     never be judged against a stale one. */
+  const tap = useRef<{ x: number; y: number; canDrop: boolean } | null>(null);
   useGameVersion();                       // re-render for the Skip button
 
   /* Mount the canvas and run the loop for as long as it is on screen. */
@@ -107,6 +112,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   const onPointerDown = (e: React.PointerEvent) => {
     if (controller.phase !== 'plan') return;
     const p = toBoard(e);
+    tap.current = null;
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
 
@@ -141,8 +147,20 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       return;
     }
 
-    /* 3. empty board: drop the selection, and start a new ramp if there is room */
-    if (controller.selected >= 0) { controller.selected = -1; controller.notifyRampsChanged(); }
+    /* 3. empty board: drop the selection, and start a new ramp if there is room.
+
+          A press here is also how the ball is dropped now that the Drop Ball
+          button is gone - but only if it turns out to be a TAP. That cannot
+          be decided yet: the same press begins a ramp, and only the distance
+          travelled by the time the finger lifts tells the two apart. So the
+          start point is recorded and endDraft() judges it.
+
+          A press that merely dismisses a selection is not eligible. Clearing
+          the selection is what that tap was for, and dropping the ball on it
+          would cost a ball the player never meant to spend. */
+    const hadSelection = controller.selected >= 0;
+    if (hadSelection) { controller.selected = -1; controller.notifyRampsChanged(); }
+    tap.current = { x: p.x, y: p.y, canDrop: !hadSelection };
     if (!levels.canPlaceRamp) return;
     controller.draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
   };
@@ -165,13 +183,30 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     e.preventDefault();
   };
 
+  /* Below this, in board units, a press-and-release is a tap rather than a
+     drag. The board is 480 wide against ~265-370 CSS px, so 10 units is about
+     6 CSS px - under a finger's own wobble, and far under MIN_RAMP, so no
+     gesture that draws a real ramp can be mistaken for a tap. */
+  const TAP_SLOP = 10;
+
   const endDraft = () => {
+    const t = tap.current;
+    tap.current = null;
+
     if (controller.dragging) { controller.dragging = null; controller.notifyRampsChanged(); return; }
+
     const d = controller.draft;
-    if (!d) return;
-    levels.addRamp(d);                    // silently refuses anything too short
-    controller.draft = null;
-    controller.notifyRampsChanged();
+    if (d) {
+      levels.addRamp(d);                  // silently refuses anything too short
+      controller.draft = null;
+      controller.notifyRampsChanged();
+    }
+
+    /* A tap on empty board drops the ball. `d` is absent when the board is out
+       of ramps, and then the press could only ever have been a tap. */
+    if (!t || !t.canDrop) return;
+    const moved = d ? Math.hypot(d.x2 - d.x1, d.y2 - d.y1) : 0;
+    if (moved <= TAP_SLOP) controller.drop();
   };
 
   const step = controller.tutorialStep();
