@@ -14,16 +14,16 @@
 
 const MUTE_KEY = 'gtb.muted.v1';
 
-const BPM = 92;
+const BPM = 112;
 const STEP = (60 / BPM) / 2;             // one eighth note, in seconds
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
-// Am - F - C - G. Four bars of eight eighth-notes each.
+// C - G - Am - F. Four bars of eight eighth-notes each.
 const CHORDS = [
-  { root: 45, tones: [57, 60, 64, 69] },   // Am
-  { root: 41, tones: [53, 57, 60, 65] },   // F
   { root: 48, tones: [60, 64, 67, 72] },   // C
   { root: 43, tones: [55, 59, 62, 67] },   // G
+  { root: 45, tones: [57, 60, 64, 69] },   // Am
+  { root: 41, tones: [53, 57, 60, 65] },   // F
 ];
 /* which eighth-notes of a bar the arp speaks on - the rests are what keep it
    from turning into a nagging loop while you think */
@@ -116,23 +116,29 @@ class SoundEngine {
     src.connect(f); f.connect(g); g.connect(dest); src.start(t); src.stop(t + dur + 0.02);
   }
 
-  private pad(freqs: number[], t: number, dur: number): void {
+  /* A tone whose pitch moves: up to `f1` in the first third, then on to `f2`.
+     A fast bend is what makes a hit read as a cartoon "boing". */
+  private sweep(dest: AudioNode, f0: number, f1: number, f2: number, t: number,
+                dur: number, peak: number, type: OscillatorType = 'triangle'): void {
     const c = this.ctx!;
-    const f = c.createBiquadFilter(); f.type = 'lowpass';
-    f.frequency.setValueAtTime(520, t);
-    f.frequency.linearRampToValueAtTime(900, t + dur * 0.5);
-    f.frequency.linearRampToValueAtTime(520, t + dur);
-    const g = c.createGain();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.3);
+    o.frequency.exponentialRampToValueAtTime(f2, t + dur);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.045, t + 0.55);
-    g.gain.setValueAtTime(0.045, t + dur - 0.45);
-    g.gain.linearRampToValueAtTime(0.0001, t + dur);
-    f.connect(g); g.connect(this.music!);
-    for (let i = 0; i < freqs.length; i++) {
-      const o = c.createOscillator();
-      o.type = 'sawtooth'; o.frequency.value = freqs[i];
-      o.detune.value = (i - 1) * 6;                 // a little chorus width
-      o.connect(f); o.start(t); o.stop(t + dur + 0.05);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
+  }
+
+  /* A struck chord, marimba-style: a triangle body that dies away at once, and
+     a faint high partial for the mallet. No sustain, so the notes stay
+     separate even through the shared delay. */
+  private pluck(freqs: number[], t: number): void {
+    for (const f of freqs) {
+      this.tone(this.music!, f, t, 0.24, 0.08, 'triangle');
+      this.tone(this.music!, f * 4, t, 0.05, 0.015, 'sine');
     }
   }
 
@@ -142,14 +148,17 @@ class SoundEngine {
   private scheduleStep(i: number, t: number): void {
     const bar = Math.floor(i / 8) % 4, beat = i % 8;
     const ch = CHORDS[bar];
-    if (beat === 0) this.pad(ch.tones.slice(0, 3).map(m => mtof(m + 12)), t, STEP * 8);
-    if (beat === 0 || beat === 3 || beat === 6)
-      this.tone(this.music!, mtof(ch.root - 12), t, beat === 0 ? 0.55 : 0.38, 0.20, 'sine');
+    // off-beat chord stabs - the bounce in the loop
+    if (beat === 2 || beat === 6) this.pluck(ch.tones.slice(0, 3).map(mtof), t);
+    // a short hopping bass, pitched high enough for a phone speaker
+    if (beat === 0 || beat === 3 || beat === 4 || beat === 6)
+      this.tone(this.music!, mtof(ch.root), t, beat === 0 ? 0.26 : 0.16, 0.28, 'triangle');
     if (ARP.indexOf(beat) !== -1) {
       const m = ch.tones[(i * 3 + beat) % ch.tones.length] + 12;
-      this.tone(this.music!, mtof(m), t, 0.42, 0.085, 'triangle');
+      this.tone(this.music!, mtof(m), t, 0.20, 0.10, 'triangle');
+      if (beat === 0) this.tone(this.music!, mtof(m + 12), t, 0.10, 0.02, 'sine');   // sparkle
     }
-    if (beat % 2 === 1) this.noise(this.music!, t, 0.045, 0.030, 7000);
+    if (beat % 2 === 1) this.noise(this.music!, t, 0.035, 0.030, 7000);
   }
 
   private pump = (): void => {
@@ -213,10 +222,10 @@ class SoundEngine {
     const t = this.ctx.currentTime;
     if (t - this.lastBounce < 0.035) return;   // a scatter of hits is one sound
     this.lastBounce = t;
-    if (kind === 'obstacle') {                 // heavier, duller, with a thud
-      this.tone(this.sfx!, 190, t, 0.16, 0.30, 'square');
-      this.tone(this.sfx!, 96, t, 0.20, 0.22, 'sine');
-      this.noise(this.sfx!, t, 0.07, 0.08, 900);
+    if (kind === 'obstacle') {                 // a cartoon boing: pitch springs up, then sags
+      this.sweep(this.sfx!, 220, 540, 260, t, 0.11, 0.28, 'triangle');
+      this.sweep(this.sfx!, 110, 270, 130, t, 0.11, 0.06, 'square');
+      this.sweep(this.sfx!, 130, 130, 60, t, 0.08, 0.20, 'sine');   // the thump under it
     } else {                                   // ramp/wall: a clean bright tick
       this.tone(this.sfx!, 880, t, 0.085, 0.20, 'triangle');
       this.tone(this.sfx!, 1320, t, 0.055, 0.10, 'sine');
@@ -246,19 +255,34 @@ class SoundEngine {
     if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
     const t = this.ctx.currentTime;
     const f = 1245 * Math.pow(2, Math.min(i, 7) / 12);
-    this.tone(this.sfx!, f, t, 0.10, 0.105, 'triangle');
-    this.tone(this.sfx!, f * 2, t, 0.055, 0.045, 'sine');
-    this.noise(this.sfx!, t, 0.028, 0.018, 6500);
+    this.tone(this.sfx!, f, t, 0.075, 0.105, 'triangle');
+    this.tone(this.sfx!, f * 2, t, 0.04, 0.04, 'sine');
+    this.tone(this.sfx!, f * 3, t, 0.025, 0.022, 'sine');   // bell partial - the toy "ting"
+    this.noise(this.sfx!, t, 0.02, 0.028, 8000);
   }
 
-  /** SFX 2 - the target swallowed the ball. */
+  /** The target closing over the ball - a quick falling gulp. The fanfare
+      itself waits for the win card, in step with the confetti. */
+  capture(): void {
+    if (this.isMuted) return;
+    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
+    this.sweep(this.sfx!, 700, 520, 250, this.ctx.currentTime, 0.12, 0.18, 'sine');
+  }
+
+  /** SFX 2 - the level is cleared: a quick run up, then a "ta-da" chord. */
   win(): void {
     if (this.isMuted) return;
     if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
-    const t = this.ctx.currentTime, notes = [69, 73, 76, 81];   // A major arpeggio
-    for (let i = 0; i < notes.length; i++)
-      this.tone(this.sfx!, mtof(notes[i]), t + i * 0.085, 0.42, 0.22, 'triangle');
-    this.noise(this.sfx!, t, 0.25, 0.045, 5000);
+    const t = this.ctx.currentTime, run = [72, 76, 79, 84];   // C major, up
+    for (let i = 0; i < run.length; i++)
+      this.tone(this.sfx!, mtof(run[i]), t + i * 0.06, 0.16, 0.18, 'triangle');
+    const hit = t + run.length * 0.06 + 0.04;
+    for (const m of [84, 88, 91])                              // the "da!"
+      this.tone(this.sfx!, mtof(m), hit, 0.55, 0.10, 'triangle');
+    // sparkle on top: a thin square, then a higher sine glint
+    this.tone(this.sfx!, mtof(96), hit, 0.22, 0.03, 'square');
+    this.tone(this.sfx!, mtof(100), hit + 0.08, 0.30, 0.04, 'sine');
+    this.noise(this.sfx!, hit, 0.35, 0.04, 7000);
   }
 }
 

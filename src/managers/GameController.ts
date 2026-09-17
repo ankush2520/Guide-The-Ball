@@ -271,7 +271,7 @@ export class GameController {
        the authored centre is only its start, and swallowing the ball toward
        that would drag it sideways to a place the target had already left. */
     const c = targetAt(this.levels.level, b.steps);
-    Sound.win();
+    Sound.capture();
     this.setPhase('capture');
     this.capture = { t: 0, bx: b.x, by: b.y, cx: c.x, cy: c.y };
     // the same particle helper, pointed straight up and fanned all the way round
@@ -315,6 +315,8 @@ export class GameController {
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
     };
     this.capture = null;
+    // the confetti starts on this phase change, so the fanfare starts with it
+    Sound.win();
     this.setPhase('over');
     this.hideFlash();
     this.bus.emit('level:cleared',
