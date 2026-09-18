@@ -56,7 +56,9 @@ for (const [name, width, height] of SIZES) {
 
   const rows = await page.evaluate(() => {
     const vw = window.innerWidth;
-    return ['.hud', '.stage', '.hint', '.status', '.levelpill', '#btn-add-ramp'].flatMap(sel => {
+    /* NOT .levelpill: it is a chip in the bar now, off to the right of the +,
+       so it is centred on nothing. The bar it rides in is measured instead. */
+    return ['.hud', '.stage', '.hint', '.status', '#btn-add-ramp'].flatMap(sel => {
       const el = document.querySelector(sel);
       /* .hint is dropped by a max-height rule on short windows */
       if (!el || !el.getClientRects().length) return [];

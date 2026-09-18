@@ -13,23 +13,28 @@
    the level's ramps gone it spends a spare from the drawer; with
    no spares either it goes quiet and a tap opens the shop.
 
+   The level number rides in the gap between the + and the bag
+   (LevelPill) - the bar's one piece of spare width - and opens
+   the level picker. It used to be a pill under the board; that
+   row is gone and the board has its height.
+
    The bag beside the settings gear is the full inventory. It
    only holds straight ramps today, but it is where curved ramps
    and boosters will be picked from.
 
-   The level name no longer lives up here: it is the pill under
-   the board (LevelPill), which opens the level picker.
    ============================================================ */
 import { useEffect, useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
+import { LevelPill } from './LevelPill';
 
 interface Props {
   onOpenSettings: () => void;
   onOpenItems: () => void;
   onOpenShop: () => void;
+  onOpenLevels: () => void;
 }
 
-export function Hud({ onOpenSettings, onOpenItems, onOpenShop }: Props) {
+export function Hud({ onOpenSettings, onOpenItems, onOpenShop, onOpenLevels }: Props) {
   const { levels, rewards, controller } = useGame();
   useGameVersion();
   const [, setTick] = useState(0);
@@ -82,6 +87,7 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenShop }: Props) {
       </button>
 
       <div className="chips right">
+        <LevelPill onOpen={onOpenLevels} />
         <button id="btn-inventory" className="iconbtn bag"
                 title="Items" aria-label="Items"
                 disabled={!planning} onClick={onOpenItems}>

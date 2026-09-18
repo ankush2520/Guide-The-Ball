@@ -116,24 +116,44 @@ async function touchDrag(cdp, b, from, to){
 section('1. Boot');
 check(await page.locator('#board').isVisible(), 'board renders');
 check(await page.locator('#overlay').isHidden(), 'no overlay on a fresh board');
-/* The title names the CITY, which is derived from the country plus the
-   level's position within it - level 1 is Verdholm's first city. */
-check((await page.locator('#level-title').textContent()).includes('Verdholm I'),
-  'level 1 title shows its city name', await page.locator('#level-title').textContent());
+/* The chip names the BOARD BY NUMBER and nothing else. The city name it used
+   to carry is in the level picker this opens - the chip has to survive the
+   ~70px of bar it lives in, which no city name would. */
+check((await page.locator('#level-title').textContent()).trim() === 'Level 1',
+  'the level chip says which board this is, by number', await page.locator('#level-title').textContent());
 check(await page.locator('#btn-settings').isVisible(),
   'the settings gear is on the HUD');
 check(await page.locator('.hud .iconbtn').count() === 2 && await page.locator('.hud #btn-inventory.iconbtn').count() === 1,
   'beside only the bag - the wheel, the info panel and the mute are behind the gear');
-/* the level name moved under the board, to give the bar to the + */
+/* The level chip moved INTO the bar, in the gap between the + and the bag -
+   the one piece of spare width up there - so the row under the board is gone
+   and the board runs to the bottom of the column. */
 const pillGeo = await page.evaluate(() => {
   const p = document.getElementById('level-title').getBoundingClientRect();
   const b = document.querySelector('.stage').getBoundingClientRect();
   const h = document.querySelector('.hud').getBoundingClientRect();
-  return { gap: p.top - b.bottom, inHud: p.top < h.bottom,
-           centred: Math.abs((p.left + p.right) / 2 - (b.left + b.right) / 2) };
+  const a = document.getElementById('btn-add-ramp').getBoundingClientRect();
+  const bag = document.getElementById('btn-inventory').getBoundingClientRect();
+  const word = document.querySelector('.levelpill .lvnum');
+  return { inHud: p.top >= h.top - 0.5 && p.bottom <= h.bottom + 0.5,
+           rightOfAdd: p.left >= a.right, leftOfBag: p.right <= bag.left + 0.5,
+           belowBoard: p.top > b.bottom, ellipsised: word.scrollWidth > word.clientWidth + 0.5 };
 });
-check(!pillGeo.inHud && pillGeo.gap >= 0 && pillGeo.gap <= 14 && pillGeo.centred <= 1.5,
-  'the level name is a pill right under the board, centred on it', JSON.stringify(pillGeo));
+check(pillGeo.inHud && pillGeo.rightOfAdd && pillGeo.leftOfBag && !pillGeo.belowBoard,
+  'the level chip is in the bar, in the gap between the + and the bag', JSON.stringify(pillGeo));
+check(!pillGeo.ellipsised, 'and the word fits the gap rather than being cut short');
+/* NOTHING SHARES THE BOARD'S SLOT any more. The board is a fixed 3:5, so it
+   can only fill the axis that runs out first - what this proves is that it is
+   the SLOT that caps it, not a row parked underneath it. */
+const slotGeo = await page.evaluate(() => {
+  const slot = document.querySelector('.board-slot').getBoundingClientRect();
+  const b = document.querySelector('.stage').getBoundingClientRect();
+  return { kids: document.querySelectorAll('.board-slot > *').length,
+           rowsUnder: document.querySelectorAll('.levelrow').length,
+           spare: +Math.min(slot.width - b.width, slot.height - b.height).toFixed(1) };
+});
+check(slotGeo.kids === 1 && slotGeo.rowsUnder === 0 && slotGeo.spare <= 1.5,
+  'the board has the slot to itself, edge to edge - no row under it', JSON.stringify(slotGeo));
 /* the + is the bar's centrepiece */
 const addGeo = await page.evaluate(() => {
   const a = document.getElementById('btn-add-ramp').getBoundingClientRect();
@@ -833,8 +853,8 @@ await page.locator('#btn-next').click();
 let st = await page.evaluate(() => window.__gtb.state());
 check(st.levelId === 2 && st.phase === 'plan', 'Next advances to level 2', `now level ${st.levelId}`);
 check(st.ramps.length === 0, 'ramps cleared on the new level');
-check((await page.locator('#level-title').textContent()).includes('Verdholm II'),
-  'level 2 title shows its city name', await page.locator('#level-title').textContent());
+check((await page.locator('#level-title').textContent()).trim() === 'Level 2',
+  'the level chip follows the board it is on', await page.locator('#level-title').textContent());
 const stored = await page.evaluate(() => localStorage.getItem('gtb.progress.v1'));
 check(stored && JSON.parse(stored).highest >= 1, 'progress persisted to localStorage', stored);
 await page.reload();

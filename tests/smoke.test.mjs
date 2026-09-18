@@ -25,7 +25,7 @@ await page.waitForSelector('canvas#board', { timeout: 10000 });
 chk(true, 'the app boots and mounts the board');
 
 // the HUD reads from the managers
-const title = await page.textContent('.title');
+const title = await page.textContent('#level-title');
 chk(/Level \d+/.test(title), 'the HUD shows a level', title.trim());
 const ballsBefore = Number(await page.textContent('.counter.balls b'));
 chk(Number.isFinite(ballsBefore) && ballsBefore > 0, 'the ball tank loaded', String(ballsBefore));
@@ -79,7 +79,7 @@ chk(await page.isVisible('.infocard'), 'and the info panel opens from it');
 await page.click('#btn-info-close');
 await page.click('#btn-settings-close');
 
-await page.click('.title');
+await page.click('#level-title');
 await page.waitForSelector('.selcard');
 const gridCount = await page.locator('.selcard .grid button').count();
 /* Read from the game rather than hard-coded: this number moves every time a

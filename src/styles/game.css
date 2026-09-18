@@ -111,8 +111,12 @@
      ============================================================ */
   .app{width:min(100%, max(320px, 75svh));height:100%;
        display:flex;flex-direction:column;gap:8px}
-  .hud,.hint,.levelrow{
-       width:max(var(--board-w, 100%), min(100%, 300px));margin-inline:auto}
+  /* The floor is for a short landscape window, where a 3:5 board leaves the
+     chrome far less width than its four chips and the + need. There the bar
+     is allowed to be wider than the board - it is capped by .app either way,
+     so it can never reach past the column. */
+  .hud,.hint{
+       width:max(var(--board-w, 100%), min(100%, 320px));margin-inline:auto}
 
   /* Three columns with equal outer tracks, so the + is dead centre. Plain
      1fr, not minmax(0,1fr): if a huge coin count ever outgrows its half, the
@@ -123,7 +127,12 @@
   .hud{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;
        flex:none;min-height:40px;position:relative;z-index:6}
   .hud .chips.left{justify-self:start}
-  .hud .chips.right{justify-self:end}
+  /* STRETCHED, not packed to the end: the right track carries the level chip
+     as well as the bag and the gear, and the chip belongs at the track's
+     START - in the gap beside the + - while the two buttons stay at the far
+     edge. margin-inline-start:auto on the bag is what splits them. */
+  .hud .chips.right{justify-self:stretch;min-width:0}
+  .hud .chips.right .iconbtn.bag{margin-inline-start:auto}
 
   /* ============================================================
      THE + BUTTON - the character of the top bar
@@ -200,27 +209,32 @@
   .iconbtn.bag .bagicon{margin-top:4px}
 
   /* ============================================================
-     THE LEVEL PILL - under the board, one short line
+     THE LEVEL CHIP - in the bar, right of the +
+
+     Drawn as one of the chips, because that is what it is now:
+     same pen, same pill, same height as the coins and balls on
+     the other side, so the bar reads as one row of four.
+
+     The NUMBER only. The gap beside the + is about 70px on the
+     narrowest phone, which "Level 128" fills and no city name
+     would survive - and the picker this opens names every board
+     anyway. Its width is also why it is allowed to shrink: on a
+     tiny window the word gives way before the bag does.
      ============================================================ */
-  .levelrow{flex:none;display:flex;justify-content:center}
-  .levelpill{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;
-             padding:3px 12px;border-radius:999px;
+  .levelpill{display:inline-flex;align-items:baseline;gap:3px;min-width:0;flex:0 1 auto;
+             padding:3px 5px;border-radius:999px;white-space:nowrap;overflow:hidden;
+             cursor:pointer;font-size:11.5px;font-weight:700;color:var(--muted);
+             letter-spacing:0;
              background:var(--panel);border:2px solid var(--edge);box-shadow:0 2px 0 var(--edge)}
-  /* The board is recognised by its CITY, not by its index, so the name
-     carries the type weight and "Level 12" is the eyebrow above it. Two
-     lines, but tight ones: the pair is shorter than the 34px the chips
-     already force the bar to be, so the name costs the board nothing. */
-  /* NOT overflow:hidden. A glyph's ink can sit slightly left of its layout
-     box - letter-spaced uppercase especially - and clipping the button cut
-     the L off the front of "LEVEL 17" on every board in the game. The
-     truncation this was for belongs to .lvname, which does it itself. */
-  .title{display:flex;min-width:0;line-height:1.2}
-  .title .lvnum{font-size:10.5px;font-weight:700;letter-spacing:.08em;flex:none;
-                text-transform:uppercase;color:var(--muted);line-height:1.35;
-                white-space:nowrap}
-  .title .lvname{font-family:var(--font-display);font-size:14px;font-weight:900;min-width:0;
-                 letter-spacing:-.012em;color:var(--ink);max-width:100%;
-                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .levelpill:active{transform:scale(.97);box-shadow:0 1px 0 var(--edge)}
+  /* The WORD is what gives way, never the number: on a narrow bar - or a
+     three-digit board - the chip shrinks and "Level" ellipsises, so the one
+     thing the chip exists to say stays whole. */
+  .levelpill .lvnum{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .levelpill .lvid{color:var(--ink);font-weight:900;font-size:13px;flex:none}
+  /* the caret marks the chip as the thing you tap to change the board */
+  .levelpill .lvid:after{content:'\25BE';margin-inline-start:1px;
+                         color:var(--muted);font-size:10px;font-weight:600}
   .counter{background:var(--panel);
            border:2px solid var(--edge);border-radius:999px;
            box-shadow:0 2px 0 var(--edge);
@@ -525,7 +539,10 @@
      group so the pill never drifts to the bottom of a tall screen. GameCanvas
      takes the pill's height off before it sizes the board. The 4px margin
      keeps the board's ring off the HUD. */
-  .board-slot{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:9px;
+  /* The board and nothing else: the level pill that used to sit under it is a
+     chip in the bar now, so the slot runs from the bar to the bottom of the
+     column and every pixel of it is board. */
+  .board-slot{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
               position:relative;margin-top:4px;
               align-items:center;justify-content:center;width:0;min-width:100%}
   /* The outline is a box-shadow ring on top of the 1px border, not a wider
@@ -976,13 +993,6 @@
      ============================================================ */
   @media (max-width:520px), (max-height:620px){ .hint{display:none} }
 
-  button.title{flex:0 1 auto;text-align:left;
-               cursor:pointer;font-size:14px;font-weight:800;color:var(--ink)}
-  button.title:active:not(:disabled){transform:scale(.97);box-shadow:0 1px 0 var(--edge)}
-  /* the caret marks the NAME as the thing you can tap to change, so it rides
-     the name's line - hung off the button it dropped to a row of its own */
-  button.title .lvname:after{content:' \25BE';color:var(--muted);font-size:12px;
-                             font-weight:600}
   .selcard{max-width:330px}
   .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;
         align-content:start}
@@ -1048,16 +1058,34 @@
   /* Landscape phones and small windows - CrazyGames requires legibility down
      to 800x450, where the board is squeezed by the chrome above and below it.
      Give the chrome less room so the board keeps more. */
+  /* A PACKED BAR - the narrowest phones, and the 320px-wide column a landscape
+     window leaves. Four chips plus the + do not fit at full size there, so the
+     level chip gives up its caret and most of its padding rather than its
+     word: 11px is the floor for the type itself (a CrazyGames gate), so the
+     space has to come from around the letters, not out of them.
+
+     Here at the bottom ON PURPOSE - the base .levelpill rule is further up the
+     file and would otherwise win on source order. See the note above. */
+  @media (max-width:389px), (max-height:520px){
+    .hud .chips{gap:3px}
+    .levelpill{padding:2px 5px;gap:2px}
+    .levelpill .lvid:after{content:''}
+  }
+  @media (max-width:359px){
+    .addramp{width:50px;height:50px}
+  }
+
   @media (max-height:520px){
     .app{gap:6px}
     .hud{min-height:30px}
     .addramp{width:46px;height:46px;margin-bottom:-16px}
     .addramp .plus{width:21px;height:21px}
-    .levelpill{padding:1px 10px}
-    .title .lvname{font-size:13px}
+    .levelpill .lvid{font-size:12px}
     .flash,.drop-cue{height:16px;line-height:16px;font-size:11px}
+    .hud{gap:6px}
+    .iconbtn.bag{width:26px;height:26px}
     /* the gap here is 6px, not 8: a little more room so the board's ring
        does not touch the chips' drop shadow */
-    .board-slot{margin-top:7px;gap:6px}
-    .iconbtn,.iconbtn.gear{width:27px;height:27px}
+    .board-slot{margin-top:7px}
+    .iconbtn,.iconbtn.gear{width:26px;height:26px}
   }

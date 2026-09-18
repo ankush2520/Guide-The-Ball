@@ -18,9 +18,10 @@ import { H, RAMP_HT, BOARD } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
 import { DEL_GRAB, PICK_PAD } from '../managers/LevelManager';
 
-/* `children` is painted ON the board (the status caption); `footer` sits
-   directly under it and moves with it (the level pill). */
-export function GameCanvas({ children, footer }: { children?: ReactNode; footer?: ReactNode }) {
+/* `children` is painted ON the board (the status caption). Nothing sits
+   under the board any more - the level chip moved into the HUD, and the
+   slot is the board and nothing else, down to the bottom of the column. */
+export function GameCanvas({ children }: { children?: ReactNode }) {
   const { canvas, controller, levels } = useGame();
   const host = useRef<HTMLDivElement>(null);
   /* Where a press on EMPTY board began. It drops the ball only if it comes
@@ -94,13 +95,8 @@ export function GameCanvas({ children, footer }: { children?: ReactNode; footer?
       if (stage && slot) {
         const r = slot.getBoundingClientRect();
         const ratio = BOARD.w / H;
-        /* the footer shares the slot's height, so the board gets what it
-           leaves; the gap is the slot's own row gap */
-        const foot = slot.querySelector<HTMLElement>(':scope > .levelrow');
-        const gap = parseFloat(getComputedStyle(slot).rowGap) || 0;
-        const footH = foot ? foot.offsetHeight + gap : 0;
         // -2 for the stage's 1px border, which sits outside the board itself
-        const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2 - footH);
+        const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2);
         const w = Math.min(avW, avH * ratio);
         if (w > 0) {
           stage.style.width = `${Math.round(w)}px`;
@@ -264,7 +260,6 @@ export function GameCanvas({ children, footer }: { children?: ReactNode; footer?
           pointer-transparent, so it can never swallow a tap. */}
       {children}
     </div>
-      {footer}
     </div>
   );
 }

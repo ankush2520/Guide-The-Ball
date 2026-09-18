@@ -20,7 +20,6 @@ import { GameProvider, useGame } from '../core/GameContext';
 import { GameCanvas } from './GameCanvas';
 import { Hud } from './Hud';
 import { Controls } from './Controls';
-import { LevelPill } from './LevelPill';
 import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
 import { LevelSelect } from './LevelSelect';
@@ -143,8 +142,9 @@ function Game() {
            onPointerDown={e => { if (e.target === e.currentTarget) controller.drop(); }}>
         <Hud onOpenSettings={() => open('settings')}
              onOpenItems={() => open('items')}
-             onOpenShop={() => open('shop')} />
-        <GameCanvas footer={<LevelPill onOpen={() => open('levels')} />}>
+             onOpenShop={() => open('shop')}
+             onOpenLevels={() => open('levels')} />
+        <GameCanvas>
           <Status />
         </GameCanvas>
         <Controls />
