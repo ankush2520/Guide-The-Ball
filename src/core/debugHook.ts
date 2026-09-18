@@ -13,7 +13,7 @@
    ============================================================ */
 import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
-import { RAMP_LEN } from '../items/items';
+import { RAMP_LEN, BOOSTER_R, BOOSTER_SPEED } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
@@ -23,6 +23,7 @@ import * as PAL from '../render/palette';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
          STARTING_COINS, BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
+         BOOSTER_PRICE, BOOSTER_BUNDLES, BOOSTER_UNLOCK_LEVEL, BOX_PRIZES,
          COIN_CLEAR, coinsFor,
          SPIN_PRIZES, SPIN_COOLDOWN_MS, SPIN_MS } from '../managers/RewardManager';
 import { BALLS_KEY, SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
@@ -74,14 +75,20 @@ const physics = {
   isLightSky: (hex: string) => PAL.isLightSky(hex),
   MECH: {
     SPEED_CAP: C.SPEED_CAP, SLIP_REST: C.SLIP_REST, PORTAL_CD: C.PORTAL_CD,
-    STAR_R: C.STAR_R, WIND_CAP: C.WIND_CAP, RESTITUTION: C.RESTITUTION,
+    STAR_R: C.STAR_R, BOX_R: C.BOX_R, WIND_CAP: C.WIND_CAP, RESTITUTION: C.RESTITUTION,
     BOOST_GAIN: C.BOOST_GAIN, BOOST_CAP: C.BOOST_CAP, BOOST_STEPS: C.BOOST_STEPS,
   },
   BALLS: { key: BALLS_KEY, start: STARTING_BALLS,
            adReward: AD_REWARD, clearBonus: CLEAR_BONUS.slice() },
   WALLET: { key: WALLET_KEY, startCoins: STARTING_COINS,
             ballPrice: BALL_PRICE, rampPrice: RAMP_PRICE,
+            boosterPrice: BOOSTER_PRICE,
             clearTable: COIN_CLEAR.map(r => r.slice()) },
+  /* The booster item and the box table, published so the suite can hold the
+     shipped numbers to the rules rather than to numbers copied out of the UI. */
+  BOOSTER: { unlockLevel: BOOSTER_UNLOCK_LEVEL, r: BOOSTER_R, speed: BOOSTER_SPEED,
+             bundles: BOOSTER_BUNDLES.map(b => ({ ...b })) },
+  BOX_PRIZES: BOX_PRIZES.map(p => ({ ...p })),
   SPIN: { key: SPIN_KEY, cooldownMs: SPIN_COOLDOWN_MS, animMs: SPIN_MS,
           prizes: SPIN_PRIZES.map(p => ({ kind: p.kind, n: p.n, w: p.w })) },
   starsFor,
@@ -212,9 +219,58 @@ export function installGameHook(s: GameServices): void {
     setBalls: (n: number) => rewards.setBallsForTest(n),
     coins: () => rewards.coins,
     spareRamps: () => rewards.extraRamps,
-    setWallet: (coins: number, ramps: number) => rewards.setWalletForTest(coins, ramps),
+    setWallet: (coins: number, ramps: number, boosters?: number) =>
+      rewards.setWalletForTest(coins, ramps, boosters),
     buyBalls: (n: number) => rewards.buyBalls(n),
     buyRamps: (n: number) => rewards.buyRamps(n),
+    buyBoosters: (n: number) => rewards.buyBoosters(n),
+    boosterCost: (n: number) => rewards.boosterCost(n),
+    /* Everything about the booster item in one read: what is owned, what is
+       on this board, whether the shop and the bag may show it at all. */
+    boosterInfo: () => ({
+      owned: rewards.extraBoosters,
+      unlocked: rewards.boostersUnlocked,
+      gifted: rewards.boosterGift,
+      placed: levels.boostersUsed,
+      paid: levels.boostersPaid,
+      paidFlags: levels.boosterPaid.slice(),
+      free: c.itemCount('booster').left,
+      selected: c.selectedBooster,
+      onBoard: levels.placedBoosters.map(b => ({ ...b })),
+      inShop: !!document.getElementById('shop-boosters-head'),
+      inBag: !!document.getElementById('btn-item-booster'),
+    }),
+    placeBooster: () => c.placeItem('booster'),
+    aimBooster: (ix: number, x: number, y: number) => {
+      levels.aimBoosterTo(ix, { x, y });
+      c.boosterAdjusted();
+    },
+    moveBoosterTo: (ix: number, x: number, y: number) => {
+      const b = levels.boosterAt(ix);
+      if (!b) return;
+      levels.moveBoosterBy(ix, x - b.x, y - b.y);
+      c.boosterAdjusted();
+    },
+    removeBooster: (ix: number) => c.removeBooster(ix),
+    /* Mystery boxes: what this board carries, what has been claimed, and the
+       table a given level is allowed to roll on. */
+    boxInfo: () => ({
+      onBoard: levels.level.boxes.map(b => ({ ...b })),
+      open: levels.sessionBoxes.slice(),
+      claimed: { ...rewards.claimedBoxes },
+      claimedHere: rewards.boxClaimed(levels.levelIndex),
+      table: rewards.boxTableFor(levels.level.id).map(p => ({ ...p })),
+      ballBoxes: c.ball ? c.ball.boxes : 0,
+    }),
+    rollBox: (levelId: number, rnd?: number) =>
+      ({ ...rewards.rollBoxPrize(levelId, rnd) }),
+    /* Mark this level's box already taken, so a drop that happens to route
+       through it pays nothing. Tests that measure the BALL a drop costs need
+       that: a box paying five balls mid-flight is a real thing that happens
+       to a player, and it is not what those tests are asking about. */
+    claimBox: () => rewards.claimBox(levels.levelIndex),
+    bonusSpins: () => rewards.bonusSpins,
+    grantBonusSpin: (n = 1) => rewards.grantBonusSpin(n),
     /* The shop's table and the prices it charges, so a test can check the two
        against each other rather than against numbers copied out of the UI. */
     BALL_BUNDLES, RAMP_BUNDLES,
@@ -246,6 +302,8 @@ export function installGameHook(s: GameServices): void {
       return { last: rewards.spinLast, ready: rewards.spinReady(),
                spinning: rewards.spinning,
                nextMs: rewards.msToSpin(),
+               dailyReady: rewards.dailyReady(),
+               bonus: rewards.bonusSpins,
                deg: rewards.wheelDeg,
                shown: rewards.spinShown ? rewards.spinShown.n : 0,
                shownKind: rewards.spinShown ? rewards.spinShown.kind : null,
@@ -292,8 +350,18 @@ export function installGameHook(s: GameServices): void {
     select: (i: number) => { c.selected = i; c.notifyRampsChanged(); },
     skipTutorial: () => c.tutorialSkip(),
     tutorialNext: () => c.tutorialNext(),
-    /** Take an item from the inventory, exactly as the popup does. */
-    placeItem: (kind: 'ramp' = 'ramp') => c.placeItem(kind),
+    /** Take an item out of the bag, exactly as the tray does. */
+    placeItem: (kind: 'booster' = 'booster') => c.placeItem(kind),
+    /* Drawing a ramp, as one gesture rather than three calls - the suite
+       drives the real pointer handlers as well, and this is for the places
+       that only need a ramp on the board. */
+    drawRamp: (x1: number, y1: number, x2: number, y2: number) => {
+      c.beginDraft({ x: x1, y: y1 });
+      c.updateDraft({ x: x2, y: y2 });
+      return c.commitDraft();
+    },
+    draft: () => (c.draft ? { ...c.draft } : null),
+    canDraw: () => c.canDraw,
     RAMP_LEN,
     drop: () => c.drop(),
     clock: () => c.clock,

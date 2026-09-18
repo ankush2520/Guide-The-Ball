@@ -29,6 +29,9 @@ export interface SimulationResult {
   spdMin: number; spdMax: number; vyMax: number; restMin: number;
   secs: number;
   stars: number; boosts: number; teleports: number;
+  /** Mystery boxes touched. Reported, never REQUIRED: the sweep proves a
+      level winnable without ever reading this. */
+  boxes: number;
   broken: boolean[];
   bounces: BounceRecord[];
   x: number; y: number;

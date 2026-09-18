@@ -56,9 +56,10 @@ for (const [name, width, height] of SIZES) {
 
   const rows = await page.evaluate(() => {
     const vw = window.innerWidth;
-    /* NOT .levelpill: it is a chip in the bar now, off to the right of the +,
-       so it is centred on nothing. The bar it rides in is measured instead. */
-    return ['.hud', '.stage', '.hint', '.status', '#btn-add-ramp'].flatMap(sel => {
+    /* NOT .levelpill or the counters: those are chips packed to the two ends
+       of the bar, so they are centred on nothing. The bar they ride in is
+       what is measured instead. */
+    return ['.hud', '.stage', '.hint', '.status'].flatMap(sel => {
       const el = document.querySelector(sel);
       /* .hint is dropped by a max-height rule on short windows */
       if (!el || !el.getClientRects().length) return [];
@@ -71,6 +72,48 @@ for (const [name, width, height] of SIZES) {
   const detail = rows.map(r => `${r.sel} ${r.gap >= 0 ? '+' : ''}${r.gap}`).join('  ');
   if (off.length) bad(`${name} ${width}x${height}`, detail);
   else            ok(`${name} ${width}x${height}`, detail);
+
+  /* ============================================================
+     EVERY COUNT THE PLAYER OWNS IS ON SCREEN AT EVERY SIZE.
+
+     This is a bug that shipped: a narrow-bar rule hid the spare
+     ramps pill below 390px, so winning a spare from a mystery
+     box changed nothing at all in the top bar on the width most
+     people play at - the reward looked unpaid.
+
+     Loaded up rather than at zero: 999 coins, 999 balls and 14
+     spares is the widest the bar ever has to be, and if it fits
+     there it fits everywhere.
+     ============================================================ */
+  await page.evaluate(() => {
+    const g = window.__gtb;
+    g.setLevel(12); g.setBalls(999); g.setWallet(999, 14, 0);
+  });
+  await page.waitForTimeout(150);
+  const bar = await page.evaluate(() => {
+    const de = document.documentElement;
+    const seen = sel => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.display !== 'none' &&
+             cs.visibility !== 'hidden' && +cs.opacity > 0;
+    };
+    const L = document.querySelector('.chips.left').getBoundingClientRect();
+    const R = document.querySelector('.chips.right').getBoundingClientRect();
+    return { coins: seen('#coin-count'), balls: seen('#ball-count'),
+             ramps: seen('#ramps-left'), spare: seen('#ramps-spare'),
+             overlap: +(R.left - L.right).toFixed(1),
+             overflow: de.scrollWidth > de.clientWidth };
+  });
+  const allShown = bar.coins && bar.balls && bar.ramps && bar.spare;
+  if (allShown && bar.overlap >= 0 && !bar.overflow)
+    ok(`${name} — every count is legible in the bar`,
+       `${bar.overlap}px between the two clusters`);
+  else
+    bad(`${name} — a count is missing from the bar`,
+        JSON.stringify(bar));
 
   await ctx.close();
 }

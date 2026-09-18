@@ -863,8 +863,20 @@ async function verify(lv, i){
 console.log(`\n  Generating country ${WORLD} - ${spec.name}  (levels ${FROM}-${TO})\n`);
 const accepted = [];
 let totalTries = 0;
+/* Which ids in this country are hand-tuned and must not be regenerated. Read
+   from the data file rather than from a list here, so the file is the one
+   place that says which boards are hand-written. */
+const PRESERVED = new Set(
+  (fs.readFileSync(path.join(root, 'src/levels/levels.data.ts'), 'utf8')
+     .match(/\{ id:(\d+),[^}]*needsBooster\s*:\s*true/g) || [])
+    .map(m => +m.match(/id:(\d+)/)[1]));
+
 for (let i = 0; i < 10; i++){
   const id = FROM + i;
+  if (PRESERVED.has(id)){
+    console.log(`  ${String(id).padStart(3)} (hand-tuned, kept as written)`);
+    continue;
+  }
   let got = null, tries = 0, lastWhy = '';
   const r = mulberry32(0xBEEF * WORLD + id * 7919);
   while (!got && tries < 240){
@@ -926,6 +938,11 @@ if (WRITE){
       out += `    stars:[${lv.stars.map(s => `{x:${num(s.x)},y:${num(s.y)}}`).join(',')}],\n`;
     if (lv.fires && lv.fires.length)
       out += `    fires:[${lv.fires.map(circ).join(',')}],\n`;
+    /* Written back out so a regeneration cannot silently strip the mystery
+       boxes off this country. A NEW level has none until tools/genboxes.mjs
+       is re-run, which is the step that places and verifies them. */
+    if (lv.boxes && lv.boxes.length)
+      out += `    boxes:[${lv.boxes.map(s => `{x:${num(s.x)},y:${num(s.y)}}`).join(',')}],\n`;
     out += `    target:{x:${num(lv.target.x)},y:${num(lv.target.y)},r:${num(lv.target.r)}}`;
     if (lv.targetMove)
       out += `,\n    targetMove:{x0:${num(lv.targetMove.x0)},x1:${num(lv.targetMove.x1)},` +
@@ -958,7 +975,14 @@ if (WRITE){
        here unnoticed while there was just the one. */
     .map(blk => blk.replace(/(?:,?\s*\/\*[\s\S]*?\*\/)+\s*$/, ''))
     .map(blk => blk.replace(/,\s*$/, ''))
-    .filter(blk => { const id = +blk.match(/id:(\d+)/)[1]; return id < FROM || id > TO; })
+    /* HAND-TUNED BOSSES SURVIVE A REGENERATION. A level carrying
+       `needsBooster` was authored by hand against a claim the generator
+       cannot make - that no ramp layout solves it - and re-rolling it would
+       quietly replace a proved board with an ordinary one. Kept, and its slot
+       skipped above. */
+    .filter(blk => { const id = +blk.match(/id:(\d+)/)[1];
+                     if (/needsBooster\s*:\s*true/.test(blk)) return true;
+                     return id < FROM || id > TO; })
     .map(blk => '  ' + blk.replace(/^\s+/, ''));
   const blocks = keep.concat(accepted.map(fmt))
     .sort((x, y) => (+x.match(/id:(\d+)/)[1]) - (+y.match(/id:(\d+)/)[1]));

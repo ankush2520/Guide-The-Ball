@@ -3,12 +3,15 @@
 import { useGame, useGameVersion } from '../core/GameContext';
 import { GLOSSARY } from './glossary';
 import { STARTING_BALLS, CLEAR_BONUS, AD_REWARD, STARTING_COINS,
-         BALL_PRICE, RAMP_PRICE, COIN_CLEAR } from '../managers/RewardManager';
+         BALL_PRICE, RAMP_PRICE, BOOSTER_PRICE, BOOSTER_UNLOCK_LEVEL,
+         COIN_CLEAR } from '../managers/RewardManager';
 
 export function InfoPanel({ onClose }: { onClose: () => void }) {
   const { levels } = useGame();
   useGameVersion();
-  const lv = levels.level;
+  /* The PLAY level, so a booster the player has just placed is marked as
+     being on this board - which it is. */
+  const lv = levels.playLevel;
 
   return (
     <div className="overlay" id="infopanel">
@@ -16,13 +19,18 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
         <div className="big">How to play</div>
         <div className="info scroll" id="info-body">
           <h4>The basics</h4>
-          <p>Tap the big <b>+</b> at the top to put a ramp on the board, then tap
-             empty board to drop the ball. The bag beside it holds your items. You never steer the
-             ball - you set the board up beforehand and watch it play out.</p>
-          <p>Tap a ramp you have placed to select it: drag it to move it, drag
-             either end to turn it, or hit the <b>&times;</b> to take it back.
-             Missing costs you nothing but the ball - your ramps stay put so the
-             next go is an adjustment, not a rebuild.</p>
+          <p><b>Drag across the board to draw a ramp.</b> Where you press is one
+             end, where you let go is the other - so one drag sets where it is,
+             how long it is and which way it points. Then <b>tap</b> empty board
+             to drop the ball. You never steer the ball: you set the board up
+             beforehand and watch it play out.</p>
+          <p>A drag draws, a tap drops, and neither can be the other. The counter
+             at the top left says how many ramps this board will take. The
+             <b>bag</b> beside the level number holds the items you own.</p>
+          <p>Tap a ramp you have placed to select it: drag the middle to move it,
+             drag either end to reshape it, or hit the <b>&times;</b> to take it
+             back. Missing costs you nothing but the ball - your ramps stay put so
+             the next go is an adjustment, not a rebuild.</p>
 
           <h4>On the board</h4>
           {GLOSSARY.map(g => (
@@ -55,13 +63,37 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
 
           <h4>Spare ramps</h4>
           <p>Every level hands you its own ramp budget, and that never changes. A
-             <b>spare</b> is one extra ramp you own outright and can spend on any
-             level, whenever you want: tap the <b>Ramps</b> counter to put one on
-             the board you are looking at.</p>
-          <p>A spare is spent the moment you tap, and it does not follow you to the
-             next level. Spares never count toward the star for coming in under the
-             budget &mdash; that is always measured against the ramps the level itself
-             gave you, so a spare can buy you a solution but never a star.</p>
+             <b>spare</b> is one extra ramp you own outright, and it is spent
+             automatically: once a board's own ramps are gone, the next one you
+             draw comes out of the drawer. The <b>+N</b> on the ramps counter is
+             what is in there.</p>
+          <p>A spare is spent by a ramp you actually keep - a drag too short to
+             become one costs nothing - and it does not follow you to the next
+             level. Spares never count toward the star for coming in under the
+             budget &mdash; that is always measured against the ramps the level
+             itself gave you, so a spare can buy you a solution but never a star.</p>
+
+          <h4>Boosters</h4>
+          <p>From level <b>{BOOSTER_UNLOCK_LEVEL}</b> you can carry your own
+             <b> boosters</b>, and the first one is free. Open the bag, tap the
+             booster, then drag it where you want it and drag the knob on its
+             nose to point it. The ball leaves along that arrow at a fixed
+             speed, every time.</p>
+          <p>A booster is only taken out of your bag if the ball actually goes
+             <b> through</b> it and that drop <b>wins</b>. Place it, miss, move
+             it, drop again as often as you like &mdash; it costs nothing until
+             it works. More are
+             <b> {BOOSTER_PRICE}</b> coins each in the shop, and a few boards
+             late in the game cannot be solved without one.</p>
+
+          <h4>Mystery boxes</h4>
+          <p>Some boards carry a <b>chest</b>. Hit it with the ball on the way
+             past and it pays out something random: coins, balls, a spare ramp,
+             occasionally a booster or a free spin of the wheel. It never
+             changes where the ball goes, so it is always worth routing through
+             if you can.</p>
+          <p>Each chest can be opened <b>once</b>, and it stays opened &mdash;
+             replaying the level shows the empty outline where it was.</p>
 
           <h4>Level rating</h4>
           <p>Separate from the gold star pickups. Clearing a level earns one to

@@ -23,6 +23,15 @@ export interface PortalDef { id?: string; a: PortalEnd; b: PortalEnd; }
 export type BreakableDef = Circle;
 export type StarDef = Vec;
 
+/** A MYSTERY BOX: a position, and nothing else.
+
+    What it pays is deliberately NOT authored. The reward is rolled when the
+    ball touches it (see RewardManager.rollBoxPrize), so the same field can be
+    dropped onto any level - the frozen Verdholm twenty included - without
+    anyone having to decide what that level's box is worth, and without a
+    level's data having to change when the prize table is retuned. */
+export type BoxDef = Vec;
+
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
     the same shape of data - what differs is entirely what contact means. The
     red obstacle deflects; this ends the drop. */
@@ -68,10 +77,19 @@ export interface RawLevel {
   breakables?: BreakableDef[];
   stars?: StarDef[];
   fires?: FireDef[];
+  /** Optional bonus pickups. Scenery to the physics, like stars: a box can
+      never change where the ball goes, which is what makes it safe to add to
+      a level whose solution is already proved. */
+  boxes?: BoxDef[];
   target: Circle;
   /** Absent on every level that came before it, which is what keeps a static
       target a zero-migration default. */
   targetMove?: TargetMove;
+  /** This board cannot be solved with ramps alone: it needs a booster out of
+      the player's own bag. A capstone marker, and a CLAIM - the solver sweep
+      proves both halves of it (see tests/items.test.mjs), so it may only be
+      set on a level that has been through that gate. */
+  needsBooster?: boolean;
 }
 
 /** A level after normalisation: every list present, walls built. The
@@ -86,6 +104,7 @@ export interface Level extends RawLevel {
   breakables: BreakableDef[];
   stars: StarDef[];
   fires: FireDef[];
+  boxes: BoxDef[];
   walls: Segment[];
 }
 

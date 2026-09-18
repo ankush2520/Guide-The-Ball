@@ -4,10 +4,28 @@
    Adopts the renderer's canvas into the layout and owns every
    pointer gesture on the board.
 
-   Nothing is DRAWN here any more: ramps come out of the
-   inventory popup (InventoryPanel). The board handles only what
-   is already on it - select a ramp, move it, turn it by an end,
-   delete it with its × - and a tap on empty board drops the ball.
+   A RAMP IS DRAWN HERE. A drag that starts on empty board is a
+   new ramp: the press is one end, the finger is the other, and
+   what is on screen while you drag is exactly what gets placed.
+   Position, length and angle in one gesture.
+
+   That shares the empty board with the drop, and the two are
+   told apart by the same slop the tap already used: let go
+   without having moved and it is a tap, which drops the ball;
+   move past TAP_SLOP and it is a ramp. A drag can never drop,
+   and a tap can never draw.
+
+   Everything already ON the board comes first, unchanged: select
+   a ramp, drag an end to reshape it, drag the middle to move it,
+   × to delete.
+
+   A placed BOOSTER is handled by the same grammar, deliberately:
+   tap to select, drag the body to move, drag the knob on its
+   nose to aim, × to take it back. It is tested BEFORE the ramps,
+   so a booster sitting over one can still be picked up - what is
+   on top is what you get. It is the one thing here that is NOT
+   drawn: an item comes out of the bag with its shape already
+   decided, and only its place and heading are the player's.
 
    All hit-testing is done in BOARD coordinates, so a grab radius
    means the same thing whatever size the canvas is displayed at.
@@ -16,7 +34,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { H, RAMP_HT, BOARD } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
-import { DEL_GRAB, PICK_PAD } from '../managers/LevelManager';
+import { DEL_GRAB, PICK_PAD, AIM_GRAB } from '../managers/LevelManager';
 
 /* `children` is painted ON the board (the status caption). Nothing sits
    under the board any more - the level chip moved into the HUD, and the
@@ -125,7 +143,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   useEffect(() => {
     const stop = (e: Event) => e.preventDefault();
     const onTouchMove = (e: TouchEvent) => {
-      if (controller.dragging) e.preventDefault();
+      if (controller.dragging || controller.boosterDrag || controller.draft)
+        e.preventDefault();
     };
     canvas.addEventListener('touchstart', stop, { passive: false });
     document.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -156,6 +175,36 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     dragMoved.current = false;
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
+
+    /* 0. the selected booster's own controls, for the same reason the ramp's
+          come first below: a control the player can see has to win over
+          whatever it happens to be drawn on top of */
+    const selB = controller.selectedBooster;
+    const sb = selB >= 0 ? levels.boosterAt(selB) : undefined;
+    if (sb) {
+      const del = levels.boosterDeleteAt(sb);
+      if (Math.hypot(p.x - del.x, p.y - del.y) <= DEL_GRAB) {
+        controller.removeBooster(selB); return;
+      }
+      const knob = levels.boosterHandleAt(sb);
+      if (Math.hypot(p.x - knob.x, p.y - knob.y) <= AIM_GRAB) {
+        controller.boosterDrag = { mode: 'aim', ix: selB, lx: p.x, ly: p.y }; return;
+      }
+      if (Math.hypot(p.x - sb.x, p.y - sb.y) <= sb.r + PICK_PAD) {
+        controller.boosterDrag = { mode: 'move', ix: selB, lx: p.x, ly: p.y }; return;
+      }
+    }
+
+    /* 0b. any other placed booster: the tap selects it, and the same gesture
+           can go straight on to dragging it */
+    const pickB = levels.pickBooster(p.x, p.y);
+    if (pickB >= 0) {
+      controller.selectedBooster = pickB;
+      controller.selected = -1;
+      controller.boosterDrag = { mode: 'move', ix: pickB, lx: p.x, ly: p.y };
+      controller.notifyRampsChanged();
+      return;
+    }
 
     /* 1. the selected ramp's own controls win over everything else */
     const sel = controller.selected;
@@ -188,23 +237,39 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       return;
     }
 
-    /* 3. empty board. With a ramp selected, the tap only puts it down -
-          dropping the ball on it would spend a ball the player never meant
-          to. Otherwise it is the drop, decided on release. */
-    if (controller.selected >= 0) {
-      controller.selected = -1; controller.notifyRampsChanged();
+    /* 3. empty board. With something selected, the gesture only puts it down -
+          drawing or dropping straight off a deselect is a move the player did
+          not ask for. Otherwise it is a ramp if it travels and the drop if it
+          does not, decided on release. */
+    if (controller.selected >= 0 || controller.selectedBooster >= 0) {
+      controller.selected = -1; controller.selectedBooster = -1;
+      controller.notifyRampsChanged();
       return;
     }
     tap.current = { x: p.x, y: p.y, ripple: ripple(e) };
+    /* Armed now, drawn from the first move. With no ramps left this simply
+       does not start, and the gesture stays a tap - which is the right
+       outcome: there is nothing to draw, but there is still a ball to drop. */
+    controller.beginDraft(p);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     const p = toBoard(e);
+    const bd = controller.boosterDrag;
+    if (bd) {
+      if (!levels.boosterAt(bd.ix)) { controller.boosterDrag = null; return; }
+      if (bd.mode === 'move') levels.moveBoosterBy(bd.ix, p.x - bd.lx, p.y - bd.ly);
+      else levels.aimBoosterTo(bd.ix, p);
+      if (p.x !== bd.lx || p.y !== bd.ly) dragMoved.current = true;
+      bd.lx = p.x; bd.ly = p.y;
+      e.preventDefault();
+      return;
+    }
     const drag = controller.dragging;
     if (drag) {
       if (!levels.rampAt(drag.ix)) { controller.dragging = null; return; }
       if (drag.mode === 'move') levels.moveRampBy(drag.ix, p.x - drag.lx, p.y - drag.ly);
-      else levels.rotateRamp(drag.ix, drag.mode === 'p1' ? 1 : 2, p);
+      else levels.moveRampEnd(drag.ix, drag.mode === 'p1' ? 1 : 2, p);
       if (p.x !== drag.lx || p.y !== drag.ly) dragMoved.current = true;
       drag.lx = p.x; drag.ly = p.y;
       e.preventDefault();
@@ -215,16 +280,35 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       t.ripple?.remove();
       tap.current = null;                   // a slide, not a tap
     }
+    /* The ramp follows the finger from here. Updated even inside the slop, so
+       the line is already the right length the instant it appears rather than
+       jumping to catch up. */
+    if (controller.draft) {
+      controller.updateDraft(p);
+      e.preventDefault();
+    }
   };
 
   const endGesture = () => {
     const t = tap.current;
     tap.current = null;
+    if (controller.boosterDrag) {
+      controller.boosterDrag = null;
+      controller.boosterAdjusted();
+      return;
+    }
     if (controller.dragging) {
       controller.dragging = null;
       if (dragMoved.current) controller.rampAdjusted();
       else controller.notifyRampsChanged();
       return;
+    }
+    /* A DRAG PLACES THE RAMP, A TAP DROPS. `t` survives only if the finger
+       never left the slop, so the two can never both fire: the draft is
+       thrown away under MIN_RAMP, and a tap's draft is always under it. */
+    if (controller.draft) {
+      const drew = controller.commitDraft();
+      if (drew) { t?.ripple?.remove(); return; }
     }
     if (!t) return;
     t.ripple?.classList.add('go');
@@ -244,6 +328,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
          onPointerCancel={() => {
            tap.current?.ripple?.remove(); tap.current = null;
            controller.dragging = null;
+           controller.boosterDrag = null;
+           controller.cancelDraft();
            controller.notifyRampsChanged();
          }}>
       {skippable && (

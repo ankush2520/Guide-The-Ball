@@ -1,15 +1,23 @@
 /* ============================================================
    THE SHOP
 
-   One direction only: coins buy balls and spare ramps, and
-   nothing sells them back. That is what keeps the wallet legible
-   - a coin is always worth exactly what this panel says.
+   One direction only: coins buy balls, spare ramps and
+   boosters, and nothing sells them back. That is what keeps the
+   wallet legible - a coin is always worth exactly what this
+   panel says.
 
    Bundles rather than a quantity stepper. A stepper is three
    taps and a sum before you learn the price; a row of bundles
    states the whole offer at a glance, and the ones you cannot
    afford say so by being disabled rather than by failing when
    pressed.
+
+   The BOOSTER section is not here at all before level 21. It is
+   not greyed out and it is not teased: an item the player has
+   never seen on a board cannot be shopped for, and a locked row
+   in a shop is just an advertisement. The wallet refuses the
+   purchase as well - see buyBoosters - because a section that
+   merely is not rendered is not a rule.
 
    The bundles and their prices live on RewardManager, not here.
    A shop that names its own quantities and asks the wallet to
@@ -18,7 +26,8 @@
    two must come from one table.
    ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
-import { BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
+import { BALL_PRICE, RAMP_PRICE, BOOSTER_PRICE, BOOSTER_UNLOCK_LEVEL,
+         BALL_BUNDLES, RAMP_BUNDLES, BOOSTER_BUNDLES,
          type Bundle } from '../managers/RewardManager';
 
 /* How much better than buying singles this row is, as whole percent. The
@@ -87,6 +96,43 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
             In your drawer: <b>{rewards.extraRamps}</b> spare
             ramp{rewards.extraRamps === 1 ? '' : 's'}.
           </p>
+
+          {rewards.boostersUnlocked && (
+            <>
+              <h4 id="shop-boosters-head">Boosters</h4>
+              <p className="shopnote">
+                Place one on any board and it fires the ball along its arrow.
+                You are only charged when a drop that actually <b>fires</b> one
+                goes on to win - misses are free, and so is a win it had no
+                part in. {BOOSTER_PRICE} coins each, and fewer the more you
+                take.
+              </p>
+              <div className="buyrow">
+                {BOOSTER_BUNDLES.map(b => {
+                  const cost = rewards.boosterCost(b.n);
+                  const off = saving(b, BOOSTER_PRICE);
+                  return (
+                    <button key={b.n} className="buybtn" id={`btn-buy-boosters-${b.n}`}
+                            disabled={!rewards.canAfford(cost)}
+                            onClick={() => rewards.buyBoosters(b.n)}>
+                      <b><i className="boostmark" />{b.n}</b>
+                      <span className="price"><i className="coin" />{cost}</span>
+                      {off > 0 && <span className="save">{off}% off</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="shopnote" id="shop-boostercount">
+                In your bag: <b>{rewards.extraBoosters}</b>
+                {' '}booster{rewards.extraBoosters === 1 ? '' : 's'}.
+              </p>
+            </>
+          )}
+          {!rewards.boostersUnlocked && (
+            <p className="shopnote" id="shop-boosters-locked">
+              Boosters unlock at level {BOOSTER_UNLOCK_LEVEL}.
+            </p>
+          )}
         </div>
 
         <div className="row">

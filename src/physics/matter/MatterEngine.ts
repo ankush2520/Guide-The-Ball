@@ -39,7 +39,7 @@ import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '.
 import { mulberry32, falses, closestOnSeg } from '../math';
 import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
-  SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, PORTAL_CD, STAR_R,
+  SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, PORTAL_CD, STAR_R, BOX_R,
   MAX_STEPS, REST_STEPS, REST_PX,
   OB_JITTER, OB_MAX_DEV, H, BOARD,
 } from '../constants';
@@ -107,7 +107,8 @@ export class MatterBall implements BallState {
   broken: boolean[];
   justBroke: number[] = [];
   got: boolean[];
-  stars = 0; boosts = 0; teleports = 0;
+  gotBox: boolean[];
+  stars = 0; boosts = 0; teleports = 0; boxes = 0;
 
   restX: number; restY: number; restAt = 0;
   restMin = Infinity;
@@ -131,6 +132,7 @@ export class MatterBall implements BallState {
     this.boostIn = falses(lv.boosters.length);
     this.broken = broken ? broken.slice() : falses(lv.breakables.length);
     this.got = falses(lv.stars.length);
+    this.gotBox = falses(lv.boxes.length);
     this.rng = mulberry32(seed >>> 0);
 
     this.engine = Engine.create();
@@ -255,6 +257,7 @@ export class MatterBall implements BallState {
       spdMin: this.spdMin, spdMax: this.spdMax, vyMax: this.vyMax,
       restMin: this.restMin, secs: this.steps / 60,
       stars: this.stars, boosts: this.boosts, teleports: this.teleports,
+      boxes: this.boxes,
       broken: this.broken.slice(), bounces: this.bounces,
       x: this.x, y: this.y,
     };
@@ -412,6 +415,23 @@ export class MatterEngine implements PhysicsEngine {
       if (Math.hypot(b.x - st.x, b.y - st.y) <= STAR_R + BALL_R) { b.got[k] = true; b.stars++; }
     }
 
+    /* Mystery boxes: scenery too, and for the same reason - a bonus pickup
+       that nudged the ball would change the solution of every level it was
+       added to, and these are added to all 150.
+
+       Tested against the SWEPT segment rather than the point, unlike the
+       stars above. A boosted ball covers over 20 units in a step and a box is
+       26 across, so a point test misses one it went straight through - and a
+       pickup the ball visibly passed through without collecting reads as a
+       bug, where a star simply reads as a near miss. */
+    for (let k = 0; k < lv.boxes.length; k++) {
+      if (b.gotBox[k]) continue;
+      const bx = lv.boxes[k];
+      if (segNear(b.px, b.py, b.x, b.y, bx.x, bx.y) <= BOX_R + BALL_R) {
+        b.gotBox[k] = true; b.boxes++;
+      }
+    }
+
     /* The kick outlives the step that applied it. Both clamps below would
        otherwise take it straight back: terminalVy alone drags a downward
        booster from 24 to 9 in the frame it fired. */
@@ -483,6 +503,19 @@ function outwardNormal(b: MatterBall, tag: BodyTag, lv: Level,
   const dx = b.x - cx, dy = b.y - cy;
   const d = Math.hypot(dx, dy);
   return d < 1e-6 ? { x: 0, y: -1 } : { x: dx / d, y: dy / d };
+}
+
+/* Distance from a point to the segment the ball travelled this step. The
+   pickup pass uses it so a fast ball cannot tunnel straight through a box
+   between two frames. */
+function segNear(x1: number, y1: number, x2: number, y2: number,
+                 px: number, py: number): number {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0
+    ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2))
+    : 0;
+  return Math.hypot(px - (x1 + dx * t), py - (y1 + dy * t));
 }
 
 function inRect(x: number, y: number, z: { x: number; y: number; w: number; h: number }): boolean {

@@ -28,8 +28,20 @@ Ordinals for now ("Solmesa I," "Solmesa II"...) — shippable immediately. Flavo
 ## Music (deferred, hooks only for now)
 Ambient loop + one accent sting per country, not full compositions — keeps file size reasonable against CrazyGames' fast-load requirements. Actual sourcing/creation happens whenever audio work is tackled on the roadmap; for now just wire up the per-country structure so it's a drop-in later.
 
+## Booster economy (shipped)
+The booster is both a level mechanic and a **player-owned item**, and the second half is what Solmesa unlocks. From level 21 it can be bought (30 coins, the ramp's table at twice the price) and placed on any board like a ramp: tap it out of the bag, drag to position, drag the knob on its nose to aim. One is given free the first time level 21 is reached, once ever. Before that the item does not exist anywhere — not in the bag, not in the shop, not in a mystery box's prize table — because a player meets a booster as furniture on the board first and only then as a thing they can own.
+
+It is the one item **charged for only when it works**: placing costs nothing, missing costs nothing, and it leaves the bag only when the ball really fires through it and that drop wins. A spare ramp is the opposite (spent on placement) because what a ramp buys is a bigger budget whatever happens next, where a booster buys the solve.
+
+Solmesa's closing board, level 30, **requires** one: its target sits at the height the ball is dropped from, right across the board, and a lossy bounce can never climb back there. Both halves of that — unsolvable by ramps, solvable by a booster — are swept in `tests/items.test.mjs` and gate the level shipping at all.
+
+## Mystery boxes (shipped)
+A chest on every one of the 150 levels, collected by touching it mid-drop. Scenery to the physics, exactly like a star, which is what made it safe to add to the frozen Verdholm twenty without re-verifying a solution. Placement is semi-procedural (`tools/genboxes.mjs`): a spot only qualifies if a traced drop actually reached it, and spots on the do-nothing drop line are rejected so collecting one is always a decision.
+
+The reward is rolled at collection time from one weighted table — coins, balls, a spare ramp, a booster, or a free spin outside the daily cooldown — never authored per level. Boosters are removed from the table below level 21 rather than re-rolled. Each box is claimed once per level, for good, so the whole game's boxes are a fixed purse rather than an income.
+
 ## Mechanics
-- **Boosters** — deterministic-direction speed bumper.
+- **Boosters** — deterministic-direction speed bumper. Also a player-owned item from level 21; see Booster economy above.
 - **Wind zones** — static region, constant push while ball is inside. Windemere (country 3) uses a randomized variant: gust direction/strength vary by level instead of being fixed, for extra unpredictability within an otherwise solvable, deterministic-per-seed drop.
 - **Slippery zones** — less speed lost on bounces inside.
 - **Portals** — paired teleporters, direction preserved.

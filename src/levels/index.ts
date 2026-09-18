@@ -18,6 +18,7 @@ export function initLevel(raw: RawLevel): Level {
     breakables: raw.breakables ?? [],
     stars: raw.stars ?? [],
     fires: raw.fires ?? [],
+    boxes: raw.boxes ?? [],
     walls: [],
   };
   /* A moving target may only be an OPEN one. Walls are collidable geometry

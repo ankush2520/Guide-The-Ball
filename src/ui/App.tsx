@@ -142,7 +142,6 @@ function Game() {
            onPointerDown={e => { if (e.target === e.currentTarget) controller.drop(); }}>
         <Hud onOpenSettings={() => open('settings')}
              onOpenItems={() => open('items')}
-             onOpenShop={() => open('shop')}
              onOpenLevels={() => open('levels')} />
         <GameCanvas>
           <Status />

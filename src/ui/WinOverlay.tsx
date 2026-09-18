@@ -67,6 +67,14 @@ export function WinOverlay() {
               <i className="pip" /><b>+{card.bonus}</b>
             </span>
           )}
+          {/* The one thing on this card that went the other way. A booster is
+              charged for by the win, so the win is where it has to be shown -
+              a bag that is quietly one lighter afterwards reads as a bug. */}
+          {card.boosters > 0 && (
+            <span className="reward spent" id="ov-boosters" title="Boosters used">
+              <i className="boostmark" /><b>&minus;{card.boosters}</b>
+            </span>
+          )}
         </div>
         {/* Two choices, not three. Replay and Adjust both meant "stay on this
             level" and the difference between them - one re-drops for you, the

@@ -26,6 +26,8 @@ export interface DrawContext {
       state, read by the entities that have two appearances. */
   broken: boolean[];
   got: boolean[];
+  /** Which mystery boxes have been opened THIS DROP. */
+  gotBox: boolean[];
   /** Elapsed SIMULATION time in steps, fractional, and 0 whenever no drop is
       running. The one thing on the board that is not drawn off the wall
       clock: a patrolling target has to be painted where the physics says it
@@ -38,8 +40,9 @@ export type EntityKind =
   | 'target'
   | 'wall'
   | 'obstacle' | 'fire'
-  | 'breakable' | 'booster' | 'portal' | 'star'
-  | 'ramp';
+  | 'breakable' | 'booster' | 'portal' | 'star' | 'box'
+  /* the two the PLAYER makes */
+  | 'ramp' | 'myboost';
 
 /* Paint order, low to high. Zones are GROUND: they sit under everything so
    the ball, the ramps and the obstacles all read as being ON the board
@@ -52,7 +55,13 @@ export const LAYER: Record<EntityKind, number> = {
      and are read against each other, so neither may cover the other. */
   obstacle: 3, fire: 3,
   breakable: 4, booster: 4, portal: 4, star: 4,
-  ramp: 5,
+  /* A mystery box rides with the other pickups, and after the star in
+     registry order so two that overlap read box-over-star - the box is the
+     rarer thing and the one worth noticing. */
+  box: 4,
+  /* What the player placed paints ON TOP of the board's own furniture, so a
+     booster dropped over an obstacle is visibly in front of it. */
+  ramp: 5, myboost: 5,
 };
 
 export abstract class Entity<TDef = unknown> {

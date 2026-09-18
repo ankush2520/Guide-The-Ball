@@ -36,7 +36,8 @@
 import { useEffect, useRef } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Sound } from '../audio/Sound';
-import type { PrizeKind } from '../core/events';
+import type { FlightKind } from '../core/events';
+import { BOARD, H } from '../physics/constants';
 import type { WinCard } from '../managers/GameController';
 
 const COINS = 3;
@@ -51,12 +52,20 @@ const FLIGHT = 2060;         // ms in the air
    where three random offsets just look like a mistake. */
 const FAN = 19;
 
-/* Where each currency flies, and what it looks like on the way. The marks
-   are the same three the HUD, the shop and the win card use. */
-const LANDS: Record<PrizeKind, { to: string; mark: string }> = {
-  coins: { to: '.counter.coins .coin', mark: 'flycoin' },
-  balls: { to: '.counter.balls .pip',  mark: 'flyball' },
-  ramps: { to: '.counter.ramps',       mark: 'flyramp' },
+/* Where each payout flies, and what it looks like on the way. The marks are
+   the same ones the HUD, the shop and the win card use.
+
+   The last two land on BUTTONS rather than on counters, because that is
+   honestly where those two things live: a booster goes into the bag, and a
+   free spin goes to the gear, which is the wheel's door and lights up the
+   moment the token arrives. Neither has a number to merge with, so each
+   arrival is the button's own bump instead. */
+const LANDS: Record<FlightKind, { to: string; mark: string }> = {
+  coins:    { to: '.counter.coins .coin', mark: 'flycoin' },
+  balls:    { to: '.counter.balls .pip',  mark: 'flyball' },
+  ramps:    { to: '.counter.ramps',       mark: 'flyramp' },
+  boosters: { to: '#btn-inventory',       mark: 'flyboost' },
+  spin:     { to: '#btn-settings',        mark: 'flyspin' },
 };
 
 interface Pt { x: number; y: number; }
@@ -89,10 +98,14 @@ const easeInOut = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 /** Fly a payout from `fromSel` to the counter that holds it. Safe to call
-    when either end is missing - it simply does nothing. */
-export function flyReward(kind: PrizeKind, fromSel: string): void {
+    when either end is missing - it simply does nothing.
+
+    `from` may also be a viewport POINT, which is how a mystery box launches
+    its reward out of the chest the ball just hit rather than out of a panel
+    that is not on screen. */
+export function flyReward(kind: FlightKind, fromSel: string | Pt): void {
   const land = LANDS[kind];
-  const from = centreOf(fromSel);
+  const from = typeof fromSel === 'string' ? centreOf(fromSel) : fromSel;
   const to = centreOf(land.to);
   if (!layerEl || !from || !to) return;
 
@@ -106,7 +119,7 @@ export function flyReward(kind: PrizeKind, fromSel: string): void {
 }
 
 export function CoinFlight() {
-  const { controller } = useGame();
+  const { bus, controller } = useGame();
   useGameVersion();
   const host = useRef<HTMLDivElement>(null);
   /* The card object is new on every win, which makes it the identity to test:
@@ -129,20 +142,51 @@ export function CoinFlight() {
     flyReward('coins', '#ov-coins');
   }, [showing, card]);
 
+  /* ============================================================
+     A MYSTERY BOX PAYING OUT
+
+     The reward leaves the CHEST, not a card: the box is on the
+     board, in the middle of a drop, and there is no panel for it
+     to come out of. So the controller says what was won and
+     where in BOARD coordinates, and this turns that into a point
+     on screen using the canvas's own rect - the same mapping
+     GameCanvas uses for the tap ripple, and the only place in
+     the flight layer that knows the board has a coordinate
+     system at all.
+     ============================================================ */
+  useEffect(() => bus.on('box:reward', ({ kind, x, y }) => {
+    const board = document.getElementById('board');
+    if (!board) return;
+    const r = board.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    flyReward(kind, { x: r.left + ((x - BOARD.x0) / BOARD.w) * r.width,
+                      y: r.top + (y / H) * r.height });
+  }), [bus]);
+
   return <div className="coinfly" ref={host} aria-hidden="true" />;
 }
 
+/* What each arrival lands ON. The three currencies take their counter; the
+   bag and the gear take the hit themselves, since they are what holds the
+   thing that just arrived. */
+const TOOK: Record<FlightKind, string> = {
+  coins: '.counter.coins',
+  balls: '.counter.balls',
+  ramps: '.counter.ramps',
+  boosters: '#btn-inventory',
+  spin: '#btn-settings',
+};
+
 /** The counter takes the hit, so the arrival lands on something. */
-function bump(kind: PrizeKind): void {
-  const chip = document.querySelector(
-    kind === 'coins' ? '.counter.coins' : kind === 'balls' ? '.counter.balls' : '.counter.ramps');
+function bump(kind: FlightKind): void {
+  const chip = document.querySelector(TOOK[kind]);
   if (!chip) return;
   chip.classList.remove('took');
   void (chip as HTMLElement).offsetWidth;     // restart the animation
   chip.classList.add('took');
 }
 
-function launch(layer: HTMLElement, from: Pt, to: Pt, i: number, kind: PrizeKind): void {
+function launch(layer: HTMLElement, from: Pt, to: Pt, i: number, kind: FlightKind): void {
   const el = document.createElement('i');
   el.className = `flymark ${LANDS[kind].mark}`;
 

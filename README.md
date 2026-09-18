@@ -149,6 +149,7 @@ Flavour names layer in later as a pure data change: set `city` on a level and
 | `portals` | A pair of ends. Direction is preserved unless the exit states a `facing`. |
 | `breakables` | Bounces exactly like an obstacle - same code - then is gone for the rest of the session. |
 | `stars` | Pickups. Never touch the trajectory; the suite asserts a run is bit-identical with and without them. |
+| `boxes` | Mystery boxes. Same deal as stars - scenery to the physics - which is what made it safe to add one to all 150 levels, Verdholm's frozen twenty included. Collected on the ball's *swept segment*, not its position, because a boosted ball covers 20px a step and would otherwise pass through one. |
 
 **`SPEED_CAP` is the universal clamp**, set at exactly `hypot(MAX_VX,
 TERMINAL_VY)` - the fastest the base game can already go. That makes it a
@@ -240,6 +241,11 @@ winnable by blind guessing, inside that slot's difficulty band, and *fair* -
 the winning line may not depend on random obstacle bounces, which is the
 level-20 lesson encoded as a gate. Only the boss level of each country is
 shaped by hand (via its own branch in the template).
+
+A level carrying `needsBooster` is **kept** by a regeneration rather than
+re-rolled: it was authored by hand against a claim the generator cannot make
+(see Items, below), and re-rolling it would swap a proved board for an
+ordinary one.
 
 Because the solver must find ramps a booster or portal throws the ball
 towards, it sweeps the whole board, not just the spawn column. `tests/levels.mjs`
@@ -423,31 +429,50 @@ Ramp in the inventory) moves one spare from the drawer onto the board, and
 both show the spare count before they are tapped. It is spent at the tap, not at the
 drop.
 
-## Items and the inventory
+## Drawing ramps, and the inventory
 
-Ramps are not drawn. The big gold **+** in the centre of the top bar puts a
-ramp on the board in one tap — in the middle and already selected — and its
-badge counts what this level has left (a gold `+N` shows spares). It pulses
-while there is a ramp to place, goes still once they are all down, and with
-no spares left either it greys out and opens the shop. The small **bag**
-beside the settings gear opens the full inventory (`InventoryPanel`), which is
-where future items will be picked from.
+**A ramp is drawn.** A drag that starts on empty board *is* the ramp: the
+press is one end, the finger is the other, and what is on screen while you
+drag is what gets placed. One gesture sets position, length and angle
+together, so there is no default shape to place and then correct. Length is
+the player's, between `MIN_RAMP` (28) and `MAX_RAMP` (160) — a drag under the
+floor is thrown away as a twitch, one over the ceiling is truncated rather
+than refused.
 
-The level name is a pill directly under the board (`LevelPill`); tapping it
-opens the level picker. On the board a selected ramp can be **moved** (drag it),
-**turned** (drag either end — it pivots on its middle) and **removed** (its ×).
-A tap on empty board drops the ball; a press that slides does not.
+The drop shares that empty board, and the two are told apart by the tap's own
+slop: let go without having travelled and it is a tap, which drops; travel and
+it is a ramp. **A drag can never drop, and a tap can never draw.** The drag is
+only charged for when a ramp is actually kept, so a discarded scribble never
+touches the level's budget or a spare.
 
-Items have a **fixed size**. A straight ramp is always `RAMP_LEN` (120) long —
-the length the level generator proves boards with. `node
-tools/fixed-ramp-sweep.mjs 120` checks all 150 levels with every ramp fixed at
-that length; every one is still winnable. Re-run it before changing
-`RAMP_LEN` or adding an item of another size.
+On the board a selected ramp is **moved** (drag the middle), **reshaped**
+(drag either end — that end follows the finger, the other stays put, so length
+and angle change together) and **removed** (its ×). An edit is held to the same
+length limits the drawing tool enforces: an edited ramp must stay a ramp you
+could have drawn by hand.
+
+The top bar carries **counts on the left** — coins, balls, and the ramps left
+on this board (with a gold `+N` when the drawer holds spares) — and on the
+right the level pill, the **bag** and the settings gear. There is no `+`
+button: a spawn button has nothing to do once ramps are drawn, and the count
+it used to wear on its badge is now a counter chip like the other two.
+
+The **bag** (`InventoryPanel`) is the inventory tray: things the player OWNS
+and places, which today means boosters. A ramp is deliberately not in it —
+drawn freehand out of a per-level budget, not owned — and that split is the
+whole input model: the ramp is the expressive tool with no fixed shape, an
+item is a scarce owned thing with a fixed one, taken out of the bag and then
+positioned and aimed. The tray links across to the shop; buying stays behind
+the gear as well.
+
+`RAMP_LEN` (120) is now only the length the **solver** draws with — the single
+canonical length the generator proves every board winnable at, so "this level
+has a solution" means one a hand-drawn ramp can match. `node
+tools/fixed-ramp-sweep.mjs 120` checks all 150 levels at exactly that length.
 
 Every kind of item is one row in `src/items/items.ts` plus a case in
-`GameController.itemCount` / `placeItem`. Only the straight ramp exists today;
-curved ramps and placeable boosters are meant to be added the same way. Level
-boosters are still part of the level data for now.
+`GameController.itemCount` / `placeItem`. Curved ramps, if they land, are
+items: a fixed shape you own, not a shape you draw.
 
 ## First-run walkthrough
 
@@ -458,10 +483,13 @@ waits for the player to actually do it:
 | Step | Says | Moves on when |
 |---|---|---|
 | intro | get the ball into the green target (a ring pulses round it) | "Let's go" |
-| add | tap the big + (it pulses faster) | a ramp is placed |
-| aim | drag it under the ball, tilt it by an end (arrow on the board) | the ramp is dragged, or "Done" |
+| draw | press and drag across the board (a dashed stroke with a finger travelling along it shows the gesture; the ramps counter leans in) | a ramp is drawn |
 | drop | tap empty space | the ball is dropped — tutorial complete |
 | retry | your ramp stays put, adjust and go again | "OK" (only after a missed first drop) |
+
+There is no "aim" step and nothing is missing: a drawn ramp was aimed by the
+drag that made it. That step only existed to undo a ramp the game had placed
+for you.
 
 The step is derived from the board each time (`GameController.tutorialStep`),
 so taking the ramp off goes back to "add". The bubble ignores the pointer
@@ -515,6 +543,57 @@ asked to draw the wheel as well.
 
     node tests/levels.mjs 0 19    # per-level winnability, precision, triviality
 
+### Items the player brings
+
+Two things are not authored into a level, so each one makes a claim the level
+data cannot check for itself. `npm test` runs `tests/items.test.mjs`, which
+proves both against the real simulator.
+
+**Boosters** unlock at level 21, the first board of Solmesa, and the player is
+given one free the first time they get there (once, ever - a persisted flag).
+Before that the item does not exist: not in the bag, not in the shop, and not
+in a mystery box's prize table. A placed booster is physically identical to an
+authored one - same def, same kick, read by the same loop in the engine - so
+it reaches the physics by being merged into the level the ball plays against
+(`LevelManager.playLevel`) rather than through any new code path.
+
+The one rule that is deliberately *not* the spare ramp's: **a booster is only
+charged for when a drop that actually fired it goes on to win.** A spare ramp
+is spent the moment it leaves the drawer, because what it buys is a bigger
+budget on this board whatever happens next. A booster buys the solve, so
+placing, missing, nudging and dropping again costs nothing - and neither does
+winning with one parked somewhere the ball never went, which would make "you
+only pay when it works" a lie in the one case a player would notice.
+
+**Level 30 requires one.** Its target sits at the height the ball is dropped
+from, right across the board: a ramp only redirects what is already falling,
+every bounce is lossy and the fall is speed-clamped, so the ball can never
+climb back to the height it started at - and it would have to, to be over
+there. The gate proves both halves and the level may not ship if either fails:
+no win from an exhaustive single-ramp sweep of the whole board at 1.5 degrees
+nor from 60,000 random two- and three-ramp layouts, and a win from one booster
+out of the bag on all seven seeds, from at least ten different placements.
+That negative is a search, not a proof - but it is a far wider search than a
+player can run by hand, and the board is built so the answer is obvious by
+construction.
+
+**Mystery boxes** are on all 150 levels, placed by `tools/genboxes.mjs`. A
+spot is only a candidate if the ball *actually visited it* in a traced drop
+under some ramp layout, so reachability is a replay of a run that happened
+rather than a claim about geometry; spots on the do-nothing drop line are then
+rejected, because a box you collect by not aiming is not a decision. The gate
+re-simulates every level with its box and again without it and requires the
+two to agree to the last decimal.
+
+What a box pays is rolled at collection time from one weighted table
+(`BOX_PRIZES`, weights totalling 100 so each reads as a percentage) - never
+authored per level, so retuning the drop rates touches no level data. Boosters
+are *removed* from the table below level 21 rather than re-rolled, or the
+weights would stop meaning what the table says. A box is claimed **once per
+level, for good**, and the claim is persisted: a bonus that could be farmed by
+replaying level 1 would be a better income than playing the game, which is the
+same reason a replay only pays a quarter of its coins.
+
 ## Layout
 
     index.html              Vite entry — a mount point, nothing else
@@ -522,8 +601,10 @@ asked to draw the wheel as well.
     legacy/original-game.html   the pre-rewrite single-file build, kept for
                                 reference
     tools/genlevels.mjs     semi-procedural generator + solver verification
+    tools/genboxes.mjs      places every level's mystery box, on a traced path
     tools/harness.mjs       bundles the physics into a blank page, no server needed
     tests/mechanics.mjs     per-mechanic isolation tests
+    tests/items.test.mjs    the booster/box solver gate (see Items below)
     tests/board.test.mjs    phone vs tablet board, over every level
     tests/play.test.mjs     UI, physics invariants, economy, portal compliance
     tests/smoke.test.mjs    end-to-end: boots, renders, drops a ball

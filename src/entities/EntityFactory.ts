@@ -14,7 +14,7 @@
    (see Entity), so the factory is a view over the level, never
    a copy of it.
    ============================================================ */
-import type { Level } from '../levels/types';
+import type { BoosterDef, Level } from '../levels/types';
 import { Entity, type EntityKind } from './Entity';
 import { Obstacle } from './Obstacle';
 import { FireObstacle } from './FireObstacle';
@@ -26,7 +26,9 @@ import { SlipperyZone } from './SlipperyZone';
 import { StarPickup } from './StarPickup';
 import { Target } from './Target';
 import { Wall } from './Wall';
+import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
+import { PlacedBooster } from './PlacedBooster';
 
 /* The registry is inherently heterogeneous - every entry pairs a different
    def type with the class that draws it - so the constructor signature is
@@ -51,8 +53,10 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   booster:   { ctor: Booster,      pick: lv => lv.boosters },
   portal:    { ctor: Portal,       pick: lv => lv.portals },
   star:      { ctor: StarPickup,   pick: lv => lv.stars },
-  // 'ramp' is deliberately absent: ramps are player-made, not level data,
-  // and are built one at a time by createRamp().
+  box:       { ctor: MysteryBox,   pick: lv => lv.boxes },
+  // 'ramp' and 'myboost' are deliberately absent: both are player-made, not
+  // level data, and are built one at a time by createRamp()/
+  // createPlacedBooster().
 };
 
 export class EntityFactory {
@@ -80,6 +84,12 @@ export class EntityFactory {
       data to be built from - it is created by a drag. */
   static createRamp(seg: { x1: number; y1: number; x2: number; y2: number }, index = 0): Ramp {
     return new Ramp(seg, index);
+  }
+
+  /** The player's other entity. Off the registry for the same reason the ramp
+      is: it comes out of the bag, not out of the level. */
+  static createPlacedBooster(def: BoosterDef, index = 0): PlacedBooster {
+    return new PlacedBooster(def, index);
   }
 }
 

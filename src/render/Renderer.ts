@@ -12,8 +12,8 @@
    ============================================================ */
 import { H, BALL_R, RAMP_HT, STEP_MS_DEFAULT } from './constants';
 import { BOARD } from '../physics/constants';
-import type { Level } from '../levels/types';
-import type { Entity } from '../entities/Entity';
+import type { BoosterDef, Level, Vec } from '../levels/types';
+import type { DrawContext, Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
 import { RAMP_STYLE } from '../entities/Ramp';
 import { Backdrop } from './Backdrop';
@@ -39,6 +39,10 @@ export interface RenderState {
   country: Country;
   entities: readonly Entity[];
   ramps: readonly Segment[];
+  /** The ramp being drawn right now, if any - not a ramp yet. */
+  draft: Segment | null;
+  /** Below this length a draft will be thrown away rather than placed. */
+  minRamp: number;
   selected: number;
   phase: Phase;
   clock: number;
@@ -50,12 +54,19 @@ export interface RenderState {
   ball: { x: number; y: number; px: number; py: number } | null;
   broken: boolean[];
   got: boolean[];
+  gotBox: boolean[];
   capture: CaptureState | null;
   captureMs: number;
   squash: Squash;
   deleteButtonAt: (s: Segment) => { x: number; y: number };
   handleR: number;
   delR: number;
+  /** The player's own boosters, and the grips of whichever is selected. */
+  boosters: readonly BoosterDef[];
+  selectedBooster: number;
+  boosterHandleAt: (b: BoosterDef) => Vec;
+  boosterDeleteAt: (b: BoosterDef) => Vec;
+  aimR: number;
   /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
       the board adds only what has to sit ON the board - see drawCoach. */
   tutorial: { step: string | null };
@@ -125,7 +136,7 @@ export class Renderer {
     else drawStarfield(ctx, s.clock);
 
     const g = { ctx, clock: s.clock, broken: s.broken, got: s.got,
-                simT: s.simT, level: s.level };
+                gotBox: s.gotBox, simT: s.simT, level: s.level };
 
     /* Entities paint themselves in factory order: zones are ground, then the
        target, walls, obstacles, and the mechanics that sit with them. */
@@ -140,8 +151,24 @@ export class Renderer {
     /* ramps - the player's own entities, drawn above the board furniture */
     for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
 
+    /* THE RAMP BEING DRAWN, in the same pen as a placed one so what you see
+       under your finger is what you are about to get. Translucent while it is
+       still too short to keep, which is the only warning the gesture needs:
+       let go here and nothing is placed. */
+    if (s.draft) {
+      const len = Math.hypot(s.draft.x2 - s.draft.x1, s.draft.y2 - s.draft.y1);
+      ctx.save();
+      if (len < s.minRamp) ctx.globalAlpha = 0.45;
+      drawSeg(ctx, s.draft, RAMP_HT, RAMP_STYLE);
+      ctx.restore();
+    }
+
     if (s.phase === 'plan' && s.selected >= 0 && s.selected < s.ramps.length)
       this.drawSelection(s, s.ramps[s.selected]);
+    if (s.phase === 'plan' && s.selectedBooster >= 0
+        && s.selectedBooster < s.boosters.length)
+      this.drawBoosterSelection(s, s.boosters[s.selectedBooster], g,
+        s.entities.find(e => e.kind === 'myboost' && e.index === s.selectedBooster));
 
     if (s.phase === 'plan') this.drawSpawnMarker(s.level);
     if (s.tutorial.step) this.drawCoach(s);
@@ -153,20 +180,75 @@ export class Renderer {
     this.drawBall(s);
   }
 
-  /* the ramp being edited: the circle its ends turn on, a halo so it reads
-     as picked out from the others, a grip at each end, and the delete button */
+  /* ============================================================
+     THE BOOSTER BEING EDITED
+
+     The same grammar as the selected ramp, so one lesson covers
+     both: a gold halo saying "this is the one", a grip you drag,
+     and the big red × that takes it back.
+
+     What differs is the third control. A ramp turns by either
+     end; a booster turns by ONE knob on its nose, joined to the
+     disc by a visible stalk and trailed by the line it will fire
+     along - because the heading is the whole item, and a player
+     aiming one needs to see the shot before they take it.
+     ============================================================ */
+  private drawBoosterSelection(s: RenderState, b: BoosterDef,
+                               g: DrawContext, ent?: Entity): void {
+    const ctx = this.ctx;
+    const a = b.angle * Math.PI / 180;
+    const knob = s.boosterHandleAt(b);
+    ctx.save();
+
+    /* The halo, the same amber the selected ramp wears - and like the ramp's,
+       the thing it picks out is drawn again ON TOP of it. A ring this thick
+       around a 60-unit disc otherwise swallows the nose, which is the one
+       part of a booster a player has to be able to see while aiming it. */
+    ctx.strokeStyle = 'rgba(255,210,63,.75)';
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI * 2); ctx.stroke();
+    ent?.draw(g);
+
+    /* THE SHOT LINE. A dashed ray along the heading, crawling outward so it
+       reads as live - this is the promise the booster makes, drawn before it
+       is taken rather than explained afterwards. */
+    ctx.strokeStyle = 'rgba(42,35,80,.34)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([9, 8]);
+    ctx.lineDashOffset = -(s.clock * 34) % 17;
+    ctx.beginPath();
+    ctx.moveTo(b.x + Math.cos(a) * (b.r + 6), b.y + Math.sin(a) * (b.r + 6));
+    ctx.lineTo(b.x + Math.cos(a) * 240, b.y + Math.sin(a) * 240);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // the stalk, so the knob is visibly PART of this booster
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x + Math.cos(a) * b.r, b.y + Math.sin(a) * b.r);
+    ctx.lineTo(knob.x, knob.y);
+    ctx.stroke();
+
+    ctx.beginPath(); ctx.arc(knob.x, knob.y, s.aimR, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd23f'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+
+    this.drawDeleteButton(s.boosterDeleteAt(b), s.delR);
+    ctx.restore();
+  }
+
+  /* the ramp being edited: a halo so it reads as picked out from the others,
+     a grip at each end, and the delete button.
+
+     NO PIVOT CIRCLE. There used to be a dashed ring through both ends, drawn
+     because an item was a fixed length and its ends really could only travel
+     round it. A ramp is drawn by hand again and an end goes wherever the
+     finger takes it, so that ring was describing a rule the game no longer
+     has - and a diagram of the wrong rule is worse than no diagram. */
   private drawSelection(s: RenderState, seg: Segment): void {
     const ctx = this.ctx;
     ctx.save();
-    // an item is a fixed length, so its ends can only travel round this circle
-    const mx = (seg.x1 + seg.x2) / 2, my = (seg.y1 + seg.y2) / 2;
-    ctx.strokeStyle = 'rgba(42,35,80,.28)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 7]);
-    ctx.beginPath();
-    ctx.arc(mx, my, Math.hypot(seg.x2 - seg.x1, seg.y2 - seg.y1) / 2, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
     ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(255,210,63,.75)';
     ctx.lineWidth = RAMP_HT * 2 + 16;
@@ -187,14 +269,22 @@ export class Renderer {
       ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
     }
 
-    const del = s.deleteButtonAt(seg);
+    this.drawDeleteButton(s.deleteButtonAt(seg), s.delR);
+    ctx.restore();
+  }
+
+  /* The × that takes a placed item back. Shared by the ramp and the booster:
+     one button, drawn one way, so "this removes it" is learned once. */
+  private drawDeleteButton(del: { x: number; y: number }, r: number): void {
+    const ctx = this.ctx;
+    ctx.save();
     ctx.fillStyle = 'rgba(42,35,80,.22)';
-    ctx.beginPath(); ctx.arc(del.x, del.y + 4, s.delR + 1.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(del.x, del.y, s.delR, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(del.x, del.y + 4, r + 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(del.x, del.y, r, 0, Math.PI * 2);
     ctx.fillStyle = OBSTACLE.base; ctx.fill();
     ctx.lineWidth = 3.5; ctx.strokeStyle = INK; ctx.stroke();
     ctx.lineCap = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = '#ffffff';
-    const k = s.delR * 0.42;
+    const k = r * 0.42;
     ctx.beginPath();
     ctx.moveTo(del.x - k, del.y - k); ctx.lineTo(del.x + k, del.y + k);
     ctx.moveTo(del.x + k, del.y - k); ctx.lineTo(del.x - k, del.y + k);
@@ -219,24 +309,26 @@ export class Renderer {
       ctx.lineDashOffset = -s.clock * 20;
       ctx.beginPath(); ctx.arc(t.x, t.y, t.r + 16 + k * 6, 0, Math.PI * 2); ctx.stroke();
     }
-    if (s.tutorial.step === 'aim' && s.ramps.length) {
-      const r = s.ramps[0];
-      const mx = (r.x1 + r.x2) / 2, my = (r.y1 + r.y2) / 2;
-      const tx = s.level.spawn.x, dx = tx - mx;
-      if (Math.abs(dx) > 40) {
-        const dir = Math.sign(dx), y = my - 34;
-        const x0 = mx + dir * 20, x1 = tx - dir * (8 + k * 6);
-        ctx.strokeStyle = 'rgba(255,170,0,.95)';
-        ctx.fillStyle = 'rgba(255,170,0,.95)';
-        ctx.lineWidth = 5; ctx.lineCap = 'round';
-        ctx.setLineDash([2, 10]);
-        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(x1 + dir * 12, y); ctx.lineTo(x1 - dir * 4, y - 10); ctx.lineTo(x1 - dir * 4, y + 10);
-        ctx.closePath(); ctx.fill();
-        ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
-      }
+    /* THE GESTURE ITSELF, shown rather than described: a stroke across the
+       ball's fall line with a hand travelling along it. It is drawn where a
+       first ramp actually wants to go, so copying it is also solving the
+       board - and it fades out the moment a draft starts, because by then the
+       player is doing the thing and a ghost under their finger is noise. */
+    if (s.tutorial.step === 'draw' && !s.draft) {
+      const y = H * 0.52, half = 58;
+      const x0 = s.level.spawn.x - half, x1 = s.level.spawn.x + half;
+      ctx.strokeStyle = `rgba(255,170,0,${0.45 + 0.35 * k})`;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 9;
+      ctx.setLineDash([3, 13]);
+      ctx.beginPath(); ctx.moveTo(x0, y + 16); ctx.lineTo(x1, y - 16); ctx.stroke();
+      ctx.setLineDash([]);
+      // the finger, sliding along it
+      const t = (s.clock * 0.55) % 1;
+      const fx = x0 + (x1 - x0) * t, fy = (y + 16) + (-32) * t;
+      ctx.beginPath(); ctx.arc(fx, fy, 9 + k * 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
     }
     ctx.restore();
   }

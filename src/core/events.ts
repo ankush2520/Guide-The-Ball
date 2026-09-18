@@ -31,6 +31,13 @@ export interface GameEvents extends Record<string, unknown> {
   'ball:hit':        HitPayload;
   'ball:captured':   { level: Level };
   'star:collected':  { index: number; total: number };
+  /* A mystery box the ball touched mid-drop. The REWARD is not in here: the
+     roll happens once, in the controller, and is announced by 'box:reward' -
+     so nothing that merely watches the board can pay a second time. */
+  'box:collected':   { index: number };
+  /* `x`/`y` are BOARD coordinates - where the chest was. The flight layer
+     turns them into screen pixels; nothing below the UI has to know how. */
+  'box:reward':      { kind: FlightKind; n: number; x: number; y: number };
   'breakable:broke': { index: number };
   'portal:used':     { index: number };
   'booster:used':    { index: number };
@@ -40,6 +47,10 @@ export interface GameEvents extends Record<string, unknown> {
   'balls:empty':     Record<string, never>;
   'coins:changed':   { coins: number; delta: number; reason: CoinChangeReason };
   'ramps:changed':   { ramps: number; delta: number; reason: RampChangeReason };
+  'boosters:changed':{ boosters: number; delta: number; reason: RampChangeReason };
+  /* A spin owed outside the daily cadence. The wheel's own cooldown is
+     untouched by it - see RewardManager.grantBonusSpin(). */
+  'spin:granted':    { bonus: number };
   'spin:won':        { prizeIndex: number; kind: PrizeKind; n: number };
 
   /* ---- ui / teaching ---- */
@@ -50,12 +61,18 @@ export interface GameEvents extends Record<string, unknown> {
   'tip:shown':       { key: string; text: string };
 }
 
-export type BallChangeReason = 'drop' | 'clear-bonus' | 'ad' | 'spin' | 'grant' | 'load' | 'buy';
-export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy';
-export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use';
+export type BallChangeReason = 'drop' | 'clear-bonus' | 'ad' | 'spin' | 'grant' | 'load' | 'buy' | 'box';
+export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box';
+export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box';
 
-/** What a wheel wedge pays. Coins buy the other two - see RewardManager. */
-export type PrizeKind = 'coins' | 'balls' | 'ramps';
+/** What the player can OWN, and therefore what a payout can land in. The
+    wheel pays the first three; a mystery box can also pay a booster. */
+export type PrizeKind = 'coins' | 'balls' | 'ramps' | 'boosters';
+
+/** What can FLY to somewhere on the HUD. A bonus spin is not a currency and
+    has no counter of its own - it lands on the gear, which is where the
+    wheel lives - so it is a flight kind and deliberately not a PrizeKind. */
+export type FlightKind = PrizeKind | 'spin';
 
 /** 'plan' -> 'drop' -> ('capture' -> 'over') | back to 'plan' on a miss. */
 export type Phase = 'plan' | 'drop' | 'capture' | 'over';

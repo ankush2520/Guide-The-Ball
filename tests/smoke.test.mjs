@@ -45,12 +45,20 @@ chk(painted > 0, 'the board is rendering', `${painted} sampled non-black pixels`
 const box = await page.locator('canvas#board').boundingBox();
 const at = (bx, by) => ({ x: box.x + (bx / 480) * box.width, y: box.y + (by / 800) * box.height });
 const rampsBefore = Number(await page.textContent('#ramps-left'));
-await page.click('#btn-add-ramp');
+/* Drawn, not spawned: one drag across empty board is the whole gesture. */
+await page.evaluate(() => window.__gtb.drawRamp(120, 320, 240, 370));
 const rampsLeft = Number(await page.textContent('#ramps-left'));
-chk(rampsLeft === rampsBefore - 1, 'the + placed a ramp', `ramps left: ${rampsBefore} -> ${rampsLeft}`);
+chk(rampsLeft === rampsBefore - 1, 'drawing a ramp spends one from the budget',
+    `ramps left: ${rampsBefore} -> ${rampsLeft}`);
 
-/* The drop is a tap on empty board. The new ramp arrives selected, so the
-   first tap only puts it down; the second is the drop. */
+/* The box on this board pays into the ball tank if the ball happens to pass
+   through it, which would make "the drop cost one ball" false for a reason
+   that has nothing to do with dropping. Claimed first, so this measures the
+   drop and only the drop. */
+await page.evaluate(() => window.__gtb.claimBox());
+
+/* The drop is a tap on empty board. A drawn ramp is not left selected, so the
+   first tap is already the drop; the second is harmless once it is falling. */
 const tapAt = at(60, 120);
 await page.mouse.click(tapAt.x, tapAt.y);
 await page.waitForTimeout(150);

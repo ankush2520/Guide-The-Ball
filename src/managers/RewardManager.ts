@@ -20,6 +20,7 @@ import type {
   CoinChangeReason,
   RampChangeReason,
   PrizeKind,
+  FlightKind,
 } from "../core/events";
 import {
   progressStore,
@@ -55,6 +56,25 @@ export const CLEAR_BONUS = [1, 2, 2, 3];
 export const STARTING_COINS = 100;
 export const BALL_PRICE = 2;
 export const RAMP_PRICE = 15;
+/* Twice a spare ramp, and the factor is the point: a booster is worth two of
+   them, which is a price a player can hold in their head. It is also the one
+   item that is only CHARGED FOR WHEN IT WORKS - see spendExtraBooster - so
+   what it really prices is a solved board, not an attempt at one. */
+export const BOOSTER_PRICE = 30;
+
+/* ---- boosters unlock with Solmesa ---- */
+
+/* Boosters are Solmesa's mechanic, and the country opens at level 21. Before
+   that the item does not exist anywhere: not in the shop, not in the bag, and
+   not in a mystery box's prize table. A player meets the booster as a thing
+   on the BOARD first (levels 21-30 are built around one), and only then as a
+   thing they can own - which is the order that makes it teachable. */
+export const BOOSTER_UNLOCK_LEVEL = 21;
+/** The same gate as an index into LEVELS, which is what progress is kept in. */
+export const BOOSTER_UNLOCK_INDEX = BOOSTER_UNLOCK_LEVEL - 1;
+/** What reaching level 21 for the first time is worth: one, free, on the
+    house. An item nobody has ever held is an item nobody buys. */
+export const BOOSTER_GIFT = 1;
 
 /* ---- what the shop sells ---- */
 
@@ -89,6 +109,14 @@ export const RAMP_BUNDLES: readonly Bundle[] = [
   { n: 1, coins: 15 },
   { n: 4, coins: 45 },
   { n: 14, coins: 150 },
+];
+/* The ramp table at twice the price, quantity for quantity, so the two shop
+   sections state the same offer and a player only has to learn it once: four
+   for the price of three, fourteen for the price of ten. */
+export const BOOSTER_BUNDLES: readonly Bundle[] = [
+  { n: 1, coins: BOOSTER_PRICE },
+  { n: 4, coins: BOOSTER_PRICE * 3 },
+  { n: 14, coins: BOOSTER_PRICE * 10 },
 ];
 
 /** What `n` of something costs: the bundle price when `n` is exactly a bundle,
@@ -148,8 +176,14 @@ export function coinsFor(
 export const SPIN_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const SPIN_MS = 4200; // length of the spin animation
 
+/** What the WHEEL can pay. A booster is not on it: the wheel is a daily
+    fixture from level 1, and it may not hand out an item that does not exist
+    until level 21. Mystery boxes can, because they know what level they are
+    on - see BOX_PRIZES. */
+export type WheelKind = "coins" | "balls" | "ramps";
+
 export interface SpinPrize {
-  kind: PrizeKind;
+  kind: WheelKind;
   n: number;
   w: number;
 }
@@ -177,25 +211,69 @@ export const SPIN_PRIZES: SpinPrize[] = [
    deliberately does NOT get it, or half the wheel would be a jackpot. */
 export const JACKPOT_COINS = 60;
 
-/** What a wedge is worth in coins, which is the only way to compare them. */
-export function prizeValue(p: SpinPrize): number {
-  return p.kind === "coins"
-    ? p.n
-    : p.kind === "balls"
-      ? p.n * BALL_PRICE
-      : p.n * RAMP_PRICE;
+/** What a payout is worth in coins, which is the only way to compare kinds.
+    The shop's list prices are the exchange rate, so this is the one place
+    that has to move when one of them does. */
+export function unitValue(kind: PrizeKind): number {
+  return kind === "coins"
+    ? 1
+    : kind === "balls"
+      ? BALL_PRICE
+      : kind === "ramps"
+        ? RAMP_PRICE
+        : BOOSTER_PRICE;
 }
 
-export const PRIZE_UNIT: Record<PrizeKind, string> = {
+/** What a wedge is worth in coins, which is the only way to compare them. */
+export function prizeValue(p: SpinPrize): number {
+  return p.n * unitValue(p.kind);
+}
+
+export const PRIZE_UNIT: Record<FlightKind, string> = {
   coins: "coin",
   balls: "ball",
   ramps: "ramp",
+  boosters: "booster",
+  spin: "free spin",
 };
 
 /** "150 coins" / "1 ramp" - the wording the wheel and the flash both use. */
-export function prizeLabel(kind: PrizeKind, n: number): string {
+export function prizeLabel(kind: FlightKind, n: number): string {
   return `${n} ${PRIZE_UNIT[kind]}${n === 1 ? "" : "s"}`;
 }
+
+/* ============================================================
+   WHAT A MYSTERY BOX PAYS
+
+   ONE TABLE, weights totalling 100 so each reads as its own
+   percentage - the same convention the wheel's wedges use.
+
+   Weighted, not uniform: coins are the common drop and carry
+   the table, a booster or a free spin is the one you tell
+   someone about. Retuning the drop rates is editing these
+   numbers and nothing else - rollBoxPrize() reads the table and
+   knows nothing about what is in it.
+
+   Worth roughly 14 coins an open at these weights, about what a
+   level clear pays - and a box is claimed once per level, for
+   good, so the whole game's boxes are a fixed purse rather than
+   an income.
+   ============================================================ */
+export interface BoxPrize {
+  kind: FlightKind;
+  n: number;
+  w: number;
+}
+
+export const BOX_PRIZES: readonly BoxPrize[] = [
+  { kind: "coins", n: 10, w: 30 },
+  { kind: "balls", n: 2, w: 20 },
+  { kind: "coins", n: 25, w: 16 },
+  { kind: "ramps", n: 1, w: 14 },
+  { kind: "balls", n: 5, w: 10 },
+  { kind: "boosters", n: 1, w: 6 },
+  { kind: "spin", n: 1, w: 4 },
+];
 
 /** Two things are worth rewarding, and they pull against each other: solving
     it in few attempts, and solving it with fewer ramps than the level hands
@@ -235,6 +313,15 @@ export class RewardManager {
   coins = STARTING_COINS;
   /** Spare ramps, spendable on ANY level on top of its own budget. */
   extraRamps = 0;
+  /** Boosters in the bag. Unlike a ramp, one is only CHARGED FOR when the
+      drop that used it wins - see spendExtraBooster. */
+  extraBoosters = 0;
+  /** Whether the one free booster has been handed over yet. */
+  boosterGift = false;
+  /** Which levels have had their mystery box opened, by level INDEX. */
+  claimedBoxes: Record<number, boolean> = {};
+  /** Spins owed outside the daily cadence. See grantBonusSpin(). */
+  bonusSpins = 0;
 
   /* ============================================================
      UNLOCK EVERYTHING - the dev switch
@@ -270,6 +357,49 @@ export class RewardManager {
   get resumeAt(): number {
     return this._highest;
   }
+  /* ============================================================
+     THE BOOSTER GATE
+
+     Read off the REAL high-water mark, never `highest` - that
+     getter is the dev unlock's view and reports the last level
+     in the game, which would open the shop's booster section on
+     a brand new save.
+
+     Two ways in, and they answer different questions. `_highest`
+     is progression: a player who has worked their way to 21 has
+     reached it whatever level they are standing on now. The gift
+     flag is the record of actually having been there, which is
+     what covers arriving by the picker.
+     ============================================================ */
+  get boostersUnlocked(): boolean {
+    return this.boosterGift || this._highest >= BOOSTER_UNLOCK_INDEX;
+  }
+
+  /** Called whenever a level is entered. The first time that level is 21 or
+      deeper, the free booster is handed over - once, ever, and persisted, so
+      every later visit to Solmesa passes straight through here. */
+  noteLevelReached(levelId: number): boolean {
+    if (this.boosterGift || levelId < BOOSTER_UNLOCK_LEVEL) return false;
+    this.boosterGift = true;
+    this.saveProgress();
+    this.grantBoosters(BOOSTER_GIFT, "grant");
+    return true;
+  }
+
+  /** Has this level's mystery box already been taken? */
+  boxClaimed(levelIndex: number): boolean {
+    return !!this.claimedBoxes[levelIndex];
+  }
+
+  /** Mark it taken, for good. Returns false if it already was, which is the
+      caller's cue that this open pays nothing. */
+  claimBox(levelIndex: number): boolean {
+    if (this.claimedBoxes[levelIndex]) return false;
+    this.claimedBoxes[levelIndex] = true;
+    this.saveProgress();
+    return true;
+  }
+
   bestStars: Record<number, number> = {};
   bestPickups: Record<number, number> = {};
   clearedLevels: Record<number, boolean> = {};
@@ -316,6 +446,8 @@ export class RewardManager {
     this.tutorialSeen = !!s.tutorialSeen;
     this.obstacleTipSeen = !!s.obstacleTipSeen;
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
+    this.boosterGift = !!s.boosterGift;
+    this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
 
     /* Which levels have ever been cleared, so the first-clear bonus is paid
        once and an easy level cannot be farmed for balls. Deliberately its own
@@ -348,10 +480,12 @@ export class RewardManager {
     if (w.coins === null) {
       this.coins = STARTING_COINS;
       this.extraRamps = 0;
+      this.extraBoosters = 0;
       this.saveWallet();
     } else {
       this.coins = w.coins;
       this.extraRamps = w.ramps;
+      this.extraBoosters = w.boosters;
     }
 
     this.loadSpin();
@@ -367,6 +501,11 @@ export class RewardManager {
     });
     this.bus.emit("ramps:changed", {
       ramps: this.extraRamps,
+      delta: 0,
+      reason: "load",
+    });
+    this.bus.emit("boosters:changed", {
+      boosters: this.extraBoosters,
       delta: 0,
       reason: "load",
     });
@@ -390,15 +529,19 @@ export class RewardManager {
     this.tutorialSeen = false;
     this.obstacleTipSeen = false;
     this.tipsSeen = {};
+    this.boosterGift = false;
+    this.claimedBoxes = {};
     this.spinLast = 0;
     this.spinOffered = 0;
+    this.bonusSpins = 0;
     this.spinning = false;
     this.spinShown = null;
-    progressStore.saveSpin(0, null, 0);
+    progressStore.saveSpin(0, null, 0, 0);
     this.balls = STARTING_BALLS;
     progressStore.saveBalls(this.balls);
     this.coins = STARTING_COINS;
     this.extraRamps = 0;
+    this.extraBoosters = 0;
     this.saveWallet();
     this.bus.emit("balls:changed", {
       balls: this.balls,
@@ -415,6 +558,11 @@ export class RewardManager {
       delta: 0,
       reason: "load",
     });
+    this.bus.emit("boosters:changed", {
+      boosters: this.extraBoosters,
+      delta: 0,
+      reason: "load",
+    });
   }
 
   saveProgress(): void {
@@ -427,6 +575,8 @@ export class RewardManager {
       tutorialSeen: this.tutorialSeen,
       obstacleTipSeen: this.obstacleTipSeen,
       tips: this.tipsSeen,
+      boosterGift: this.boosterGift,
+      boxes: this.claimedBoxes,
     });
   }
 
@@ -440,7 +590,7 @@ export class RewardManager {
 
   grant(
     n: number,
-    reason: "clear-bonus" | "ad" | "spin" | "grant" = "grant",
+    reason: "clear-bonus" | "ad" | "spin" | "grant" | "box" = "grant",
   ): void {
     if (!(n > 0)) return;
     this.setBalls(this.balls + n, n, reason);
@@ -467,7 +617,7 @@ export class RewardManager {
   /* ---------------- the wallet ---------------- */
 
   private saveWallet(): void {
-    progressStore.saveWallet(this.coins, this.extraRamps);
+    progressStore.saveWallet(this.coins, this.extraRamps, this.extraBoosters);
   }
 
   private setCoins(n: number, delta: number, reason: CoinChangeReason): void {
@@ -492,6 +642,25 @@ export class RewardManager {
     this.setRamps(this.extraRamps + n, n, reason);
   }
 
+  private setBoosters(
+    n: number,
+    delta: number,
+    reason: RampChangeReason,
+  ): void {
+    this.extraBoosters = Math.max(0, n);
+    this.saveWallet();
+    this.bus.emit("boosters:changed", {
+      boosters: this.extraBoosters,
+      delta,
+      reason,
+    });
+  }
+
+  grantBoosters(n: number, reason: RampChangeReason = "grant"): void {
+    if (!(n > 0)) return;
+    this.setBoosters(this.extraBoosters + n, n, reason);
+  }
+
   /* ---------------- the shop ---------------- */
 
   ballCost(n: number): number {
@@ -499,6 +668,9 @@ export class RewardManager {
   }
   rampCost(n: number): number {
     return priced(RAMP_BUNDLES, n, RAMP_PRICE);
+  }
+  boosterCost(n: number): number {
+    return priced(BOOSTER_BUNDLES, n, BOOSTER_PRICE);
   }
   canAfford(cost: number): boolean {
     return cost > 0 && this.coins >= cost;
@@ -524,6 +696,18 @@ export class RewardManager {
     return true;
   }
 
+  /** Refuses outright before level 21, the same way it refuses an order the
+      wallet cannot cover. The shop hides the section as well, but the gate
+      belongs HERE: a panel that is merely not rendered is not a rule. */
+  buyBoosters(n: number): boolean {
+    if (!this.boostersUnlocked) return false;
+    const cost = this.boosterCost(n);
+    if (!this.canAfford(cost)) return false;
+    this.setCoins(this.coins - cost, -cost, "buy");
+    this.setBoosters(this.extraBoosters + (n | 0), n | 0, "buy");
+    return true;
+  }
+
   /** Take one spare ramp out of the drawer for the level on screen. Spent the
       moment it is taken: the budget it joins is this level's, and handing it
       back on a level change would make "how many do I have" depend on where
@@ -534,12 +718,36 @@ export class RewardManager {
     return true;
   }
 
+  /* ============================================================
+     A BOOSTER IS PAID FOR ON THE WIN
+
+     Deliberately NOT the ramp's rule. A spare ramp is spent the
+     moment it is taken out of the drawer, because what it buys
+     is a bigger budget on this board whatever happens next.
+
+     A booster buys the SOLVE. Placing one costs nothing, missing
+     with one costs nothing - the player is free to drop, watch,
+     move it and drop again all day - and it is only taken out of
+     the bag when the drop it was part of actually wins. Which is
+     why this is its own path and not a second caller of the
+     ramp's: the two are spent at different moments on purpose.
+     ============================================================ */
+  spendExtraBooster(): boolean {
+    if (this.extraBoosters <= 0) return false;
+    this.setBoosters(this.extraBoosters - 1, -1, "use");
+    return true;
+  }
+
   /** Test-only, like setBallsForTest. */
-  setWalletForTest(coins: number, ramps: number): void {
+  setWalletForTest(coins: number, ramps: number, boosters?: number): void {
     const c = Math.max(0, coins | 0),
       r = Math.max(0, ramps | 0);
     this.setCoins(c, c - this.coins, "grant");
     this.setRamps(r, r - this.extraRamps, "grant");
+    if (boosters !== undefined) {
+      const b = Math.max(0, boosters | 0);
+      this.setBoosters(b, b - this.extraBoosters, "grant");
+    }
   }
 
   /** What clearing level `id` pays the FIRST time, and only the first time. */
@@ -613,9 +821,10 @@ export class RewardManager {
   /* ---------------- the daily wheel ---------------- */
 
   private loadSpin(): void {
-    const { last, pending, offered } = progressStore.loadSpin();
+    const { last, pending, offered, bonus } = progressStore.loadSpin();
     const now = Date.now();
     this.spinLast = last;
+    this.bonusSpins = bonus;
     this.spinOffered = offered > now ? 0 : offered;
     // a clock that has moved backwards just hands the player a spin; the worst
     // case is one extra spin, where the alternative is a wheel locked forever
@@ -638,11 +847,38 @@ export class RewardManager {
         this.saveWallet();
       }
     }
-    progressStore.saveSpin(this.spinLast, null, this.spinOffered);
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered, this.bonusSpins);
+  }
+
+  /* ============================================================
+     THE COOLDOWN, AND THE WAY PAST IT
+
+     `dailyReady` is the 24-hour clock and the only thing that
+     ever moves `spinLast`. `spinReady` is the question the gear
+     and the Spin button actually ask - "may I spin now?" - and a
+     bonus token answers yes without the clock having anything to
+     do with it.
+
+     Keeping them apart is what lets a mystery box hand out a
+     spin without shortening, lengthening or resetting the daily
+     one. A token spent today leaves tomorrow's free spin due at
+     exactly the moment it was already due.
+     ============================================================ */
+  dailyReady(now = Date.now()): boolean {
+    return now - this.spinLast >= SPIN_COOLDOWN_MS;
   }
 
   spinReady(now = Date.now()): boolean {
-    return now - this.spinLast >= SPIN_COOLDOWN_MS;
+    return this.bonusSpins > 0 || this.dailyReady(now);
+  }
+
+  /** A spin owed outside the daily cadence - a mystery box's free-spin
+      token. Stacks, so two boxes in a row are two spins. */
+  grantBonusSpin(n = 1): void {
+    if (!(n > 0)) return;
+    this.bonusSpins += n | 0;
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered, this.bonusSpins);
+    this.bus.emit("spin:granted", { bonus: this.bonusSpins });
   }
 
   /* ---- letting itself in ----
@@ -653,13 +889,17 @@ export class RewardManager {
      (which moves `spinLast` forward again) re-arms it. Closing the wheel
      without spinning therefore leaves it alone until the next day, rather
      than raising it again on the next reload. */
+  /* The DAILY one only. A bonus token must not make the wheel let itself in:
+     the token was won on the board a moment ago, the flash and the gear
+     already say so, and a modal that opens itself mid-play is the one thing
+     this whole mechanism was built to avoid doing twice. */
   shouldOfferSpin(now = Date.now()): boolean {
-    return this.spinReady(now) && this.spinOffered <= this.spinLast;
+    return this.dailyReady(now) && this.spinOffered <= this.spinLast;
   }
 
   markSpinOffered(now = Date.now()): void {
     this.spinOffered = now;
-    progressStore.saveSpin(this.spinLast, null, this.spinOffered);
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered, this.bonusSpins);
   }
   msToSpin(now = Date.now()): number {
     return clamp(SPIN_COOLDOWN_MS - (now - this.spinLast), 0, SPIN_COOLDOWN_MS);
@@ -677,17 +917,25 @@ export class RewardManager {
     return SPIN_PRIZES.length - 1;
   }
 
-  /** Commit the result BEFORE the animation runs - see loadSpin(). */
+  /** Commit the result BEFORE the animation runs - see loadSpin().
+
+      The FREE daily spin is always spent first when it is due; a token is
+      only drawn on when it is the only way this spin could happen. That
+      ordering is what keeps a token worth what it says: spending one on a day
+      the wheel was free anyway would quietly buy nothing. */
   beginSpin(): number {
     const ix = this.pickPrize();
     const p = SPIN_PRIZES[ix];
-    this.spinLast = Date.now();
+    if (this.dailyReady()) this.spinLast = Date.now();
+    else if (this.bonusSpins > 0) this.bonusSpins--;
+    else return ix;                     // not spinnable; the UI never calls it
     this.spinning = true;
     this.spinShown = null;
     progressStore.saveSpin(
       this.spinLast,
       { kind: p.kind, n: p.n } as PendingPrize,
       this.spinOffered,
+      this.bonusSpins,
     );
     return ix;
   }
@@ -697,10 +945,55 @@ export class RewardManager {
     const p = SPIN_PRIZES[ix];
     this.spinning = false;
     this.spinShown = { kind: p.kind, n: p.n };
-    progressStore.saveSpin(this.spinLast, null, this.spinOffered);
+    progressStore.saveSpin(this.spinLast, null, this.spinOffered, this.bonusSpins);
     if (p.kind === "balls") this.grant(p.n, "spin");
     else if (p.kind === "coins") this.grantCoins(p.n, "spin");
     else this.grantRamps(p.n, "spin");
     this.bus.emit("spin:won", { prizeIndex: ix, kind: p.kind, n: p.n });
+  }
+
+  /* ---------------- mystery boxes ---------------- */
+
+  /** The table this level is allowed to roll on. Boosters are REMOVED rather
+      than re-rolled: a prize that cannot be paid must not be able to come up
+      at all, or the weights stop meaning what BOX_PRIZES says they mean. */
+  boxTableFor(levelId: number): readonly BoxPrize[] {
+    const ok = this.boostersUnlocked && levelId >= BOOSTER_UNLOCK_LEVEL;
+    return ok ? BOX_PRIZES : BOX_PRIZES.filter((p) => p.kind !== "boosters");
+  }
+
+  /** Weighted pick over that table - the same walk the wheel uses. */
+  rollBoxPrize(levelId: number, rnd = Math.random()): BoxPrize {
+    const table = this.boxTableFor(levelId);
+    let total = 0;
+    for (const p of table) total += p.w;
+    let r = clamp(rnd, 0, 0.999999) * total;
+    for (const p of table) {
+      r -= p.w;
+      if (r <= 0) return p;
+    }
+    return table[table.length - 1];
+  }
+
+  /** Hand over what a box rolled. One place, so every kind of box prize is
+      paid the same way and the 'box' reason is what the ledger shows. */
+  payBoxPrize(p: BoxPrize): void {
+    switch (p.kind) {
+      case "coins":
+        this.grantCoins(p.n, "box");
+        break;
+      case "balls":
+        this.grant(p.n, "box");
+        break;
+      case "ramps":
+        this.grantRamps(p.n, "box");
+        break;
+      case "boosters":
+        this.grantBoosters(p.n, "box");
+        break;
+      case "spin":
+        this.grantBonusSpin(p.n);
+        break;
+    }
   }
 }

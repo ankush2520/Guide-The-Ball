@@ -41,6 +41,12 @@ export const GLOSSARY: GlossaryEntry[] = [
   { cls: 'bs', has: lv => lv.boosters.length > 0, name: 'Booster',
     long: 'Fires the ball along the arrow at a fixed speed, every single time. Unlike an ' +
           'obstacle there is nothing random about it - the arrow is exactly the heading you leave on.' },
+  /* Straight after the level's own booster, because they are the same machine
+     and the only thing to learn is which one is yours. */
+  { cls: 'mb', has: lv => lv.boosters.length > 0, name: 'Your booster',
+    long: 'The blue one is one you placed from your bag. It works exactly like the level\'s own: ' +
+          'drag it to move, drag the knob on its nose to aim. It only leaves your bag if the ball ' +
+          'really fires through it AND that drop wins - missing with one costs you nothing.' },
   { cls: 'pt', has: lv => lv.portals.length > 0, name: 'Portal',
     long: 'Two rings of the same colour. Go into one and you come out of the other keeping your ' +
           'direction, unless the exit has an arrow, which turns you to face it.' },
@@ -53,8 +59,15 @@ export const GLOSSARY: GlossaryEntry[] = [
   { cls: 'st', has: lv => lv.stars.length > 0, name: 'Gold star',
     long: 'Collect it by passing close. Purely optional: it never changes where the ball goes ' +
           'and never affects winning. Your best count per level is remembered.' },
+  { cls: 'bx', has: lv => lv.boxes.length > 0, name: 'Mystery box',
+    long: 'A chest. Touch it with the ball mid-drop and it pays out something random - coins, ' +
+          'balls, a spare ramp, sometimes a booster or a free spin of the wheel. Like a star it ' +
+          'never changes where the ball goes, and each one can only be opened ONCE: after that ' +
+          'the board shows the empty outline where it was.' },
   { cls: 'rp', has: () => true, name: 'Your ramp',
-    long: 'What you place. The ball mirrors off it like a real bounce and loses a little speed.' },
+    long: 'What you draw: drag anywhere on empty board and the ramp is the line you drag, any ' +
+          'length and any angle you like. The ball mirrors off it like a real bounce and loses a ' +
+          'little speed.' },
   { cls: 'wl', has: lv => lv.walls.length > 0, name: 'Wall',
     long: 'Fixed level scenery guarding the target. It bounces the ball the same predictable way ' +
           'your ramps do - it just is not yours to move.' },

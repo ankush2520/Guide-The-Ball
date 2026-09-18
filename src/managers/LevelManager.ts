@@ -11,14 +11,14 @@
    without any of them knowing about each other.
    ============================================================ */
 import type { GameBus } from '../core/events';
-import type { Level, Segment } from '../levels/types';
+import type { BoosterDef, Level, Segment, Vec } from '../levels/types';
 import { LEVELS, countryOf, cityOf } from '../levels';
 import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
-import { MIN_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
-import { RAMP_LEN } from '../items/items';
+import { MIN_RAMP, MAX_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
+import { BOOSTER_R, BOOSTER_SPEED, BOOSTER_ANGLE } from '../items/items';
 
 /** How close a finger has to be to grab a ramp or one of its controls.
     Board coordinates throughout, so a grab radius means the same thing
@@ -46,14 +46,40 @@ export const DEL_OFF  = 50;
 export const DEL_R    = 30;
 export const DEL_GRAB = 36;
 
+/* The booster's aim knob sits this far outside its rim, on the nose. Far
+   enough out that the finger holding it is not covering the disc whose
+   direction it is setting - which is the whole reason it is a knob on a stalk
+   and not a drag anywhere on the body. */
+export const AIM_OFF  = 26;
+export const AIM_R    = 11;
+export const AIM_GRAB = 24;
+
 export class LevelManager {
   private index = 0;
   private ramps: Segment[] = [];
+  /* The player's own boosters. Kept apart from the level's own the same way
+     ramps are kept apart from walls: identical physics, different owner. */
+  private boosters: BoosterDef[] = [];
+  /** Which of those have been PAID for out of the bag, by index. A booster is
+      only charged for by a win that actually went through it (see
+      GameController), so a placed one is on loan until then - and per-index
+      rather than a count because a board can carry one that fired beside one
+      that did not. */
+  boosterPaid: boolean[] = [];
+  /* The level with the player's boosters merged in, rebuilt only when one is
+     added or removed. Moving or aiming one mutates the def IN PLACE, and this
+     array holds the same objects by reference, so a drag needs no rebuild -
+     the same contract the entities have with the level (see Entity). */
+  private composed: Level | null = null;
 
   /** Breakables survive re-drops inside ONE level entry and reset when the
       level is entered again. That keeps the point of the mechanic - learn the
       board, then solve it - which per-drop resetting would destroy. */
   sessionBroken: boolean[] = [];
+  /** Which mystery boxes are already open, for the same reason and with one
+      difference: a box that was opened on a PREVIOUS visit starts open too,
+      because it was claimed for good - see setBoxesClaimed. */
+  sessionBoxes: boolean[] = [];
 
   /** Rebuilt only when the level changes, never per frame. */
   private cachedEntities: Entity[] = [];
@@ -70,8 +96,26 @@ export class LevelManager {
   /** What the player sees this level called - see cityOf(). */
   get cityName(): string { return cityOf(this.level); }
   get entities(): readonly Entity[] { return this.cachedEntities; }
+  /* WHAT THE BALL PLAYS AGAINST, which is not always what was authored: a
+     booster the player put down is part of the board for this drop. Every
+     caller in the drop path uses this; the renderer and the level picker use
+     `level`, because what a board IS does not change when you furnish it. */
+  get playLevel(): Level { return this.composed ?? this.level; }
   get count(): number { return LEVELS.length; }
   get isLast(): boolean { return this.index >= LEVELS.length - 1; }
+
+  /** The player's boosters, as the physics wants them: plain defs. */
+  get placedBoosters(): readonly BoosterDef[] { return this.boosters; }
+  get boostersUsed(): number { return this.boosters.length; }
+  /** Placed but not yet paid for - held out of the bag while they sit on the
+      board, so the count in the inventory is what is still available. */
+  get boostersReserved(): number {
+    return this.boosters.reduce((n, _b, i) => n + (this.boosterPaid[i] ? 0 : 1), 0);
+  }
+  /** How many of this board's boosters have actually been charged for. */
+  get boostersPaid(): number {
+    return this.boosterPaid.reduce((n, p) => n + (p ? 1 : 0), 0);
+  }
 
   /** The player's ramps, as the physics wants them: plain segments. */
   get rampSegments(): readonly Segment[] { return this.ramps; }
@@ -105,33 +149,148 @@ export class LevelManager {
 
   private rebuild(): void {
     this.ramps = [];
+    this.boosters = [];
+    this.boosterPaid = [];
+    this.composed = null;
     this.extraBudget = 0;
     this.sessionBroken = falses(this.level.breakables.length);
-    this.cachedEntities = EntityFactory.createFromLevel(this.level);
+    this.sessionBoxes = falses(this.level.boxes.length);
+    this.rebuildEntities();
+  }
+
+  /* The entity list is the level's own furniture plus whatever the player has
+     put down. Rebuilt when that CHANGES, never per frame. */
+  private rebuildEntities(): void {
+    const out = EntityFactory.createFromLevel(this.level);
+    for (let i = 0; i < this.boosters.length; i++)
+      out.push(EntityFactory.createPlacedBooster(this.boosters[i], i));
+    this.cachedEntities = out.sort((a, b) => a.layer - b.layer);
+  }
+
+  /** Show this level's boxes as already opened. Called by the controller on
+      every level entry, because whether a box has been claimed is the reward
+      ledger's business and this manager has no view of it. */
+  setBoxesClaimed(claimed: boolean): void {
+    if (claimed) this.sessionBoxes = this.level.boxes.map(() => true);
+  }
+
+  /* ---------------- the player's boosters ---------------- */
+
+  /** Put one on the board and return its index. It lands in the middle,
+      pointing straight down - unaimed on purpose, so the first thing the
+      player does with it is the thing that makes it theirs. */
+  placeBooster(): number {
+    const cx = (BOARD.x0 + BOARD.x1) / 2;
+    const ys = [400, 300, 500, 220, 580];
+    const free = (y: number) =>
+      this.boosters.every(b => Math.hypot(b.x - cx, b.y - y) > BOOSTER_R * 2.4);
+    const y = ys.find(free) ?? ys[this.boosters.length % ys.length];
+    this.boosters.push({ x: cx, y, r: BOOSTER_R,
+                         angle: BOOSTER_ANGLE, speed: BOOSTER_SPEED });
+    this.boosterPaid.push(false);
+    this.composeLevel();
+    this.rebuildEntities();
+    return this.boosters.length - 1;
+  }
+
+  boosterAt(i: number): BoosterDef | undefined { return this.boosters[i]; }
+
+  removeBooster(i: number): void {
+    if (i < 0 || i >= this.boosters.length) return;
+    /* The paid flag goes with it. A paid-for booster is not refunded by
+       picking it back up - the win it bought already happened - which is why
+       the two arrays are spliced together and never re-indexed apart. */
+    this.boosters.splice(i, 1);
+    this.boosterPaid.splice(i, 1);
+    this.composeLevel();
+    this.rebuildEntities();
+  }
+
+  /** The nearest placed booster to a tap, or -1. */
+  pickBooster(x: number, y: number): number {
+    let pick = -1, bestD = Infinity;
+    for (let i = 0; i < this.boosters.length; i++) {
+      const b = this.boosters[i];
+      const d = Math.hypot(x - b.x, y - b.y);
+      if (d <= b.r + PICK_PAD && d < bestD) { bestD = d; pick = i; }
+    }
+    return pick;
+  }
+
+  /** Slide one, clamped so the whole disc stays on the board. */
+  moveBoosterBy(i: number, dx: number, dy: number): void {
+    const b = this.boosters[i];
+    if (!b) return;
+    b.x = clamp(b.x + dx, BOARD.x0 + b.r, BOARD.x1 - b.r);
+    b.y = clamp(b.y + dy, b.r, H - b.r);
+  }
+
+  /** Point one at `p`. The disc never moves - only the heading changes - so
+      aiming is as reversible as turning a ramp by its end. */
+  aimBoosterTo(i: number, p: Vec): void {
+    const b = this.boosters[i];
+    if (!b) return;
+    const dx = p.x - b.x, dy = p.y - b.y;
+    if (Math.hypot(dx, dy) < 6) return;            // no direction in a pivot
+    b.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+
+  /** Where the aim knob sits: on the nose, just outside the rim. */
+  boosterHandleAt(b: BoosterDef): Vec {
+    const a = b.angle * Math.PI / 180;
+    return { x: b.x + Math.cos(a) * (b.r + AIM_OFF),
+             y: b.y + Math.sin(a) * (b.r + AIM_OFF) };
+  }
+
+  /** Where its × sits: opposite the nose, flipped to whichever side keeps it
+      on the board - the same rule the ramp's delete button follows.
+
+      Pushed out further than the ramp's, and it has to be: the ramp's offset
+      is measured from a 9-unit-thick bar, this one from a 60-unit disc, so at
+      the ramp's distance the × would sit ON the booster it removes. */
+  boosterDeleteAt(b: BoosterDef): Vec {
+    const a = b.angle * Math.PI / 180;
+    const off = b.r + DEL_R + 14;
+    let bx = b.x - Math.cos(a) * off, by = b.y - Math.sin(a) * off;
+    if (bx < BOARD.x0 + DEL_R || bx > BOARD.x1 - DEL_R || by < DEL_R || by > H - DEL_R) {
+      bx = b.x + Math.cos(a + Math.PI / 2) * off;
+      by = b.y + Math.sin(a + Math.PI / 2) * off;
+    }
+    return { x: clamp(bx, BOARD.x0 + DEL_R, BOARD.x1 - DEL_R),
+             y: clamp(by, DEL_R, H - DEL_R) };
+  }
+
+  /* One object, rebuilt only when the LIST changes. Null when the player has
+     placed nothing, so an untouched board hands the physics the level itself
+     and not a copy of it. */
+  private composeLevel(): void {
+    this.composed = this.boosters.length === 0 ? null
+      : { ...this.level, boosters: [...this.level.boosters, ...this.boosters] };
   }
 
   /* ---------------- ramp editing ---------------- */
 
-  /** Put a new ramp on the board from the inventory, and return its index
-      (or -1 if the budget is spent).
+  /* ============================================================
+     A RAMP IS DRAWN, NOT SPAWNED
 
-      It lands in the middle of the board, a little tilted so it reads as a
-      ramp rather than a shelf. If a ramp already sits there it steps down
-      and then up the board until it has room, so a second ramp never lands
-      exactly on top of the first and hides it. */
-  placeRamp(): number {
-    if (!this.canPlaceRamp) return -1;
-    const cx = (BOARD.x0 + BOARD.x1) / 2, a = 20 * Math.PI / 180;
-    const hx = Math.cos(a) * RAMP_LEN / 2, hy = Math.sin(a) * RAMP_LEN / 2;
-    const ys = [360, 450, 270, 540, 180, 630];
-    const free = (y: number) => this.ramps.every(r =>
-      Math.hypot((r.x1 + r.x2) / 2 - cx, (r.y1 + r.y2) / 2 - y) > 70);
-    const y = ys.find(free) ?? ys[this.ramps.length % ys.length];
-    /* Listed right-to-left, which puts its × ABOVE it (deleteButtonAt takes
-       the normal on the left of x1->x2). The space below the ramp is then
-       free for the walkthrough's bubble, clear of the ball's drop line. */
-    this.ramps.push({ x1: cx + hx, y1: y + hy, x2: cx - hx, y2: y - hy });
-    return this.ramps.length - 1;
+     One drag sets where it is, how long it is and which way it
+     points, all at once - which is the whole reason the ramp is
+     the player's expressive tool and the booster is not. There
+     is no default length to place and then correct.
+
+     Everything below is the vocabulary that drag needs: the
+     length limits it is held to (MIN_RAMP so a stray tap is not
+     a ramp, MAX_RAMP so one is not a wall), and an editing rule
+     that keeps an edited ramp inside them - an edited ramp must
+     stay a ramp you could have drawn by hand.
+     ============================================================ */
+
+  /** Clamp `q` so the segment from `p` is never longer than MAX_RAMP. */
+  truncate(p: Vec, q: Vec): Vec {
+    const dx = q.x - p.x, dy = q.y - p.y;
+    const len = Math.hypot(dx, dy);
+    if (len <= MAX_RAMP) return q;
+    return { x: p.x + dx / len * MAX_RAMP, y: p.y + dy / len * MAX_RAMP };
   }
 
   addRamp(seg: Segment): boolean {
@@ -156,22 +315,24 @@ export class LevelManager {
 
   rampAt(i: number): Segment | undefined { return this.ramps[i]; }
 
-  /* Turn a ramp by one of its ends. The ramp pivots on its own middle and
-     keeps its length: an item is a fixed size, so dragging an end points it
-     rather than stretching it. A finger right on the pivot has no direction,
-     so it leaves the ramp alone. Then the whole thing is nudged back inside
-     the board, in case the turn swung an end over the edge. */
-  rotateRamp(i: number, which: 1 | 2, p: { x: number; y: number }): void {
+  /* Move ONE END of a ramp, the other staying where it is - so a drag on an
+     end changes the length and the angle together, exactly as the drag that
+     drew it did. The end is held inside the same limits the drawing tool
+     enforces: never past MAX_RAMP from its anchor, and pushed back out along
+     its own heading if the finger comes closer than MIN_RAMP. */
+  moveRampEnd(i: number, which: 1 | 2, p: Vec): void {
     const s = this.ramps[i];
     if (!s) return;
-    const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2;
-    const dx = p.x - mx, dy = p.y - my;
-    if (Math.hypot(dx, dy) < MIN_RAMP / 2) return;
-    const half = Math.hypot(s.x2 - s.x1, s.y2 - s.y1) / 2;
-    const a = Math.atan2(dy, dx) + (which === 1 ? Math.PI : 0);
-    const ux = Math.cos(a) * half, uy = Math.sin(a) * half;
-    s.x1 = mx - ux; s.y1 = my - uy; s.x2 = mx + ux; s.y2 = my + uy;
-    this.moveRampBy(i, 0, 0);
+    const ax = which === 1 ? s.x2 : s.x1, ay = which === 1 ? s.y2 : s.y1;
+    let q = this.truncate({ x: ax, y: ay }, p);
+    const dx = q.x - ax, dy = q.y - ay;
+    const len = Math.hypot(dx, dy);
+    if (len < MIN_RAMP) {
+      const a = len > 1e-6 ? Math.atan2(dy, dx) : -Math.PI / 2;
+      q = { x: ax + Math.cos(a) * MIN_RAMP, y: ay + Math.sin(a) * MIN_RAMP };
+    }
+    q = { x: clamp(q.x, BOARD.x0, BOARD.x1), y: clamp(q.y, 0, H) };
+    if (which === 1) { s.x1 = q.x; s.y1 = q.y; } else { s.x2 = q.x; s.y2 = q.y; }
   }
 
   /** Slide a whole ramp, clamped so neither end can leave the board. */
@@ -191,6 +352,7 @@ export class LevelManager {
      and angle survive: the player's work is moved, not discarded. */
   reclampRamps(): void {
     for (let i = 0; i < this.ramps.length; i++) this.moveRampBy(i, 0, 0);
+    for (let i = 0; i < this.boosters.length; i++) this.moveBoosterBy(i, 0, 0);
   }
 
   /** Where the × sits: off the ramp's midpoint, along its normal, flipped to

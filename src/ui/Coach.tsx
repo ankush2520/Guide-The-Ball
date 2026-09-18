@@ -3,8 +3,8 @@
 
    The first-run walkthrough's speech bubble. One short card per
    step (see TutStep in GameController), with an arrow at the
-   thing it is talking about: the target, the + button, the ramp
-   itself.
+   thing it is talking about: the target, or the stretch of board
+   the ramp should be drawn across.
 
    It never blocks play. The card ignores the pointer - a tap on
    it lands on whatever is underneath, which in the "drop" step
@@ -29,10 +29,9 @@ const COPY: Record<TutStep, Copy> = {
   intro: { title: 'Get the ball in the target!',
            text: "You can't steer the ball. Place ramps so it bounces into the green target, then drop it.",
            button: "Let's go" },
-  add:   { title: 'Add a ramp', text: 'Tap the big + to put a ramp on the board.' },
-  aim:   { title: 'Aim it',
-           text: 'Drag it under the ball. Drag a yellow end to tilt it.',
-           button: 'Done' },
+  draw:  { title: 'Draw a ramp',
+           text: 'Press on the board and drag. Where you drag is the ramp - ' +
+                 'put one under the ball.' },
   drop:  { title: 'Drop it!', text: 'Tap any empty space to drop the ball.' },
   retry: { title: 'So close!',
            text: 'Your ramp stays put. Adjust it a little and drop again.',
@@ -56,13 +55,6 @@ export function Coach({ hidden }: { hidden: boolean }) {
       const r = canvas.getBoundingClientRect();
       return { x: r.left + (x - BOARD.x0) * r.width / BOARD.w, y: r.top + y * r.height / H };
     };
-    const fromEl = (sel: string, side: 'above' | 'below'): Spot | null => {
-      const e = document.querySelector(sel);
-      if (!e) return null;
-      const b = e.getBoundingClientRect();
-      return { x: b.left + b.width / 2, y: side === 'below' ? b.bottom : b.top, side };
-    };
-
     /* where this step points, in viewport px */
     const spot = (): Spot | null => {
       const lv = levels.level;
@@ -71,15 +63,12 @@ export function Coach({ hidden }: { hidden: boolean }) {
           const t = lv.target;
           return { ...fromBoard(t.x, t.y - t.r - 26), side: 'above' };
         }
-        case 'add':  return fromEl('#btn-add-ramp', 'below');
-        case 'aim': {
-          const r = levels.rampAt(0);
-          if (!r) return null;
-          const mx = (r.x1 + r.x2) / 2, my = (r.y1 + r.y2) / 2;
-          // on the far side of the ramp from its ×, so the card never hides it
-          const below = levels.deleteButtonAt(r).y < my;
-          return { ...fromBoard(mx, my + (below ? 64 : -64)), side: below ? 'below' : 'above' };
-        }
+        /* Under the spot the board is asking them to draw across - which is
+           the ball's own fall line, low enough to be well clear of the
+           gesture itself. The card must not sit ON the stretch of board the
+           player is being told to drag over. */
+        case 'draw':
+          return { ...fromBoard(lv.spawn.x, H * 0.62), side: 'below' };
         case 'drop':
         case 'retry': {
           // whichever half of the board the ramp is NOT in

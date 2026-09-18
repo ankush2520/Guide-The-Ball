@@ -13,18 +13,18 @@
    subscribes to a version counter and re-reads whatever it needs.
    ============================================================ */
 import type { GameBus, Phase } from '../core/events';
-import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
-import { RewardManager } from './RewardManager';
+import { LevelManager, DEL_R, HANDLE_R, AIM_R } from './LevelManager';
+import { RewardManager, prizeLabel } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
 import { CAPTURE_MS, STEP_MS_DEFAULT } from '../render/constants';
 import { Sound } from '../audio/Sound';
 import { clamp } from '../physics/math';
-import { TERMINAL_VY } from '../physics/constants';
+import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
-import type { Level, Segment } from '../levels/types';
+import type { BoosterDef, Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
 const STEP_MS = STEP_MS_DEFAULT;
@@ -53,6 +53,8 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
     text: 'Breakable: bounces once, then shatters.' },
   { key: 'star',      has: lv => lv.stars.length > 0,
     text: 'Gold stars are optional pickups.' },
+  { key: 'box',       has: lv => lv.boxes.length > 0,
+    text: 'Mystery box: hit it for a random reward.' },
 ];
 
 /* ============================================================
@@ -62,25 +64,29 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
    player to actually do the thing it asks:
 
      intro  - what the game is: get the ball into the target
-     add    - tap the big + to put a ramp down
-     aim    - drag the ramp under the ball, turn it by an end
+     draw   - drag across the board to draw a ramp
      drop   - tap empty board to drop
      retry  - (only if that first drop missed) your ramp stayed,
               nudge it and go again
 
    The step is DERIVED from the board every time it is asked -
-   no ramp means "add" again even after it was passed - with
-   three small flags for what the board cannot tell us: the
-   intro was read, the ramp has been adjusted, and the first
-   drop missed. Nothing here blocks play; Coach.tsx draws the
-   bubble and Skip ends all of it.
+   no ramp means "draw" again even after it was passed - with
+   two small flags for what the board cannot tell us: the intro
+   was read, and the first drop missed. Nothing here blocks play;
+   Coach.tsx draws the bubble and Skip ends all of it.
+
+   There is no "aim" step any more, and there is nothing missing:
+   a drawn ramp was aimed BY the drag that made it. That step
+   only existed to undo a ramp the game had placed for you.
    ============================================================ */
-export type TutStep = 'intro' | 'add' | 'aim' | 'drop' | 'retry';
+export type TutStep = 'intro' | 'draw' | 'drop' | 'retry';
 
 /** What a finished level shows on the win card. */
 export interface WinCard {
   stars: number; note: string; bonus: number; coins: number;
   isLast: boolean; nextId: number | null;
+  /** Boosters this win actually spent. Zero on all but a handful of boards. */
+  boosters: number;
 }
 
 export class GameController {
@@ -91,12 +97,39 @@ export class GameController {
   ball: BallState | null = null;
   capture: CaptureState | null = null;
   selected = -1;
+  /* The player's booster on this board, selected separately from the ramps.
+     Two fields rather than one tagged selection because they are two
+     different kinds of thing with two different sets of grips, and because
+     the ramp's selection is load-bearing everywhere - it is not worth
+     reshaping to make room for a second item. Only one is ever >= 0. */
+  selectedBooster = -1;
+  /** Which boxes this controller has already reacted to, this drop. */
+  private boxSeen: boolean[] = [];
+  /** Which of the player's own boosters this drop has actually fired through.
+      The same test the engine fires them on, run at the same step boundaries,
+      so the two can never disagree about whether one went off. */
+  private boosterFired: boolean[] = [];
   private tutIntroDone = false;
-  private tutAdjusted = false;
   private tutRetry = false;
   /** Set on the walkthrough's own drop, so a miss knows to coach a retry. */
   private tutDropping = false;
   dragging: { mode: 'p1' | 'p2' | 'move'; ix: number; lx: number; ly: number } | null = null;
+  /* ============================================================
+     THE RAMP BEING DRAWN
+
+     A drag across empty board IS the ramp: where it starts is one
+     end, where the finger is now is the other, and the thing on
+     screen is the thing that will be placed. No spawn step, no
+     default length to correct - one gesture sets position, length
+     and angle together.
+
+     It lives here rather than on LevelManager because it is not a
+     ramp yet: nothing in the simulation can see it, and letting
+     go below MIN_RAMP throws it away.
+     ============================================================ */
+  draft: Segment | null = null;
+  /** A booster drag: its body, or the knob that aims it. */
+  boosterDrag: { mode: 'move' | 'aim'; ix: number; lx: number; ly: number } | null = null;
   /** Forces a seed, for tests and the solver. null means a fresh random one. */
   seedOverride: number | null = null;
 
@@ -131,8 +164,57 @@ export class GameController {
        on screen somewhere. The counters are React reading this version
        number, so anything that moves a balance has to bump it, or the HUD
        and the shop go stale until something else happens to redraw them. */
-    for (const e of ['balls:changed', 'coins:changed', 'ramps:changed'] as const)
+    for (const e of ['balls:changed', 'coins:changed', 'ramps:changed',
+                     'boosters:changed', 'spin:granted'] as const)
       bus.on(e, () => this.changed());
+  }
+
+  /** Whether a drag on empty board may start a ramp at all: this level's own
+      budget, or a spare in the drawer to cover it. Read by the canvas before
+      a draft begins and by the caption that offers the gesture. */
+  get canDraw(): boolean {
+    return this.phase === 'plan' &&
+           (this.levels.canPlaceRamp || this.rewards.extraRamps > 0);
+  }
+
+  /** Begin a ramp at `p`. Returns false when there is nothing left to draw
+      with, which is the canvas's cue to let the gesture be a tap instead. */
+  beginDraft(p: Vec): boolean {
+    if (!this.canDraw) return false;
+    this.draft = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    return true;
+  }
+
+  /** The far end follows the finger, held to MAX_RAMP from where it started. */
+  updateDraft(p: Vec): void {
+    const d = this.draft;
+    if (!d) return;
+    const q = this.levels.truncate({ x: d.x1, y: d.y1 }, p);
+    d.x2 = q.x; d.y2 = q.y;
+    this.changed();
+  }
+
+  /** Let go. A draft shorter than MIN_RAMP is thrown away - that is a tap, or
+      a twitch, and neither is a ramp. Only a draft that is actually KEPT
+      spends a spare, so a discarded scribble costs nothing.
+
+      Returns true if a ramp was placed. */
+  commitDraft(): boolean {
+    const d = this.draft;
+    this.draft = null;
+    if (!d) return false;
+    const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
+    if (len < MIN_RAMP) { this.changed(); return false; }
+    if (!this.levels.canPlaceRamp && !this.useExtraRamp()) { this.changed(); return false; }
+    const ok = this.levels.addRamp(d);
+    this.notifyRampsChanged();
+    return ok;
+  }
+
+  cancelDraft(): void {
+    if (!this.draft) return;
+    this.draft = null;
+    this.changed();
   }
 
   /** Take one spare ramp from the drawer and add it to THIS level's budget.
@@ -149,13 +231,27 @@ export class GameController {
     return true;
   }
 
-  /** How many of an item the inventory can hand out right now: what is left
-      of this level's budget, plus the spares in the drawer, which are spent
-      automatically once the level's own ramps run out. */
+  /** How many of an item the inventory can hand out right now.
+
+      RAMPS ARE NOT IN HERE, and that is the distinction the whole input model
+      rests on: a ramp is drawn by hand, out of a per-level budget, and a
+      booster is an owned thing taken out of a bag. One is the player's
+      expressive tool, the other is scarce. */
   itemCount(kind: ItemKind): { left: number; spare: number } {
     switch (kind) {
-      case 'ramp': return { left: this.levels.rampsLeft, spare: this.rewards.extraRamps };
+      /* A booster has no level budget at all - every one of them is yours -
+         so `left` is simply what is in the bag, minus any already sitting on
+         this board waiting to find out whether they get spent. */
+      case 'booster':
+        return { left: Math.max(0, this.rewards.extraBoosters - this.levels.boostersReserved),
+                 spare: 0 };
     }
+  }
+
+  /** Whether the bag may show this item at all. Boosters do not exist before
+      level 21 - see RewardManager.boostersUnlocked. */
+  itemUnlocked(kind: ItemKind): boolean {
+    return kind === 'booster' ? this.rewards.boostersUnlocked : true;
   }
 
   /** Take one item out of the inventory and put it on the board, selected,
@@ -164,17 +260,59 @@ export class GameController {
   placeItem(kind: ItemKind): boolean {
     if (this.phase !== 'plan') return false;
     switch (kind) {
-      case 'ramp': {
-        if (!this.levels.canPlaceRamp && !this.useExtraRamp()) return false;
-        const ix = this.levels.placeRamp();
-        if (ix < 0) return false;
-        this.selected = ix;
+      /* Nothing is charged here. Taking a booster out of the bag puts it on
+         the board and reserves it; the coins only leave when a drop that used
+         it wins - see commitBoosters(). */
+      case 'booster': {
+        if (!this.itemUnlocked('booster')) return false;
+        if (this.itemCount('booster').left <= 0) return false;
+        const ix = this.levels.placeBooster();
+        this.selectedBooster = ix;
+        this.selected = -1;
         this.dragging = null;
+        this.boosterDrag = null;
         this.bus.emit('item:placed', { kind, index: ix });
         this.notifyRampsChanged();
         return true;
       }
     }
+  }
+
+  /* ============================================================
+     PAYING FOR A BOOSTER
+
+     Only from finish(), and finish() only runs on a win. That is
+     most of the rule, and it is why this is not folded into
+     placeItem the way a spare ramp's spend is: a booster that
+     went down, missed, was nudged and dropped again has cost
+     nothing at all, however many attempts that took.
+
+     The rest of the rule is `boosterFired`: the drop has to have
+     actually gone THROUGH it. Winning with one parked in a
+     corner it never touched is not a booster that worked, and
+     charging for it would make "you only pay when it works" a
+     lie in the one case a player would notice.
+
+     Idempotent through the paid flags, so a Replay of a board
+     already won cannot charge for the same booster twice.
+     ============================================================ */
+  private commitBoosters(): number {
+    let paid = 0;
+    for (let i = 0; i < this.levels.boostersUsed; i++) {
+      if (!this.boosterFired[i] || this.levels.boosterPaid[i]) continue;
+      if (!this.rewards.spendExtraBooster()) break;   // bag emptied elsewhere
+      this.levels.boosterPaid[i] = true;
+      paid++;
+    }
+    return paid;
+  }
+
+  /** Take the selected booster back off the board. Free, always - see above. */
+  removeBooster(ix: number): void {
+    this.levels.removeBooster(ix);
+    this.selectedBooster = -1;
+    this.boosterDrag = null;
+    this.notifyRampsChanged();
   }
 
   /** Matter builds a world per drop; let the engine tear it down. */
@@ -224,7 +362,7 @@ export class GameController {
         this.acc -= STEP_MS;
         const b = this.ball;
         b.px = b.x; b.py = b.y;
-        this.engine.step(b, this.levels.level, this.levels.rampSegments);
+        this.engine.step(b, this.levels.playLevel, this.levels.rampSegments);
         this.reactToStep(b);
         if (b.result) { this.land(b.result); break; }
       }
@@ -237,7 +375,26 @@ export class GameController {
   /* Everything the physics RECORDED, turned into things you can see and hear.
      Driven from here, never from stepBall. */
   private reactToStep(b: BallState): void {
-    const lv = this.levels.level;
+    const lv = this.levels.playLevel;
+
+    /* Which of the player's boosters the ball is inside. Recorded rather than
+       read back off the engine because the engine counts every booster on the
+       board as one kind of thing, and only the player's are charged for. */
+    const mine = this.levels.placedBoosters;
+    for (let k = 0; k < mine.length; k++) {
+      if (this.boosterFired[k]) continue;
+      const z = mine[k];
+      if (Math.hypot(b.x - z.x, b.y - z.y) <= z.r) this.boosterFired[k] = true;
+    }
+
+    /* a box the ball opened this step. Before the hit reaction, so a box sat
+       against a wall pops on the frame it is touched rather than the one
+       after the bounce. */
+    for (let k = 0; k < b.gotBox.length; k++) {
+      if (!b.gotBox[k] || this.boxSeen[k]) continue;
+      this.boxSeen[k] = true;
+      this.openBox(k, lv.boxes[k]);
+    }
 
     // a block that shattered this step throws its pieces
     while (this.seenBroke < b.justBroke.length) {
@@ -261,6 +418,43 @@ export class GameController {
         this.showFlash('Obstacles bounce you randomly — try to avoid them.');
       }
     }
+  }
+
+  /* ============================================================
+     OPENING A MYSTERY BOX
+
+     The pop is unconditional - the ball hit a chest, the chest
+     reacts - and the PAYOUT is not: claimBox() is the ledger's
+     one-per-level gate, and a box already claimed on an earlier
+     visit pays nothing at all. That ordering is deliberate: the
+     feedback belongs to the contact, the reward belongs to the
+     record.
+
+     The roll happens HERE and not in the simulation, which never
+     learns what a box is worth. That is what keeps simulate()
+     pure enough for the solver sweep to run a thousand drops
+     without paying a player a thousand times.
+     ============================================================ */
+  private openBox(ix: number, at: { x: number; y: number }): void {
+    // the same burst helper everything else uses - gold shards, then a
+    // brighter flash of white through them
+    this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffc53a', 18, 3.4, Math.PI, 520);
+    this.renderer.particles.burst(at.x, at.y, 0, -1, '#fff3c4', 9, 2.3, Math.PI, 360);
+    Sound.coin(0);
+    this.bus.emit('box:collected', { index: ix });
+
+    if (!this.rewards.claimBox(this.levels.levelIndex)) return;
+    const prize = this.rewards.rollBoxPrize(this.levels.level.id);
+    this.rewards.payBoxPrize(prize);
+    this.showFlash(
+      prize.kind === 'spin'
+        ? 'Mystery box: a free spin! Tap the gear.'
+        : `Mystery box: ${prizeLabel(prize.kind, prize.n)}!`);
+    /* The mark flies from the chest itself to whatever now holds it. The
+       controller cannot reach the DOM, so it says where and what, and
+       CoinFlight - which owns that layer - does the flying. */
+    this.bus.emit('box:reward', { kind: prize.kind, n: prize.n, x: at.x, y: at.y });
+    this.changed();
   }
 
   /** Fire everything a single contact is worth: sparks and squash. */
@@ -292,12 +486,18 @@ export class GameController {
     this.tutRetry = false;
 
     this.capture = null; this.dragging = null; this.selected = -1;
+    this.boosterDrag = null; this.selectedBooster = -1; this.draft = null;
     this.hideFlash();
     const seed = this.seedOverride !== null
       ? this.seedOverride : (Math.random() * 0x7fffffff) | 0;
     this.releaseBall();
-    this.ball = this.engine.createBall(this.levels.level, seed, this.levels.sessionBroken);
+    this.ball = this.engine.createBall(this.levels.playLevel, seed, this.levels.sessionBroken);
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
+    /* A box already opened - this session or a previous visit - must not pop
+       again, so the run starts with those already accounted for. */
+    this.boxSeen = this.levels.sessionBoxes.slice();
+    // whether a booster fired is a fact about THIS drop, not the board
+    this.boosterFired = this.levels.placedBoosters.map(() => false);
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.acc = 0;
 
@@ -307,7 +507,7 @@ export class GameController {
     this.rewards.spendBall();
     this.tries++;
     this.setPhase('drop');
-    this.bus.emit('drop:started', { level: this.levels.level, seed, tries: this.tries });
+    this.bus.emit('drop:started', { level: this.levels.playLevel, seed, tries: this.tries });
   }
 
   /* A win is swallowed by the target first; the card waits for the animation.
@@ -316,13 +516,16 @@ export class GameController {
     const b = this.ball!;
     // a block broken this run stays broken for the next drop
     this.levels.sessionBroken = b.broken.slice();
+    // and a box opened this run stays open, win or lose: it was claimed the
+    // instant it was touched, so it must not come back for the next attempt
+    this.levels.sessionBoxes = this.levels.sessionBoxes.map((g, i) => g || !!b.gotBox[i]);
     this.rewards.recordPickups(this.levels.levelIndex, b.stars);
 
     if (result !== 'win') { this.missed(result); return; }
     /* Where the target WAS when the ball reached it. On a patrolling board
        the authored centre is only its start, and swallowing the ball toward
        that would drag it sideways to a place the target had already left. */
-    const c = targetAt(this.levels.level, b.steps);
+    const c = targetAt(this.levels.playLevel, b.steps);
     Sound.capture();
     this.setPhase('capture');
     this.capture = { t: 0, bx: b.x, by: b.y, cx: c.x, cy: c.y };
@@ -357,6 +560,10 @@ export class GameController {
   private finish(result: DropResult): void {
     this.lastResult = result;
     const lv = this.levels.level;
+    /* THE ONE PLACE A BOOSTER IS SPENT. Before the clear is recorded, so the
+       win card and the bag are already telling the same story by the time
+       either is looked at. */
+    const boostersUsed = this.commitBoosters();
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
     const { stars, bonus, coins, note, firstClear } = this.rewards.recordClear(
@@ -366,6 +573,7 @@ export class GameController {
     this.winCard = {
       stars, note, bonus, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
+      boosters: boostersUsed,
     };
     this.capture = null;
     // the confetti starts on this phase change, so the fanfare starts with it
@@ -390,6 +598,8 @@ export class GameController {
     this.releaseBall();
     this.capture = null;
     this.selected = -1; this.dragging = null; this.lastResult = null;
+    this.selectedBooster = -1; this.boosterDrag = null; this.draft = null;
+    this.boxSeen = []; this.boosterFired = [];
     this.winCard = null;
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
@@ -401,7 +611,16 @@ export class GameController {
       this.rewards.highest = this.levels.levelIndex;
       this.rewards.saveProgress();
     }
+    /* Whether this board's box has already been taken is the ledger's fact
+       and the board's appearance, so joining them is this method's job - the
+       same cross-manager seam as every other spend here. */
+    this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
+    /* Reaching Solmesa is what puts the first booster in the bag. Announced
+       with a flash rather than a modal: it is a gift, not an interruption. */
+    if (this.rewards.noteLevelReached(this.levels.level.id))
+      this.showFlash('Boosters unlocked - one is in your bag!');
     this.teachNewMechanics();
+    this.teachBoosterBoard();
   }
 
   nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
@@ -428,8 +647,7 @@ export class GameController {
     if (this.tutRetry) return 'retry';
     if (this.rewards.tutorialSeen) return null;
     if (!this.tutIntroDone) return 'intro';
-    if (this.levels.rampsUsed === 0) return 'add';
-    if (!this.tutAdjusted) return 'aim';
+    if (this.levels.rampsUsed === 0) return 'draw';
     return 'drop';
   }
 
@@ -437,23 +655,15 @@ export class GameController {
   tutorialNext(): void {
     switch (this.tutorialStep()) {
       case 'intro': this.tutIntroDone = true; break;
-      case 'aim':   this.tutAdjusted = true; this.selected = -1; break;
       case 'retry': this.tutRetry = false; break;
       default: return;
     }
     this.changed();
   }
 
-  /** A drag on a placed ramp just ended. During "aim" that is the lesson
-      done: the ramp is put down so the very next tap on empty board is the
-      drop the next step asks for, rather than a tap that only deselects. */
-  rampAdjusted(): void {
-    if (this.tutorialStep() === 'aim') {
-      this.tutAdjusted = true;
-      this.selected = -1;
-    }
-    this.notifyRampsChanged();
-  }
+  /** A drag on a placed ramp just ended. Nothing to teach here any more -
+      see the note on the walkthrough - but the UI still has to re-read. */
+  rampAdjusted(): void { this.notifyRampsChanged(); }
 
   tutorialDone(): void {
     if (this.rewards.tutorialSeen) return;
@@ -486,6 +696,27 @@ export class GameController {
     }
   }
 
+  /* ============================================================
+     "THIS ONE NEEDS A BOOSTER"
+
+     A board that cannot be solved with ramps has to say so. The
+     puzzle is meant to be the placement, not the discovery that
+     the level is a wall - a player who spends fifteen balls
+     proving a board impossible has been tricked, not challenged.
+
+     Said EVERY time the level is entered, unlike the mechanic
+     tips, which are once-ever: this is not a thing to learn, it
+     is a fact about the board in front of you. And it says
+     something different when the bag is empty, because then the
+     next move is the shop rather than the bag.
+     ============================================================ */
+  private teachBoosterBoard(): void {
+    if (!this.levels.level.needsBooster) return;
+    this.showFlash(this.rewards.extraBoosters > 0
+      ? 'Ramps cannot reach this one - use a booster.'
+      : 'Ramps cannot reach this one - the shop has boosters.');
+  }
+
   showFlash(text: string): void {
     this.flash = text;
     if (this.flashTimer) clearTimeout(this.flashTimer);   // a new miss replaces the old
@@ -504,11 +735,12 @@ export class GameController {
 
   /* ---------------- ramp editing, driven by the canvas ---------------- */
 
-  notifyRampsChanged(): void {
-    // the ramp came off: the next one has to be aimed again
-    if (this.levels.rampsUsed === 0) this.tutAdjusted = false;
-    this.changed();
-  }
+  notifyRampsChanged(): void { this.changed(); }
+
+  /** A drag on a placed booster just ended. Its own method rather than a
+      branch inside rampAdjusted(), which belongs to the walkthrough and must
+      not be taught anything by an item the walkthrough never mentions. */
+  boosterAdjusted(): void { this.changed(); }
 
   /* ---------------- what the renderer needs ---------------- */
 
@@ -521,6 +753,8 @@ export class GameController {
       country: this.levels.country,
       entities: this.levels.entities,
       ramps: this.levels.rampSegments,
+      draft: this.draft,
+      minRamp: MIN_RAMP,
       selected: this.selected,
       phase: this.phase,
       clock: this.clock,
@@ -533,10 +767,23 @@ export class GameController {
       ball: this.ball,
       broken: this.ball ? this.ball.broken : this.levels.sessionBroken,
       got: this.ball ? this.ball.got : [],
+      /* OR-ed rather than taken from the ball: a box claimed on an earlier
+         visit is open before this drop starts, and the live run only ever
+         adds to that. */
+      gotBox: this.levels.sessionBoxes.map(
+        (g, i) => g || !!(this.ball && this.ball.gotBox[i])),
       capture: this.capture,
       captureMs: CAPTURE_MS,
       squash: this.squash,
       deleteButtonAt: (s: Segment) => this.levels.deleteButtonAt(s),
+      /* The player's boosters, and the grips for whichever one is selected.
+         Passed the same way the ramp's are, from the same manager, so the
+         thing drawn and the thing the finger hits cannot disagree. */
+      boosters: this.levels.placedBoosters,
+      selectedBooster: this.selectedBooster,
+      boosterHandleAt: (b: BoosterDef) => this.levels.boosterHandleAt(b),
+      boosterDeleteAt: (b: BoosterDef) => this.levels.boosterDeleteAt(b),
+      aimR: AIM_R,
       /* read from the same constants the hit-test uses: these were once
          literals, and the × was resized for the finger while still being
          painted at its old size */
@@ -550,22 +797,26 @@ export class GameController {
       to drop after that. Null when the caption slot should stay empty. */
   get cue(): string | null {
     // the walkthrough's bubble does this job while it is up
-    if (this.phase !== 'plan' || this.selected >= 0 || this.tutorialStep()) return null;
-    return 'Touch or click on screen to drop ball';
+    if (this.phase !== 'plan' || this.selected >= 0 || this.selectedBooster >= 0
+        || this.tutorialStep()) return null;
+    return this.canDraw
+      ? 'Drag to draw a ramp, or tap to drop the ball'
+      : 'Touch or click on screen to drop ball';
   }
 
   /** The hint line under the board - a read-only view of state. */
   get hint(): string {
     const step = this.tutorialStep();
     if (step === 'intro') return 'Get the ball into the green target.';
-    if (step === 'add') return 'Tap the big + at the top to add a ramp.';
-    if (step === 'aim') return 'Drag the ramp under the ball, and an end to turn it.';
+    if (step === 'draw') return 'Drag across the board to draw a ramp under the ball.';
     if (step === 'drop') return 'Tap anywhere to drop the ball.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
-    if (this.selected >= 0) return 'Drag the ramp to move it, an end to turn it, × to remove it.';
+    if (this.selectedBooster >= 0)
+      return 'Drag the booster to move it, the arrow to aim it, × to take it back.';
+    if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
     if (this.levels.rampsLeft <= 0 && this.rewards.extraRamps <= 0)
       return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';
-    return 'Tap + to add a ramp. Tap a ramp to adjust it, or empty board to drop.';
+    return 'Drag to draw a ramp. Tap a ramp to adjust it, or empty board to drop.';
   }
 }

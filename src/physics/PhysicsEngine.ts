@@ -28,10 +28,13 @@ export interface BallState {
   broken: boolean[];
   justBroke: number[];
   got: boolean[];
+  /** Which mystery boxes this drop has opened. */
+  gotBox: boolean[];
 
   stars: number;
   boosts: number;
   teleports: number;
+  boxes: number;
 
   result: DropResult | null;
   readonly speed: number;

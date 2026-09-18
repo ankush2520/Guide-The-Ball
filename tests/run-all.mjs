@@ -36,6 +36,9 @@ try {
   /* ---- server-free: the simulator itself ---- */
   await run('node', ['tests/mechanics.mjs']);
   await run('node', ['tests/board.test.mjs']);
+  /* The booster/box solver gate. Headless like the two above: it proves
+     claims about LEVELS against the simulator, and needs no app. */
+  await run('node', ['tests/items.test.mjs']);
 
   /* ---- the real app ---- */
   console.log('\nbuilding for the UI tests…');

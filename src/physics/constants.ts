@@ -138,6 +138,12 @@ export const SLIP_REST = 0.985;      // restitution inside a slippery zone
 export const PORTAL_CD = 12;
 
 export const STAR_R = 13;            // star collection radius (plus the ball's)
+/* A mystery box is a PRESENT, and a present has to be big enough to read as
+   one on a 270px-wide phone board - the ribbon and the bow are what say what
+   it is, and neither survives being drawn at star size. It is still the same
+   KIND of thing to the simulation as a star: scenery the ball passes through,
+   never geometry it hits, so its size can be chosen for legibility alone. */
+export const BOX_R = 20;             // box collection radius (plus the ball's)
 export const WIND_CAP = 1.2;         // hard ceiling on a level's wind accel
 
 // Obstacle bounces mirror off the circle like a real bounce, then scatter by
