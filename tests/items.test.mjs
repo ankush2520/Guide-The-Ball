@@ -8,7 +8,15 @@
 
    1. A LEVEL FLAGGED `needsBooster` MUST BE BOTH:
         - unsolvable with ramps alone, and
-        - solvable with one booster out of the bag.
+        - solvable with one BOOSTER RAMP out of the bag.
+
+      The second half is the one that moved when the item did:
+      the bag now holds a bar that bounces like a ramp and
+      multiplies the exit speed, so what is placed below is that
+      bar - and the claim being proved is sharper than it was.
+      An ordinary ramp cannot solve this board and a bar in the
+      same place can, which means the SPEED is what the board
+      needs, not the extra surface.
       Either half failing is a shipped defect, in opposite
       directions: a board that turns out to be rampable makes the
       item pointless, and one that is unsolvable even WITH the
@@ -64,7 +72,7 @@ chk(needs.length > 0, 'at least one board in the game requires a booster',
 
 for (const lvl of needs) {
   const r = await page.evaluate(([li]) => {
-    const g = window.__gtb, { simulate, CONSTS, BOOSTER } = g;
+    const g = window.__gtb, { simulate } = g;
     const R = Math.PI / 180;
     const ramp = (cx, cy, deg, len = 120) => {
       const a = deg * R, hx = Math.cos(a) * len / 2, hy = Math.sin(a) * len / 2;
@@ -100,11 +108,11 @@ for (const lvl of needs) {
       if (simulate(cfg, 1, li).result === 'win') multi = cfg;
     }
 
-    /* ---- half two: ONE BOOSTER OUT OF THE BAG DOES WIN ----
-       Exactly the item the player owns - the shipped radius and speed, which
-       come from the game rather than from a number copied in here - placed
-       and aimed by the same freedoms the board gives them. */
-    const B = (x, y, angle) => ({ x, y, r: BOOSTER.r, angle, speed: BOOSTER.speed });
+    /* ---- half two: ONE BOOSTER RAMP OUT OF THE BAG DOES WIN ----
+       Exactly the item the player owns - a bar of the shipped length, built by
+       the game's own helper rather than by a shape copied in here - placed and
+       turned by the same freedoms the board gives them. */
+    const B = (x, y, angle) => g.bar(x, y, angle);
     let solved = null, spots = 0;
     /* Stopped at ten solving spots rather than swept exhaustively. The claim
        being proved is "a booster solves this, and finding the spot is not a
@@ -114,7 +122,7 @@ for (const lvl of needs) {
       for (let by = 150; by <= 630 && spots < 10; by += 30) {
         let spotSolves = false;
         for (let ang = -170; ang < 180 && !spotSolves; ang += 10) {
-          const j = g.scratch({ ...lv, boosters: [...lv.boosters, B(bx, by, ang)] }, 0);
+          const j = g.scratch({ ...lv, boostRamps: [B(bx, by, ang)] }, 0);
           for (let ry = 130; ry <= 620 && !spotSolves; ry += 60)
             for (let th = 20; th <= 160; th += 12) {
               const cfg = [ramp(lv.spawn.x, ry, th)];
@@ -144,12 +152,12 @@ for (const lvl of needs) {
       r.oneRamp ? `but one does: ${JSON.stringify(r.oneRamp)}` : 'swept the whole board at 1.5°');
   chk(!r.multi, `level ${r.id}: nor do 60,000 random two- and three-ramp layouts`,
       r.multi ? 'but one does' : 'none of them win');
-  chk(!!r.solved, `level ${r.id}: one booster from the bag DOES solve it`,
-      r.solved ? `e.g. booster (${r.solved.bx},${r.solved.by}) at ${r.solved.ang}°, ` +
+  chk(!!r.solved, `level ${r.id}: one booster ramp from the bag DOES solve it`,
+      r.solved ? `e.g. a bar at (${r.solved.bx},${r.solved.by}) lying at ${r.solved.ang}°, ` +
                  `ramp y=${r.solved.ry} th=${r.solved.th}° - wins on all 7 seeds`
-               : 'no booster placement wins');
+               : 'no booster ramp placement wins');
   chk(r.spots >= 5, `level ${r.id}: and it is not a pixel hunt`,
-      `${r.spots}+ booster positions solve it`);
+      `${r.spots}+ bar positions solve it`);
   chk(r.atDropHeight && r.across > 250,
       `level ${r.id}: and the reason is VISIBLE - the target is at the ball's own ` +
       'drop height, right across the board',

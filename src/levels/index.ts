@@ -12,6 +12,7 @@ export function initLevel(raw: RawLevel): Level {
     ...raw,
     obstacles: raw.obstacles ?? [],
     boosters: raw.boosters ?? [],
+    boostRamps: raw.boostRamps ?? [],
     wind: raw.wind ?? [],
     slippery: raw.slippery ?? [],
     portals: raw.portals ?? [],

@@ -22,6 +22,7 @@ import { Hud } from './Hud';
 import { Controls } from './Controls';
 import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
+import { GiftPanel } from './GiftPanel';
 import { LevelSelect } from './LevelSelect';
 import { NoBallsPanel } from './NoBallsPanel';
 import { InfoPanel } from './InfoPanel';
@@ -151,6 +152,10 @@ function Game() {
 
       {/* The walkthrough bubble. Over the board, under every panel. */}
       <Coach hidden={stack.length > 0} />
+      {/* The gift beat comes BEFORE the win card and never with it: the
+          controller holds the card back while a wrapped target is being
+          opened, so only one of these two is ever on screen. */}
+      <GiftPanel />
       <WinOverlay />
       {/* Both of these paint OVER the card rather than inside it. The burst
           sits under the coin flight, because the coins are the payout and the

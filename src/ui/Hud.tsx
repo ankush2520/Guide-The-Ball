@@ -23,6 +23,7 @@
 import { useEffect, useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { LevelPill } from './LevelPill';
+import { useCoinsHeld } from './coinsInFlight';
 
 interface Props {
   onOpenSettings: () => void;
@@ -34,6 +35,11 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
   const { levels, rewards, controller } = useGame();
   useGameVersion();
   const [, setTick] = useState(0);
+  /* What the wallet HAS, minus what is still flying towards this chip. The
+     ledger is credited the instant a payout is recorded; the number here
+     climbs as the coins arrive, so the flight is the payment rather than a
+     decoration over one that already happened. See coinsInFlight. */
+  const coins = Math.max(0, rewards.coins - useCoinsHeld());
 
   /* The wheel's cooldown is the only thing up here that expires without the
      game changing, so the gear gets its own once-a-second nudge. Without it
@@ -56,7 +62,7 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
     <div className="hud">
       <div className="chips left">
         <div className="counter coins" title="Coins — spend them in the shop">
-          <i className="coin" /><b id="coin-count">{rewards.coins}</b>
+          <i className="coin" /><b id="coin-count">{coins}</b>
         </div>
         <div className={'counter balls' + (rewards.balls <= 0 ? ' empty' : '')} title="Balls left">
           <i className="pip" /><b id="ball-count">{rewards.balls}</b>

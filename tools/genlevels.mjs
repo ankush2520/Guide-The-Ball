@@ -866,9 +866,20 @@ let totalTries = 0;
 /* Which ids in this country are hand-tuned and must not be regenerated. Read
    from the data file rather than from a list here, so the file is the one
    place that says which boards are hand-written. */
+const DATA_SRC = fs.readFileSync(path.join(root, 'src/levels/levels.data.ts'), 'utf8');
 const PRESERVED = new Set(
-  (fs.readFileSync(path.join(root, 'src/levels/levels.data.ts'), 'utf8')
-     .match(/\{ id:(\d+),[^}]*needsBooster\s*:\s*true/g) || [])
+  (DATA_SRC.match(/\{ id:(\d+),[^}]*needsBooster\s*:\s*true/g) || [])
+    .map(m => +m.match(/id:(\d+)/)[1]));
+
+/* WHICH TARGETS ARE WRAPPED, read out of the data file the same way.
+
+   `targetGift` is a designer's decoration on a milestone board - it changes no
+   geometry, so unlike `needsBooster` it is no reason to skip regenerating the
+   level. It IS a reason to write the flag back out afterwards: a regeneration
+   that silently unwrapped level 100's target would take a milestone away and
+   nothing would fail. See fmt() below. */
+const GIFTED = new Set(
+  (DATA_SRC.match(/\{ id:(\d+)[\s\S]*?targetGift\s*:\s*true/g) || [])
     .map(m => +m.match(/id:(\d+)/)[1]));
 
 for (let i = 0; i < 10; i++){
@@ -947,6 +958,8 @@ if (WRITE){
     if (lv.targetMove)
       out += `,\n    targetMove:{x0:${num(lv.targetMove.x0)},x1:${num(lv.targetMove.x1)},` +
              `period:${num(lv.targetMove.period)}}`;
+    // the wrapped-target flag survives a regeneration - see GIFTED above
+    if (GIFTED.has(lv.id) || lv.targetGift) out += `, targetGift:true`;
     out += ` }`;
     return out;
   };

@@ -143,7 +143,8 @@ Flavour names layer in later as a pure data change: set `city` on a level and
 
 | Entity | Behaviour |
 |---|---|
-| `boosters` | On entry, sets velocity to a fixed angle and speed. Deterministic, unlike the red obstacles' scatter. Fires once per entry, and the chevron drawn on it is the exact heading you leave on. |
+| `boosters` | The level's own booster **pad**. On entry, sets velocity to a fixed angle and speed. Deterministic, unlike the red obstacles' scatter. Fires once per entry, and the chevron drawn on it is the exact heading you leave on. |
+| `boostRamps` | The player's booster **ramp**, merged in by `LevelManager.playLevel`. Collides exactly like a ramp - same body, same mirror - and then multiplies the exit speed by `BOOST_RAMP_GAIN` (10x what it came in at, held to `BOOST_RAMP_CAP`). The launch decays back under the general cap by `BOOST_DECAY` a step rather than ending in a snap. Authorable, but no shipped level uses one. |
 | `wind` | Rectangular, never moves. Constant acceleration while the ball's centre is inside; gone the instant it leaves. |
 | `slippery` | Rectangular. Raises restitution to `SLIP_REST` for bounces resolved inside it. |
 | `portals` | A pair of ends. Direction is preserved unless the exit states a `facing`. |
@@ -161,6 +162,20 @@ Two ordering rules inside a substep are load-bearing: a portal fires on where
 the ball *arrived*, before anything can bounce it back out; and a booster
 fires *after* collisions, so it always wins the substep. A booster that can be
 cancelled by the wall it is pushing you into is unreadable.
+
+**A boost ramp is the one thing allowed past `BOOST_CAP`**, and the frame pays
+for it: above that speed `stepMatter()` runs the frame as several smaller
+Matter steps, enough that none advances more than `BOOST_SUB_PX`, because
+Matter has no continuous collision detection and a ball moving further than a
+bar is thick passes clean through it. Matter's own time correction carries the
+velocity across the delta change and gravity integrates to the same total, so
+nothing is re-tuned for the subdivision - and the gate is what protects the
+proved levels: an authored pad tops out *at* `BOOST_CAP`, so only a bar out of
+the bag ever takes that branch, and every other drop runs the identical single
+step it was proved with. The pickup and hazard tests switch to the swept form
+on those frames for the same reason (`flew` in `MatterEngine.step`), gated on
+the turbo state and on no portal having fired, since a teleport's "path" is
+not a path.
 
 `npm run mech` runs the per-mechanic isolation tests on purpose-built boards.
 
@@ -342,10 +357,10 @@ level it covers roughly the first twenty levels on its own, so a new player
 meets the whole of Verdholm before the economy ever asks them for anything.
 After that the drain resumes and the wheel and the ad carry it.
 
-**Coins are what closes that gap.** Every clear pays them — including replays,
-at a quarter rate — and at 2 coins a ball a single three-star clear in Act 1
-pays for ten drops. The drain is still real, but it is now a drain against an
-income rather than against a fixed opening grant.
+**Coins are what closes that gap.** A clear pays them the first time a board
+is beaten, and at 2 coins a ball a single three-star clear in Act 1 pays for
+ten drops. The drain is still real, but it is now a drain against an income
+rather than against a fixed opening grant.
 
 If it needs tuning, the levers, cheapest first: `COIN_CLEAR`, `BALL_PRICE`,
 `STARTING_COINS`, then `STARTING_BALLS` / `CLEAR_BONUS`.
@@ -389,10 +404,18 @@ reach:
 | Act 3 | 18 | 22 | 28 |
 | Act 4 | 22 | 26 | 32 |
 
-Unlike the ball bonus, coins are paid on **every** clear. A replay of an
-already-cleared level pays a quarter (minimum 2), which keeps a board you
-enjoy worth returning to while leaving farming level 1 far worse than playing
-on — 5 coins for a drop that cost a ball worth 2.
+**A board pays once.** A replay of an already-cleared level pays nothing, and
+the reason is arithmetic rather than taste: a drop costs a ball, a ball costs
+2 coins at list price and 1.43 in the best bundle, so any replay rate above
+about one and a half coins makes a solved board a machine that prints coins,
+which print balls, which print more coins. It ran at a quarter (minimum 2) and
+paid 4-5 coins for a ball worth 2 — a slow loop, but a farm only has to be
+positive to be a farm, and the fastest board in the game is the one already
+solved. There is no rate that is both worth collecting and safe, so the rule
+is the simple one: the clear that first beats a board is what it pays, and
+after that the board is practice for a better star rating. `tests/play.test.mjs`
+asserts the arithmetic, not the number - a replay must pay less than the
+cheapest ball - so reintroducing any rate that could outrun it fails.
 
 ### The reward flight
 
@@ -549,13 +572,30 @@ Two things are not authored into a level, so each one makes a claim the level
 data cannot check for itself. `npm test` runs `tests/items.test.mjs`, which
 proves both against the real simulator.
 
-**Boosters** unlock at level 21, the first board of Solmesa, and the player is
-given one free the first time they get there (once, ever - a persisted flag).
-Before that the item does not exist: not in the bag, not in the shop, and not
-in a mystery box's prize table. A placed booster is physically identical to an
-authored one - same def, same kick, read by the same loop in the engine - so
-it reaches the physics by being merged into the level the ball plays against
-(`LevelManager.playLevel`) rather than through any new code path.
+**Booster ramps** unlock at level 21, the first board of Solmesa, and the
+player is given one free the first time they get there (once, ever - a
+persisted flag). Before that the item does not exist: not in the bag, not in
+the shop, and not in a mystery box's prize table.
+
+The item is a **bar**, not a pad, and the distinction is the whole design. It
+is the ramp's silhouette and the ramp's physics - the ball mirrors off it
+exactly as it would off one the player drew - and what it adds is *speed*: the
+ball leaves at ten times the speed it arrived with. That is the one thing no
+ramp can give you, since every bounce in the game is lossy, which is what
+makes this a puzzle piece rather than a second way to aim. It was a disc with
+an arrow once; an arrow is a heading, and a heading is what the expressive
+tool already does.
+
+It is **orange**, and pointedly not green: the pad it replaces wore a
+green-cyan a step away from the target's own green, and green belongs to the
+goal alone. Not the ramp's blue either - with the same silhouette, colour is
+the only thing left to separate "a bar that turns you" from "a bar that throws
+you". The level's own pads are now orange too: same family, and the shape says
+which is which.
+
+It reaches the physics by being merged into the level the ball plays against
+(`LevelManager.playLevel`, as `boostRamps`) rather than through any new code
+path, exactly as the old disc was.
 
 The one rule that is deliberately *not* the spare ramp's: **a booster is only
 charged for when a drop that actually fired it goes on to win.** A spare ramp
@@ -572,7 +612,10 @@ climb back to the height it started at - and it would have to, to be over
 there. The gate proves both halves and the level may not ship if either fails:
 no win from an exhaustive single-ramp sweep of the whole board at 1.5 degrees
 nor from 60,000 random two- and three-ramp layouts, and a win from one booster
-out of the bag on all seven seeds, from at least ten different placements.
+ramp out of the bag on all seven seeds, from at least ten different
+placements. The claim got sharper when the item did: an ordinary ramp in that
+spot cannot solve the board and a bar in the same spot can, so what the level
+needs is the *speed*, not the extra surface.
 That negative is a search, not a proof - but it is a far wider search than a
 player can run by hand, and the board is built so the answer is obvious by
 construction.
@@ -592,7 +635,28 @@ are *removed* from the table below level 21 rather than re-rolled, or the
 weights would stop meaning what the table says. A box is claimed **once per
 level, for good**, and the claim is persisted: a bonus that could be farmed by
 replaying level 1 would be a better income than playing the game, which is the
-same reason a replay only pays a quarter of its coins.
+same reason a replay pays no coins at all.
+
+**A gift inside the target** is the second flavour of the same thing, and the
+only one that is not on the board: a level may set `targetGift`, which puts the
+chest's own present - same paper, same ribbon - *inside* the target's well, and
+landing in it unwraps a prize out of the same table. Inside, and drawn entirely
+within `c.r`: the target's rings are untouched around it, because the outline
+is what a player reads "land here" off and a gift target must still be a
+target. Four boards in 150 carry it - the last level of an Act - and
+it is meant to stay that rare: a game where every target is wrapped has no
+milestones. The flag changes no geometry and no physics, so it can sit on one
+of Verdholm's frozen twenty without re-proving anything, and
+`tools/genlevels.mjs` writes it back out so a regeneration cannot quietly
+unwrap a milestone.
+
+The two celebrations are **sequential, never stacked**. `GameController.finish()`
+rolls the prize, claims it, and holds the win card in `pendingCard` while
+`GiftPanel` plays its unwrap; the confetti and the payout flight both key off
+`winCard`, so holding the card back holds the whole win beat back with it and
+there is no second gate to keep in step. Taking the gift credits the ledger
+through the same `payBoxPrize()` the chest uses and flies the reward to its
+counter with the same flight, then releases the card.
 
 ## Layout
 

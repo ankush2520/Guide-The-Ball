@@ -16,9 +16,10 @@ import type { RawLevel } from '../levels/types';
 
 export interface DrawContext {
   ctx: CanvasRenderingContext2D;
-  /** The level being drawn. Only the target reads it, and only to resolve a
-      patrol - an entity still never looks up its own def through this. */
-  level: Pick<RawLevel, 'target' | 'targetMove'>;
+  /** The level being drawn. Only the target reads it: to resolve a patrol, and
+      to know whether it is WRAPPED - an entity still never looks up its own
+      def through this. */
+  level: Pick<RawLevel, 'target' | 'targetMove' | 'targetGift'>;
   /** Seconds since load. Every animation is a pure function of this, so the
       board looks identical at the same clock on any device. */
   clock: number;
@@ -28,6 +29,11 @@ export interface DrawContext {
   got: boolean[];
   /** Which mystery boxes have been opened THIS DROP. */
   gotBox: boolean[];
+  /** Whether this level's TARGET GIFT has already been taken - on a previous
+      visit or a moment ago. A wrapped target that has been opened goes back to
+      being an ordinary one, the same way a taken chest goes to an outline:
+      the board must never promise a prize it can no longer pay. */
+  giftTaken: boolean;
   /** Elapsed SIMULATION time in steps, fractional, and 0 whenever no drop is
       running. The one thing on the board that is not drawn off the wall
       clock: a patrolling target has to be painted where the physics says it

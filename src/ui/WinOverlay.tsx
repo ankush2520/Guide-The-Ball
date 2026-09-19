@@ -59,9 +59,17 @@ export function WinOverlay() {
           {[0, 1, 2].map(i => <i key={i} className={i < card.stars ? 'on' : ''}>&#9733;</i>)}
         </div>
         <div className="rewards" id="ov-rewards">
-          <span className="reward" id="ov-coins">
-            <i className="coin" /><b>+{card.coins}</b>
-          </span>
+          {/* A REPLAY PAYS NOTHING - see coinsFor - so there is no chip to
+              show, and a "+0" would be worse than none: it reads as a payout
+              that failed rather than as a board already earned. The line that
+              replaces it says which it is, once, where the number was. */}
+          {card.coins > 0 ? (
+            <span className="reward" id="ov-coins">
+              <i className="coin" /><b>+{card.coins}</b>
+            </span>
+          ) : (
+            <span className="nopay" id="ov-nopay">Already earned &mdash; replays are practice</span>
+          )}
           {card.bonus > 0 && (
             <span className="reward" id="ov-balls" title="First clear bonus">
               <i className="pip" /><b>+{card.bonus}</b>
@@ -71,7 +79,7 @@ export function WinOverlay() {
               charged for by the win, so the win is where it has to be shown -
               a bag that is quietly one lighter afterwards reads as a bug. */}
           {card.boosters > 0 && (
-            <span className="reward spent" id="ov-boosters" title="Boosters used">
+            <span className="reward spent" id="ov-boosters" title="Booster ramps used">
               <i className="boostmark" /><b>&minus;{card.boosters}</b>
             </span>
           )}

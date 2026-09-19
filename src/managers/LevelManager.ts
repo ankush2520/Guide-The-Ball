@@ -11,14 +11,15 @@
    without any of them knowing about each other.
    ============================================================ */
 import type { GameBus } from '../core/events';
-import type { BoosterDef, Level, Segment, Vec } from '../levels/types';
+import type { BoostRampDef, Level, Segment, Vec } from '../levels/types';
 import { LEVELS, countryOf, cityOf } from '../levels';
 import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
-import { MIN_RAMP, MAX_RAMP, RAMP_HT, H, BOARD } from '../physics/constants';
-import { BOOSTER_R, BOOSTER_SPEED, BOOSTER_ANGLE } from '../items/items';
+import { MIN_RAMP, MAX_RAMP, RAMP_HT, BOOST_HT, BOOST_LEN, H, BOARD }
+  from '../physics/constants';
+import { BOOSTER_ANGLE } from '../items/items';
 
 /** How close a finger has to be to grab a ramp or one of its controls.
     Board coordinates throughout, so a grab radius means the same thing
@@ -46,20 +47,31 @@ export const DEL_OFF  = 50;
 export const DEL_R    = 30;
 export const DEL_GRAB = 36;
 
-/* The booster's aim knob sits this far outside its rim, on the nose. Far
-   enough out that the finger holding it is not covering the disc whose
-   direction it is setting - which is the whole reason it is a knob on a stalk
-   and not a drag anywhere on the body. */
+/* The booster ramp's aim knob sits this far beyond one END of the bar, on the
+   bar's own axis. Far enough out that the finger holding it is not covering
+   the bar whose angle it is setting - which is the whole reason it is a knob
+   on a stalk and not a drag anywhere on the body. */
 export const AIM_OFF  = 26;
 export const AIM_R    = 11;
 export const AIM_GRAB = 24;
 
+/* How close a finger has to come to a boost ramp to grab it. Much wider than
+   its 14-unit thickness, and wider than the ramp's PICK_PAD: a bar the player
+   OWNS and can only have one or two of must never be fiddly to pick up, where
+   a ramp they can redraw in one drag can afford to be exact. */
+export const BOOST_GRAB = 22;
+
 export class LevelManager {
   private index = 0;
   private ramps: Segment[] = [];
-  /* The player's own boosters. Kept apart from the level's own the same way
-     ramps are kept apart from walls: identical physics, different owner. */
-  private boosters: BoosterDef[] = [];
+  /* The player's own boost ramps. Kept apart from the level's own the same way
+     ramps are kept apart from walls: identical physics, different owner.
+
+     SEGMENTS, exactly like the ramps above - the item is a bar now, and its
+     position and its angle are its two ends. Nothing derived is stored: where
+     the knob goes, where the × goes and what the physics collides with are all
+     computed from these four numbers, so they cannot drift apart. */
+  private boosters: BoostRampDef[] = [];
   /** Which of those have been PAID for out of the bag, by index. A booster is
       only charged for by a win that actually went through it (see
       GameController), so a placed one is on loan until then - and per-index
@@ -104,8 +116,12 @@ export class LevelManager {
   get count(): number { return LEVELS.length; }
   get isLast(): boolean { return this.index >= LEVELS.length - 1; }
 
-  /** The player's boosters, as the physics wants them: plain defs. */
-  get placedBoosters(): readonly BoosterDef[] { return this.boosters; }
+  /** The player's boost ramps, as the physics wants them: plain segments. */
+  get placedBoosters(): readonly BoostRampDef[] { return this.boosters; }
+  /** Where the player's bars START in the composed level's list, so a fired
+      bar can be matched back to the one in the bag. Zero on every shipped
+      level: none of them author a boost ramp of their own. */
+  get boostOffset(): number { return this.level.boostRamps.length; }
   get boostersUsed(): number { return this.boosters.length; }
   /** Placed but not yet paid for - held out of the bag while they sit on the
       board, so the count in the inventory is what is still available. */
@@ -163,7 +179,7 @@ export class LevelManager {
   private rebuildEntities(): void {
     const out = EntityFactory.createFromLevel(this.level);
     for (let i = 0; i < this.boosters.length; i++)
-      out.push(EntityFactory.createPlacedBooster(this.boosters[i], i));
+      out.push(EntityFactory.createBoostRamp(this.boosters[i], i));
     this.cachedEntities = out.sort((a, b) => a.layer - b.layer);
   }
 
@@ -174,26 +190,25 @@ export class LevelManager {
     if (claimed) this.sessionBoxes = this.level.boxes.map(() => true);
   }
 
-  /* ---------------- the player's boosters ---------------- */
+  /* ---------------- the player's boost ramps ---------------- */
 
-  /** Put one on the board and return its index. It lands in the middle,
-      pointing straight down - unaimed on purpose, so the first thing the
-      player does with it is the thing that makes it theirs. */
+  /** Put one on the board and return its index. It lands in the middle, lying
+      flat - UNAIMED on purpose, so the first thing the player does with it is
+      the thing that makes it theirs. */
   placeBooster(): number {
     const cx = (BOARD.x0 + BOARD.x1) / 2;
     const ys = [400, 300, 500, 220, 580];
     const free = (y: number) =>
-      this.boosters.every(b => Math.hypot(b.x - cx, b.y - y) > BOOSTER_R * 2.4);
+      this.boosters.every(b => Math.hypot(midX(b) - cx, midY(b) - y) > BOOST_LEN * 0.8);
     const y = ys.find(free) ?? ys[this.boosters.length % ys.length];
-    this.boosters.push({ x: cx, y, r: BOOSTER_R,
-                         angle: BOOSTER_ANGLE, speed: BOOSTER_SPEED });
+    this.boosters.push(barAt(cx, y, BOOSTER_ANGLE));
     this.boosterPaid.push(false);
     this.composeLevel();
     this.rebuildEntities();
     return this.boosters.length - 1;
   }
 
-  boosterAt(i: number): BoosterDef | undefined { return this.boosters[i]; }
+  boosterAt(i: number): BoostRampDef | undefined { return this.boosters[i]; }
 
   removeBooster(i: number): void {
     if (i < 0 || i >= this.boosters.length) return;
@@ -206,58 +221,58 @@ export class LevelManager {
     this.rebuildEntities();
   }
 
-  /** The nearest placed booster to a tap, or -1. */
+  /** The nearest placed boost ramp to a tap, or -1. Distance to the BAR, the
+      same test a ramp gets, just with a wider pad - see BOOST_GRAB. */
   pickBooster(x: number, y: number): number {
     let pick = -1, bestD = Infinity;
     for (let i = 0; i < this.boosters.length; i++) {
-      const b = this.boosters[i];
-      const d = Math.hypot(x - b.x, y - b.y);
-      if (d <= b.r + PICK_PAD && d < bestD) { bestD = d; pick = i; }
+      const d = distToSeg(x, y, this.boosters[i]);
+      if (d <= BOOST_HT + BOOST_GRAB && d < bestD) { bestD = d; pick = i; }
     }
     return pick;
   }
 
-  /** Slide one, clamped so the whole disc stays on the board. */
+  /** Slide one, clamped so the whole bar stays on the board. The same
+      translation a ramp gets, and for the same reason: a bar half off the
+      edge is geometry the player cannot see the end of. */
   moveBoosterBy(i: number, dx: number, dy: number): void {
     const b = this.boosters[i];
     if (!b) return;
-    b.x = clamp(b.x + dx, BOARD.x0 + b.r, BOARD.x1 - b.r);
-    b.y = clamp(b.y + dy, b.r, H - b.r);
+    const loX = Math.min(b.x1, b.x2), hiX = Math.max(b.x1, b.x2);
+    const loY = Math.min(b.y1, b.y2), hiY = Math.max(b.y1, b.y2);
+    dx = clamp(dx, BOARD.x0 - loX, BOARD.x1 - hiX);
+    dy = clamp(dy, -loY, H - hiY);
+    b.x1 += dx; b.x2 += dx; b.y1 += dy; b.y2 += dy;
   }
 
-  /** Point one at `p`. The disc never moves - only the heading changes - so
-      aiming is as reversible as turning a ramp by its end. */
+  /** Turn one to lie along `p`, pivoting about its own middle - so aiming
+      never moves it, exactly as it never did when this item was a disc. The
+      bar is then pulled back onto the board if the turn hung an end off it:
+      a rotation that cannot be completed must not be silently half-applied. */
   aimBoosterTo(i: number, p: Vec): void {
     const b = this.boosters[i];
     if (!b) return;
-    const dx = p.x - b.x, dy = p.y - b.y;
+    const cx = midX(b), cy = midY(b);
+    const dx = p.x - cx, dy = p.y - cy;
     if (Math.hypot(dx, dy) < 6) return;            // no direction in a pivot
-    b.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    const turned = barAt(cx, cy, Math.atan2(dy, dx) * 180 / Math.PI);
+    b.x1 = turned.x1; b.y1 = turned.y1; b.x2 = turned.x2; b.y2 = turned.y2;
+    this.moveBoosterBy(i, 0, 0);
   }
 
-  /** Where the aim knob sits: on the nose, just outside the rim. */
-  boosterHandleAt(b: BoosterDef): Vec {
-    const a = b.angle * Math.PI / 180;
-    return { x: b.x + Math.cos(a) * (b.r + AIM_OFF),
-             y: b.y + Math.sin(a) * (b.r + AIM_OFF) };
+  /** Where the aim knob sits: off the bar's leading end, on its own axis. */
+  boosterHandleAt(b: BoostRampDef): Vec {
+    const a = angleOf(b);
+    return { x: midX(b) + Math.cos(a) * (BOOST_LEN / 2 + AIM_OFF),
+             y: midY(b) + Math.sin(a) * (BOOST_LEN / 2 + AIM_OFF) };
   }
 
-  /** Where its × sits: opposite the nose, flipped to whichever side keeps it
-      on the board - the same rule the ramp's delete button follows.
-
-      Pushed out further than the ramp's, and it has to be: the ramp's offset
-      is measured from a 9-unit-thick bar, this one from a 60-unit disc, so at
-      the ramp's distance the × would sit ON the booster it removes. */
-  boosterDeleteAt(b: BoosterDef): Vec {
-    const a = b.angle * Math.PI / 180;
-    const off = b.r + DEL_R + 14;
-    let bx = b.x - Math.cos(a) * off, by = b.y - Math.sin(a) * off;
-    if (bx < BOARD.x0 + DEL_R || bx > BOARD.x1 - DEL_R || by < DEL_R || by > H - DEL_R) {
-      bx = b.x + Math.cos(a + Math.PI / 2) * off;
-      by = b.y + Math.sin(a + Math.PI / 2) * off;
-    }
-    return { x: clamp(bx, BOARD.x0 + DEL_R, BOARD.x1 - DEL_R),
-             y: clamp(by, DEL_R, H - DEL_R) };
+  /** Where its × sits. The RAMP's rule, unchanged: off the middle along the
+      normal, flipped to whichever side keeps it on the board. Two bars of the
+      same shape get the same button in the same place, which is the whole
+      reason this item is no longer measured like a disc. */
+  boosterDeleteAt(b: BoostRampDef): Vec {
+    return this.deleteButtonAt(b);
   }
 
   /* One object, rebuilt only when the LIST changes. Null when the player has
@@ -265,7 +280,7 @@ export class LevelManager {
      and not a copy of it. */
   private composeLevel(): void {
     this.composed = this.boosters.length === 0 ? null
-      : { ...this.level, boosters: [...this.level.boosters, ...this.boosters] };
+      : { ...this.level, boostRamps: [...this.level.boostRamps, ...this.boosters] };
   }
 
   /* ---------------- ramp editing ---------------- */
@@ -377,4 +392,21 @@ export class LevelManager {
     const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
     return Math.min(GRAB_R, len * 0.38);
   }
+}
+
+/* ---- the bar, as geometry ----
+
+   A boost ramp stores nothing but its two ends, so its middle and its angle
+   are read back out of them rather than kept alongside - two copies of the
+   same fact are two facts that can disagree, and the physics only ever reads
+   the ends. */
+const midX = (b: Segment): number => (b.x1 + b.x2) / 2;
+const midY = (b: Segment): number => (b.y1 + b.y2) / 2;
+const angleOf = (b: Segment): number => Math.atan2(b.y2 - b.y1, b.x2 - b.x1);
+
+/** A bar of the item's one fixed length, centred on (cx, cy) at `deg`. */
+function barAt(cx: number, cy: number, deg: number): Segment {
+  const a = deg * Math.PI / 180;
+  const hx = Math.cos(a) * BOOST_LEN / 2, hy = Math.sin(a) * BOOST_LEN / 2;
+  return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy };
 }

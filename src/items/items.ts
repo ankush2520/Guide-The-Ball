@@ -27,9 +27,10 @@ export interface ItemDef {
 }
 
 export const ITEMS: readonly ItemDef[] = [
-  { kind: 'booster', name: 'Booster',
-    blurb: 'Fires the ball along the arrow. Drag it to move, drag the arrow ' +
-           'to aim. Only spent if it fires and you win.' },
+  { kind: 'booster', name: 'Booster ramp',
+    blurb: 'A ramp that FIRES you. Bounces the ball like any ramp, then throws ' +
+           'it out ten times faster. Drag it to move, drag the knob to turn it. ' +
+           'Only spent if the ball hits it and you win.' },
 ];
 
 /** The length the SOLVER draws with. A player's ramp is whatever length they
@@ -40,19 +41,33 @@ export const ITEMS: readonly ItemDef[] = [
 export const RAMP_LEN = 120;
 
 /* ============================================================
-   THE PLAYER'S BOOSTER
+   THE PLAYER'S BOOSTER - A RAMP THAT FIRES
 
-   One size and one speed, exactly like the ramp's one length.
-   What the player chooses is where it goes and which way it
-   points - which is the whole item, and is why a booster can be
-   a puzzle piece rather than a difficulty slider.
+   It used to be a disc with an arrow: you chose a spot and a
+   heading, and the ball left along that heading at a fixed
+   speed. It is a BAR now - the ramp's own silhouette, the ramp's
+   own physics - and what it adds is speed rather than a heading:
+   the ball mirrors off it exactly as it would off a ramp you
+   drew, and leaves ten times faster (see BOOST_RAMP_GAIN).
 
-   Both numbers sit inside the range the authored Solmesa
-   boosters already use (r 28-34, speed 9.5-12.4), so a placed
-   booster behaves like one the level came with: identical
-   physics, identical feel, nothing new to learn. */
-export const BOOSTER_R = 30;
-export const BOOSTER_SPEED = 11.5;
-/** Where it points when it first lands: straight down the board, so it is
-    obviously aimable and obviously not yet aimed. */
-export const BOOSTER_ANGLE = 90;
+   Why the change is worth it: a heading is something a ramp
+   already gives you, so the disc was a second way to do the
+   thing the expressive tool does. Speed is something no ramp can
+   give you at all - every bounce in the game is lossy - which
+   makes this a piece that answers a question ramps cannot.
+
+   One length and one thickness, exactly like the ramp's one
+   solver length. What the player chooses is where it goes and
+   which way it lies, and that is the whole item.
+
+   Its numbers live in physics/constants.ts with the mechanic
+   they belong to - BOOST_LEN, BOOST_HT, BOOST_RAMP_GAIN - and are
+   re-exported here so the bag, the shop and the tray have one
+   place to read the item from.
+   ============================================================ */
+export { BOOST_LEN, BOOST_HT, BOOST_RAMP_GAIN } from '../physics/constants';
+
+/** Which way it lies when it first lands: flat across the board. Deliberately
+    the one angle that cannot be a plan - a level horizon nobody would aim
+    for - so the first thing the player does with it is turn it. */
+export const BOOSTER_ANGLE = 0;

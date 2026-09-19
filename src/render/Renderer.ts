@@ -11,8 +11,8 @@
    touches the render path.
    ============================================================ */
 import { H, BALL_R, RAMP_HT, STEP_MS_DEFAULT } from './constants';
-import { BOARD } from '../physics/constants';
-import type { BoosterDef, Level, Vec } from '../levels/types';
+import { BOARD, BOOST_HT, BOOST_LEN } from '../physics/constants';
+import type { BoostRampDef, Level, Vec } from '../levels/types';
 import type { DrawContext, Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
 import { RAMP_STYLE } from '../entities/Ramp';
@@ -55,17 +55,20 @@ export interface RenderState {
   broken: boolean[];
   got: boolean[];
   gotBox: boolean[];
+  /** Whether this level's target gift has already been taken - see the note
+      on the wrapped target in Target.draw(). */
+  giftTaken: boolean;
   capture: CaptureState | null;
   captureMs: number;
   squash: Squash;
   deleteButtonAt: (s: Segment) => { x: number; y: number };
   handleR: number;
   delR: number;
-  /** The player's own boosters, and the grips of whichever is selected. */
-  boosters: readonly BoosterDef[];
+  /** The player's own boost ramps, and the grips of whichever is selected. */
+  boosters: readonly BoostRampDef[];
   selectedBooster: number;
-  boosterHandleAt: (b: BoosterDef) => Vec;
-  boosterDeleteAt: (b: BoosterDef) => Vec;
+  boosterHandleAt: (b: BoostRampDef) => Vec;
+  boosterDeleteAt: (b: BoostRampDef) => Vec;
   aimR: number;
   /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
       the board adds only what has to sit ON the board - see drawCoach. */
@@ -136,7 +139,8 @@ export class Renderer {
     else drawStarfield(ctx, s.clock);
 
     const g = { ctx, clock: s.clock, broken: s.broken, got: s.got,
-                gotBox: s.gotBox, simT: s.simT, level: s.level };
+                gotBox: s.gotBox, giftTaken: s.giftTaken,
+                simT: s.simT, level: s.level };
 
     /* Entities paint themselves in factory order: zones are ground, then the
        target, walls, obstacles, and the mechanics that sit with them. */
@@ -181,52 +185,62 @@ export class Renderer {
   }
 
   /* ============================================================
-     THE BOOSTER BEING EDITED
+     THE BOOST RAMP BEING EDITED
 
      The same grammar as the selected ramp, so one lesson covers
      both: a gold halo saying "this is the one", a grip you drag,
-     and the big red × that takes it back.
+     and the big red × that takes it back. It is the same SHAPE as
+     a selected ramp now, so the halo is drawn the same way too -
+     a fat amber line down the bar rather than a ring, which is
+     what a ring around a 96-unit bar could never be.
 
-     What differs is the third control. A ramp turns by either
-     end; a booster turns by ONE knob on its nose, joined to the
-     disc by a visible stalk and trailed by the line it will fire
-     along - because the heading is the whole item, and a player
-     aiming one needs to see the shot before they take it.
+     What still differs is the third control, and it is the whole
+     item: a ramp turns by either END, which also changes its
+     length; a boost ramp has ONE fixed length, so it turns by a
+     single knob on a stalk past its leading end and pivots about
+     its middle. The dashed line through it is the plane the ball
+     will mirror off - drawn out both ways, because a bar has two
+     faces and the ball may arrive at either.
      ============================================================ */
-  private drawBoosterSelection(s: RenderState, b: BoosterDef,
+  private drawBoosterSelection(s: RenderState, b: BoostRampDef,
                                g: DrawContext, ent?: Entity): void {
     const ctx = this.ctx;
-    const a = b.angle * Math.PI / 180;
+    const cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
+    const a = Math.atan2(b.y2 - b.y1, b.x2 - b.x1);
     const knob = s.boosterHandleAt(b);
     ctx.save();
 
     /* The halo, the same amber the selected ramp wears - and like the ramp's,
-       the thing it picks out is drawn again ON TOP of it. A ring this thick
-       around a 60-unit disc otherwise swallows the nose, which is the one
-       part of a booster a player has to be able to see while aiming it. */
+       the thing it picks out is drawn again ON TOP of it. */
+    ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(255,210,63,.75)';
-    ctx.lineWidth = 9;
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = BOOST_HT * 2 + 16;
+    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
     ent?.draw(g);
 
-    /* THE SHOT LINE. A dashed ray along the heading, crawling outward so it
-       reads as live - this is the promise the booster makes, drawn before it
-       is taken rather than explained afterwards. */
+    /* THE MIRROR LINE. A dashed ray along the bar's own plane, both ways,
+       crawling outward so it reads as live. This is the promise the bar makes
+       - the surface the ball leaves along - drawn before it is taken rather
+       than explained afterwards. */
     ctx.strokeStyle = 'rgba(42,35,80,.34)';
     ctx.lineWidth = 2;
     ctx.setLineDash([9, 8]);
     ctx.lineDashOffset = -(s.clock * 34) % 17;
-    ctx.beginPath();
-    ctx.moveTo(b.x + Math.cos(a) * (b.r + 6), b.y + Math.sin(a) * (b.r + 6));
-    ctx.lineTo(b.x + Math.cos(a) * 240, b.y + Math.sin(a) * 240);
-    ctx.stroke();
+    const reach = 150;
+    for (const dir of [-1, 1]) {
+      const from = BOOST_LEN / 2 + 8;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * dir * from, cy + Math.sin(a) * dir * from);
+      ctx.lineTo(cx + Math.cos(a) * dir * reach, cy + Math.sin(a) * dir * reach);
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
 
-    // the stalk, so the knob is visibly PART of this booster
+    // the stalk, so the knob is visibly PART of this bar
     ctx.strokeStyle = INK;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(b.x + Math.cos(a) * b.r, b.y + Math.sin(a) * b.r);
+    ctx.moveTo(b.x2, b.y2);
     ctx.lineTo(knob.x, knob.y);
     ctx.stroke();
 

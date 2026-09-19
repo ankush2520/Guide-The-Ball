@@ -32,8 +32,14 @@ export interface SaveData {
   /** Which levels have had their mystery box opened. A box is treasure, not
       income: claimed once per level, for good, so replaying an easy board
       cannot be farmed for rewards the way clearing it cannot be farmed for
-      coins (see REPLAY_SHARE). */
+      coins at all (see coinsFor). */
   boxes?: Record<number, boolean>;
+  /** Which levels have had the GIFT IN THEIR TARGET opened. Its own record
+      rather than a second use of `boxes`: a level may carry both flavours -
+      a chest on the board and a wrapped target - and claiming one must never
+      quietly claim the other. Absent from every save written before gifts
+      existed, which reads as "none opened", which is right. */
+  gifts?: Record<number, boolean>;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */

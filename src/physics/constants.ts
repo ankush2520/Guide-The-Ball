@@ -127,6 +127,83 @@ export const BOOST_CAP = 13;
    the ball is back under the board's normal rules well before it crosses it. */
 export const BOOST_STEPS = 18;       // 0.3s
 
+/* ============================================================
+   THE PLAYER'S BOOST RAMP
+
+   The item out of the bag is a BAR now, not a pad: the ramp's
+   silhouette, and the ramp's physics - the ball mirrors off it
+   exactly as it does off one the player drew. The one difference
+   is what leaves: the exit speed is MULTIPLIED, where a ramp
+   only redirects.
+
+   None of this touches the authored pads above. Twenty-three
+   shipped levels were proved winnable against BOOST_GAIN and
+   BOOST_CAP, so those two numbers - and the path that reads them
+   - are frozen, and everything here is a second, independent
+   mechanism that only a bar out of the bag can arm.
+   ============================================================ */
+
+/* Half-thickness, and it is what the body is built at as well as what is
+   painted: thicker than a drawn ramp's 4.5, because this one is a machine
+   rather than a line, and because a fat bar is a fatter thing for a ball
+   moving ten times normal speed to find. */
+export const BOOST_HT = 7;
+
+/* THE FIXED LENGTH. A ramp is whatever length the drag made it; an item has
+   one shape, and choosing where it goes and which way it lies is the whole
+   move. Shorter than the solver's 120-unit ramp so the two never read as the
+   same object at a glance. */
+export const BOOST_LEN = 96;
+
+/* THE MULTIPLIER - the design intent, x10 off the bar.
+
+   Tuned, not guessed. It is applied to the speed the bounce LEAVES with and
+   then held to BOOST_RAMP_CAP, so a ball arriving at terminal (9) leaves at
+   ~81-90 and one already flying leaves at the ceiling. See tests/mechanics.mjs
+   for the measured curve and tests/items.test.mjs for the proof that level 30
+   is still solvable with one of these - and still not solvable without. */
+export const BOOST_RAMP_GAIN = 10;
+
+/* The ceiling on a launch. Not a tunnelling guard - the substepping below is
+   what keeps a 100px/frame ball colliding honestly - but a sanity limit, so
+   two bars in a row cannot compound into a number that eats the step budget
+   in substeps for no visible gain. */
+export const BOOST_RAMP_CAP = 120;
+
+/* How the launch comes back DOWN to the board's own rules. A hard window that
+   ended at the general cap snapped the ball from 90 to 12.7 in one frame,
+   which reads as a stutter rather than as a landing; this bleeds the ceiling
+   off geometrically instead, so the ball visibly settles. At 0.86 a 90-unit
+   launch is back under the general cap in about 13 steps (~0.2s), which is
+   roughly the time it takes to cross the board. */
+export const BOOST_DECAY = 0.86;
+
+/* Steps before the same bar may fire again. A bar is two-sided and a turbo
+   ball can come back through it within a frame or two of leaving; without
+   this, one bar and one unlucky angle is a ball multiplying itself every
+   other step. Long enough to have left, short enough that a genuine second
+   pass across the board still gets its kick. */
+export const BOOST_RAMP_CD = 12;
+
+/* ---- how a turbo ball is kept colliding ----
+
+   Matter runs one 1/60s step with no continuous collision detection, so a
+   ball moving further than a bar is thick passes clean THROUGH it. BOOST_CAP
+   above is that limit for the authored pads: 13 units a frame, inside a
+   ramp's 9-unit thickness.
+
+   A boost ramp deliberately exceeds it, so the frame is SUBDIVIDED instead:
+   the engine runs as many Matter steps as it takes to keep each one under
+   BOOST_SUB_PX. Matter's own time correction rescales the Verlet velocity
+   when the delta changes, and gravity integrates to the same total over the
+   subdivided frame as over the whole one - so a ball that is not flying is
+   not affected at all. Which is the point of the gate: the subdivision only
+   ever happens above BOOST_CAP, a speed nothing in the base game and no
+   authored pad can reach, so every proved level still runs the identical
+   single step it was proved with. */
+export const BOOST_SUB_PX = 3;
+export const BOOST_SUBSTEPS_MAX = 48;
+
 export const SLIP_REST = 0.985;      // restitution inside a slippery zone
 
 /* Substeps of immunity after a teleport. This alone is NOT enough: the ball

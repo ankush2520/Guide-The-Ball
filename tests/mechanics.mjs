@@ -42,6 +42,94 @@ console.log('\nBOOSTER — deterministic redirect, fires once on entry');
     'and is deterministic - a different RNG seed changes nothing');
 }
 
+console.log('\nBOOST RAMP — the player\'s bar: bounces like a ramp, leaves ten times faster');
+{
+  /* The item as the bag hands it out, built by the game's own helper so a
+     retuned length or thickness moves this test with it. Laid flat under the
+     spawn: the ball arrives at terminal velocity straight down, so what comes
+     off the bar is the cleanest possible reading of the mechanic. */
+  const bar=await p.evaluate(()=>window.__gtb.bar(240,300,0));
+  const plain=await run({...base});
+  const t=await run({...base, boostRamps:[bar]});
+  const ix=t.samples.findIndex(s=>s.boosts===1);
+  const inSp=ix>0?t.samples[ix-1].sp:0, outSp=ix>=0?t.samples[ix].sp:0;
+  chk(ix>=0,'the bar fires when the ball reaches it');
+  chk(Math.abs(plain.samples[ix]?.sp-CONSTS.TERMINAL_VY)<0.2,
+    'the same drop without one is at terminal velocity there',
+    `${plain.samples[ix]?.sp.toFixed(2)} vs ${CONSTS.TERMINAL_VY}`);
+  /* THE WHOLE CLAIM, and asserted against the constant rather than a number:
+     the exit speed is the ENTRY speed times the gain, held to the item's own
+     ceiling. A ramp can only ever give back less than it took. */
+  const want=Math.min(inSp*MECH.BOOST_RAMP_GAIN, MECH.BOOST_RAMP_CAP);
+  chk(Math.abs(outSp-want)<0.5,
+    `it leaves at x${MECH.BOOST_RAMP_GAIN} the speed it arrived at`,
+    `${inSp.toFixed(2)} -> ${outSp.toFixed(2)}, want ${want.toFixed(2)}`);
+  chk(outSp>MECH.SPEED_CAP*3,
+    'which is far past anything the board can otherwise reach',
+    `${outSp.toFixed(1)} vs the general cap ${MECH.SPEED_CAP.toFixed(1)}`);
+  /* IT IS A RAMP, not a launcher: the heading is the mirror of the bounce, so a
+     flat bar sends a ball that fell straight down straight back UP. */
+  chk(t.samples[ix].vy<0,'and it mirrors like a ramp - a flat bar throws the ball back up',
+    `vy ${t.samples[ix].vy.toFixed(1)}`);
+
+  // the launch bleeds back into the board's own rules rather than stopping dead
+  const decay=t.samples.slice(ix,ix+20).map(s=>s.sp);
+  let falling=true;
+  for(let i=1;i<decay.length;i++) if(decay[i]>decay[i-1]+1e-9) falling=false;
+  chk(falling,'the launch decays every step instead of ending in a snap',
+    decay.slice(0,6).map(v=>v.toFixed(0)).join(' -> '));
+  /* Each step is BOOST_DECAY of the last, which is what "it settles" is made
+     of. Measured on this board and not on the settling itself, because a ball
+     launched straight up off a flat bar leaves the top of the board long
+     before it is done slowing down - the cage below is where it really lands. */
+  let ratios=[];
+  for(let i=1;i<6;i++) ratios.push(decay[i]/decay[i-1]);
+  chk(ratios.every(r=>Math.abs(r-MECH.BOOST_DECAY)<0.02),
+    `at the rate the constant states - x${MECH.BOOST_DECAY} a step`,
+    ratios.map(r=>r.toFixed(3)).join(' '));
+
+  chk(t.samples[t.samples.length-1].boosts===1,
+    'one contact is one launch - a two-sided bar does not multiply a ball it just fired',
+    `${t.samples[t.samples.length-1].boosts} launch(es)`);
+  const r2=await run({...base, boostRamps:[bar]},[],7);
+  chk(JSON.stringify(r2.samples.map(s=>[s.x,s.y]))===JSON.stringify(t.samples.map(s=>[s.x,s.y])),
+    'and it is deterministic - a different RNG seed changes nothing');
+
+  /* NO TUNNELLING, which is the one thing a ten-times launch could break.
+     A sealed cage of ramps, a bar inside it, and the ball must never get out:
+     leaving is passing through 9 units of ramp, and nothing else. */
+  const cage=[{x1:30,y1:120,x2:450,y2:120},{x1:30,y1:700,x2:450,y2:700},
+              {x1:30,y1:120,x2:30,y2:700},{x1:450,y1:120,x2:450,y2:700}];
+  const caged={...base,spawn:{x:240,y:140},target:{x:20,y:60,r:8}};
+  let out=0,runs=0,peak=0;
+  for(let ang=0;ang<180;ang+=15)
+    for(const seed of [1,5]){
+      const bars=await p.evaluate(a=>[window.__gtb.bar(240,300,a),window.__gtb.bar(240,520,-a)],ang);
+      const r=await p.evaluate(([lv,ramps,seed])=>{
+        const ix=window.__gtb.scratch(lv);
+        return window.__gtb.simulate(ramps,seed,ix);
+      },[{...caged,boostRamps:bars},cage,seed]);
+      runs++; peak=Math.max(peak,r.spdMax);
+      if(r.result==='out') out++;
+    }
+  chk(out===0,'a launched ball never passes through a ramp, however fast it is going',
+    `${runs} runs in a sealed cage, peak speed ${peak.toFixed(0)}, ${out} escapes`);
+  /* And inside that cage, where it cannot escape, the launch really does come
+     all the way back down to the speed the rest of the board lives at. */
+  const cageTrace=await p.evaluate(([lv,ramps])=>{
+    const ix=window.__gtb.scratch(lv);
+    return window.__gtb.trace(ramps,1,ix);
+  },[{...caged,boostRamps:[await p.evaluate(()=>window.__gtb.bar(240,300,20))]},cage]);
+  const fired=cageTrace.samples.findIndex(s=>s.boosts===1);
+  const back=cageTrace.samples.slice(fired).findIndex(s=>s.sp<=MECH.SPEED_CAP+1e-6);
+  chk(fired>=0&&back>0,'and a launch that stays on the board settles back under the general cap',
+    back>0?`${back} steps after firing`:'it never settled');
+  chk(peak>MECH.BOOST_RAMP_CAP*0.9,'and the cage really did get it up to speed',
+    `peak ${peak.toFixed(0)} against the item's ceiling ${MECH.BOOST_RAMP_CAP}`);
+  chk(peak<=MECH.BOOST_RAMP_CAP+1e-6,'two bars compounding are still held to that ceiling',
+    `peak ${peak.toFixed(2)}`);
+}
+
 console.log('\nWIND_ZONE — accelerates only while inside');
 {
   const zone={x:140,y:250,w:200,h:120,ax:0.6};

@@ -8,7 +8,8 @@
 export type DropResult = 'win' | 'out' | 'timeout' | 'burned';
 
 /** What the ball last touched. Drives the juice, never the physics. */
-export type HitKind = 'ramp' | 'wall' | 'obstacle' | 'breakable' | 'booster' | 'portal' | 'fire';
+export type HitKind = 'ramp' | 'wall' | 'obstacle' | 'breakable' | 'booster'
+                    | 'boost' | 'portal' | 'fire';
 
 /** Last contact, mutated in place so the solver never allocates. */
 export interface Hit {

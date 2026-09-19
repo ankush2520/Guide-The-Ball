@@ -14,7 +14,7 @@
    (see Entity), so the factory is a view over the level, never
    a copy of it.
    ============================================================ */
-import type { BoosterDef, Level } from '../levels/types';
+import type { BoostRampDef, Level } from '../levels/types';
 import { Entity, type EntityKind } from './Entity';
 import { Obstacle } from './Obstacle';
 import { FireObstacle } from './FireObstacle';
@@ -28,7 +28,7 @@ import { Target } from './Target';
 import { Wall } from './Wall';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
-import { PlacedBooster } from './PlacedBooster';
+import { BoostRamp } from './BoostRamp';
 
 /* The registry is inherently heterogeneous - every entry pairs a different
    def type with the class that draws it - so the constructor signature is
@@ -56,7 +56,7 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   box:       { ctor: MysteryBox,   pick: lv => lv.boxes },
   // 'ramp' and 'myboost' are deliberately absent: both are player-made, not
   // level data, and are built one at a time by createRamp()/
-  // createPlacedBooster().
+  // createBoostRamp().
 };
 
 export class EntityFactory {
@@ -88,8 +88,8 @@ export class EntityFactory {
 
   /** The player's other entity. Off the registry for the same reason the ramp
       is: it comes out of the bag, not out of the level. */
-  static createPlacedBooster(def: BoosterDef, index = 0): PlacedBooster {
-    return new PlacedBooster(def, index);
+  static createBoostRamp(def: BoostRampDef, index = 0): BoostRamp {
+    return new BoostRamp(def, index);
   }
 }
 

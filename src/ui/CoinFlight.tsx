@@ -25,6 +25,12 @@
    credited when the level was recorded, so nothing here can be
    missed, interrupted or replayed into paying twice.
 
+   What the COUNTER shows is held back to match, though, or the
+   flight is decoration over a payment that visibly already
+   happened - the number in the top bar climbs as the three marks
+   merge into it. The ledger is still written first and this
+   cannot affect it; see coinsInFlight.
+
    THREE, AND NO SPIN. The first pass threw nine coins on
    randomised arcs with randomised tumble, and it read as
    confetti rather than as money arriving somewhere. What makes
@@ -35,6 +41,7 @@
    ============================================================ */
 import { useEffect, useRef } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
+import { flushCoins, holdCoins, landedCoin, launchedCoins } from './coinsInFlight';
 import { Sound } from '../audio/Sound';
 import type { FlightKind } from '../core/events';
 import { BOARD, H } from '../physics/constants';
@@ -107,13 +114,18 @@ export function flyReward(kind: FlightKind, fromSel: string | Pt): void {
   const land = LANDS[kind];
   const from = typeof fromSel === 'string' ? centreOf(fromSel) : fromSel;
   const to = centreOf(land.to);
-  if (!layerEl || !from || !to) return;
+  /* Nothing can fly - no layer, or one of the two ends is not on screen. The
+     counter must not sit waiting for a mark that is never coming. */
+  if (!layerEl || !from || !to) { if (kind === 'coins') flushCoins(); return; }
 
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     Sound.coin(0);
     bump(kind);
     return;
   }
+  /* The counter is holding these coins back until they land, so the flight
+     has to say how many are coming - see coinsInFlight. */
+  if (kind === 'coins') launchedCoins(COINS);
   for (let i = 0; i < COINS; i++)
     window.setTimeout(() => launch(layerEl!, from, to, i, kind), i * STAGGER);
 }
@@ -141,6 +153,25 @@ export function CoinFlight() {
     flown.current = card;
     flyReward('coins', '#ov-coins');
   }, [showing, card]);
+
+  /* ============================================================
+     HOLDING THE PAYOUT BACK
+
+     Every coin payout in the game is announced here before its
+     flight starts, so this is the one place that can tell the
+     counter to wait - and the reasons are listed rather than
+     assumed: these three are exactly the ones a flight is
+     launched for (the win card's, the wheel's, and a chest's or
+     a wrapped target's). Anything else - a purchase, a grant, a
+     save being loaded - has no mark in the air, so it flushes
+     instead, which is also what keeps the shop showing the real
+     balance the moment a player spends.
+     ============================================================ */
+  useEffect(() => bus.on('coins:changed', ({ delta, reason }) => {
+    if (delta > 0 && (reason === 'clear' || reason === 'spin' || reason === 'box'))
+      holdCoins(delta);
+    else flushCoins();
+  }), [bus]);
 
   /* ============================================================
      A MYSTERY BOX PAYING OUT
@@ -177,8 +208,11 @@ const TOOK: Record<FlightKind, string> = {
   spin: '#btn-settings',
 };
 
-/** The counter takes the hit, so the arrival lands on something. */
+/** The counter takes the hit, so the arrival lands on something - and, for
+    coins, takes the coins with it: the chip's number climbs as they merge
+    into it rather than having changed before they set off. */
 function bump(kind: FlightKind): void {
+  if (kind === 'coins') landedCoin();
   const chip = document.querySelector(TOOK[kind]);
   if (!chip) return;
   chip.classList.remove('took');

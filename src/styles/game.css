@@ -16,6 +16,11 @@
     --bg:#dcefff; --bg-2:#efe9ff;
     --panel:#ffffff; --panel-2:#fff6e3; --ink:#2a2350; --muted:#6a6690;
     --obstacle:#f0223f; --target:#17963d; --ramp:#1680f0; --wall:#7c83a8;
+    /* ORANGE IS SPEED - the booster ramp, and nothing else. Deliberately not
+       green (that is the goal) and not the ramp's blue (that is a bar that
+       only turns you): see src/render/palette.ts, which the canvas reads the
+       same values from. */
+    --boost:#ff7a18; --boost-ink:#b8430a;
     --ball:#ffffff; --accent:#ffb400;
     /* gold is a FILL colour: on white it is under 2:1. Gold text uses this. */
     --gold-ink:#8a5200;
@@ -255,15 +260,19 @@
   .rampmark{width:16px;height:5px;border-radius:3px;flex:none;display:inline-block;
             background:var(--ramp);box-shadow:0 0 0 1.5px var(--edge);
             transform:rotate(-18deg)}
-  /* the booster's shop mark: the same disc-and-nose the board paints, at chip
-     size. Round where the ramp mark is a bar, so the two rows never blur. */
-  .boostmark{width:13px;height:13px;border-radius:50%;flex:none;
+  /* The booster ramp's chip mark: the same bar the board paints, at chip size.
+     It is the RAMP mark's shape now - which is the honest thing, because the
+     item is a ramp - so colour is what separates the two rows, exactly as it
+     is on the board. Tilted the other way from .rampmark so a row holding
+     both still reads as two different things. */
+  .boostmark{width:17px;height:6px;border-radius:3px;flex:none;
              display:inline-block;position:relative;
-             background:radial-gradient(circle at 34% 30%,#8fc8ff,var(--ramp) 70%,#0d5fb8);
-             box-shadow:0 0 0 1.5px var(--edge)}
-  .boostmark::after{content:'';position:absolute;left:4px;top:3.5px;
-                    border-left:5px solid #fff;border-top:3px solid transparent;
-                    border-bottom:3px solid transparent}
+             background:linear-gradient(var(--boost),var(--boost-ink));
+             box-shadow:0 0 0 1.5px var(--edge);
+             transform:rotate(16deg)}
+  .boostmark::after{content:'';position:absolute;left:5.5px;top:1.2px;
+                    width:6px;height:2px;border-radius:1px;
+                    background:rgba(255,255,255,.9)}
   .counter.coins{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
   .counter.coins b{color:var(--gold-ink)}
 
@@ -556,11 +565,88 @@
 
   /* One stacking order, stated once. The wheel must open ON TOP of the
      out-of-balls screen, because it is a way out of it. */
-  #select{z-index:50} #overlay{z-index:55} #noballs{z-index:60}
+  #select{z-index:50} #overlay{z-index:55} #giftpanel{z-index:57} #noballs{z-index:60}
   /* settings sits UNDER the two panels it opens, so closing either of them
      lands back on it rather than dismissing both */
   #settingspanel{z-index:65} #inventorypanel{z-index:66} #shoppanel{z-index:68}
   #spinpanel{z-index:70} #infopanel{z-index:80}
+
+  /* ============================================================
+     THE GIFT IN THE TARGET
+
+     Its own beat, so it gets the win card's own light scrim: what
+     it is celebrating happened ON the board, and the board is
+     worth seeing under it for exactly the reason the win card
+     does not dim it either.
+
+     THE BOX IS THREE PIECES - body, ribbon, lid - stacked over
+     the prize. The lid leaves; the body stays. That is the whole
+     trick, and it is why this is not one element with a sprite
+     swap: a lid that travels is what reads as opening.
+     ============================================================ */
+  .giftlay{background:rgba(60,70,130,.16);
+           -webkit-backdrop-filter:none;backdrop-filter:none}
+  .giftcard .sub{color:var(--muted);font-size:12.5px;margin:0 0 4px}
+  .giftbox{position:relative;width:132px;height:118px;margin:8px auto 12px}
+  /* the warm light behind it, always on, brightest once the lid is off */
+  .gbglow{position:absolute;left:50%;top:52%;width:120px;height:120px;
+          margin:-60px 0 0 -60px;border-radius:50%;
+          background:radial-gradient(circle,rgba(255,197,58,.55),rgba(255,197,58,0) 70%);
+          opacity:.5;transition:opacity .4s ease}
+  .giftcard.shown .gbglow{opacity:1;animation:giftglow 1.6s ease-in-out infinite}
+  @keyframes giftglow{50%{transform:scale(1.12)}}
+  /* the body: a wrapped square in the chest's own magenta, ink-lined like
+     everything else on this screen */
+  .gbbody{position:absolute;left:24px;top:44px;width:84px;height:66px;border-radius:6px;
+          background:linear-gradient(135deg,#f07ac4,#d94a9e 55%,#a82f76);
+          box-shadow:0 0 0 3px var(--edge), 0 4px 0 rgba(42,35,80,.25)}
+  /* the ribbon down the front, in the gold every reward is paid in */
+  .gbtie{position:absolute;left:60px;top:44px;width:12px;height:66px;
+         background:linear-gradient(90deg,#ffe07a,#ffc53a 40%,#e0a112);
+         box-shadow:0 0 0 1.5px var(--edge)}
+  .gblid{position:absolute;left:16px;top:28px;width:100px;height:22px;border-radius:5px;
+         background:linear-gradient(#f79ad4,#d94a9e);
+         box-shadow:0 0 0 3px var(--edge);
+         transform-origin:50% 100%}
+  .gbbow{position:absolute;left:50%;top:10px;width:34px;height:22px;margin-left:-17px;
+         border-radius:17px 17px 4px 4px;
+         background:linear-gradient(#ffe07a,#ffc53a);
+         box-shadow:0 0 0 3px var(--edge)}
+  /* the prize, behind the box until the lid has gone */
+  .gbprize{position:absolute;left:50%;top:34px;transform:translate(-50%,0) scale(.4);
+           opacity:0;transition:none}
+  /* ---- beat one: the shake. Short, and on the whole box, so the ribbon and
+          the bow move with it rather than sliding about on top of it. ---- */
+  .giftcard.wrap .gbbody,.giftcard.wrap .gbtie,
+  .giftcard.wrap .gblid,.giftcard.wrap .gbbow{
+    animation:giftshake .16s ease-in-out infinite}
+  @keyframes giftshake{
+    0%{transform:translateX(0) rotate(0)}
+    25%{transform:translateX(-3px) rotate(-2.5deg)}
+    75%{transform:translateX(3px) rotate(2.5deg)}
+    100%{transform:translateX(0) rotate(0)}}
+  /* ---- beat two: the lid and bow leave, up and over ---- */
+  .giftcard.open .gblid,.giftcard.shown .gblid{
+    animation:giftlid .46s cubic-bezier(.2,-.4,.3,1) forwards}
+  .giftcard.open .gbbow,.giftcard.shown .gbbow{
+    animation:giftbow .46s cubic-bezier(.2,-.4,.3,1) forwards}
+  @keyframes giftlid{
+    to{transform:translate(26px,-54px) rotate(38deg);opacity:0}}
+  @keyframes giftbow{
+    to{transform:translate(38px,-66px) rotate(52deg);opacity:0}}
+  /* ---- beat three: what was inside, rising out of the box ---- */
+  .giftcard.shown .gbprize{animation:giftpop .5s cubic-bezier(.2,1.5,.4,1) forwards}
+  @keyframes giftpop{
+    from{opacity:0;transform:translate(-50%,14px) scale(.4)}
+    to{opacity:1;transform:translate(-50%,-14px) scale(1.55)}}
+  /* the chip under it stays put; only its label changes when the prize lands */
+  #gift-prize b{min-width:74px}
+  @media (prefers-reduced-motion: reduce){
+    .giftcard .gbbody,.giftcard .gbtie,.giftcard .gblid,.giftcard .gbbow,
+    .giftcard .gbglow{animation:none}
+    .giftcard .gblid,.giftcard .gbbow{opacity:0}
+    .giftcard .gbprize{opacity:1;animation:none;
+                       transform:translate(-50%,-14px) scale(1.55)}}
 
   /* ============================================================
      THE COIN FLIGHT
@@ -713,14 +799,13 @@
            box-shadow:0 0 0 2px var(--edge)}
   .flyramp{width:26px;height:8px;border-radius:4px;background:var(--ramp);
            box-shadow:0 0 0 2px var(--edge)}
-  /* the booster as the board draws it: the player's blue, with the nose that
-     says which way it fires */
-  .flyboost{width:20px;height:20px;border-radius:50%;
-            background:radial-gradient(circle at 34% 30%,#8fc8ff,var(--ramp) 70%,#0d5fb8);
+  /* the booster ramp as the board draws it: an orange bar, chevroned */
+  .flyboost{width:26px;height:9px;border-radius:4.5px;
+            background:linear-gradient(var(--boost),var(--boost-ink));
             box-shadow:0 0 0 2px var(--edge);position:relative}
-  .flyboost::after{content:'';position:absolute;left:5px;top:4px;
-                   border-left:7px solid #fff;border-top:6px solid transparent;
-                   border-bottom:6px solid transparent}
+  .flyboost::after{content:'';position:absolute;left:8px;top:2.5px;
+                   width:10px;height:3px;border-radius:1.5px;
+                   background:rgba(255,255,255,.92)}
   /* a free spin: the wheel's own gold, quartered like a wedge */
   .flyspin{width:19px;height:19px;border-radius:50%;
            background:conic-gradient(#ffd76b 0 25%,#d98b0c 0 50%,#ffd76b 0 75%,#d98b0c 0);
@@ -792,14 +877,17 @@
                   border-radius:6px;background:linear-gradient(#5aaaff,var(--ramp));
                   box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
                   transform:rotate(-20deg)}
-  /* the booster as the board draws it: a blue disc with a white nose */
-  .boostart::after{content:'';position:absolute;left:13px;top:13px;
-                   width:26px;height:26px;border-radius:50%;
-                   background:radial-gradient(circle at 34% 30%,#8fc8ff,var(--ramp) 70%,#0d5fb8);
-                   box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2)}
-  .boostart::before{content:'';position:absolute;left:24px;top:19px;z-index:1;
-                    border-left:11px solid #fff;border-top:7px solid transparent;
-                    border-bottom:7px solid transparent}
+  /* The booster ramp as the board draws it: the ramp tile's own bar, in orange
+     and a little fatter - which is exactly the difference on the board. */
+  .boostart{background:#ffeede}
+  .boostart::after{content:'';position:absolute;left:6px;right:6px;top:20px;height:13px;
+                   border-radius:7px;
+                   background:linear-gradient(var(--boost),var(--boost-ink));
+                   box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
+                   transform:rotate(-20deg)}
+  .boostart::before{content:'';position:absolute;left:16px;top:24px;z-index:1;
+                    width:20px;height:3.5px;border-radius:2px;
+                    background:rgba(255,255,255,.92);transform:rotate(-20deg)}
   .shopcard .big,.shopcard .sub{text-align:center}
   .shopcard .sub{margin-bottom:10px}
   .coinamt{color:var(--gold-ink);font-weight:900;white-space:nowrap}
@@ -837,6 +925,11 @@
           background:var(--panel-2);
           border:2px solid var(--edge);
           box-shadow:0 2px 0 var(--edge)}
+  /* A win that paid nothing, because the board was already earned. It sits in
+     the payout row's place so the card keeps its shape, and it is prose in the
+     muted pen rather than a chip: a chip is a thing you were given. */
+  .nopay{font-size:11.5px;font-weight:700;color:var(--muted);line-height:1.3;
+         padding:6px 0;text-align:center}
   /* the one payout that is a DEBIT - inked in the muted pen so it reads as
      "this left your bag" rather than as another prize */
   .reward.spent{color:var(--muted)}
@@ -927,7 +1020,11 @@
          box-shadow:0 0 0 2px var(--edge)}
   .sw.bl{border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff,#ffc53a);
          box-shadow:0 0 0 2px var(--edge)}
-  .sw.bs{border-radius:50%;background:radial-gradient(circle,#7af0d0,#14b28e);
+  /* The LEVEL's booster: still a pad, still a disc - and no longer green.
+     It wore a green-cyan that sat one step from the target's own green, which
+     is the one collision the palette may never have. Orange is the speed
+     family it shares with the bar below. */
+  .sw.bs{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffc078,var(--boost) 70%,var(--boost-ink));
          box-shadow:0 0 0 2px var(--edge)}
   .sw.bk{border-radius:50%;background:radial-gradient(circle at 34% 30%,#ffd7a8,#c0671f);
          box-shadow:0 0 0 2px var(--edge)}
@@ -949,14 +1046,28 @@
   .sw.mt{border-radius:50%;background:radial-gradient(circle,var(--target) 0 30%,#fff 31% 55%,#5fd67c 56%);
          box-shadow:0 0 0 2px var(--edge),
                     -8px 0 0 -5px var(--edge), 8px 0 0 -5px var(--edge)}
-  /* Your booster: the player's blue disc, against the level booster's green
-     one directly above it in the list - the one comparison that matters. */
-  .sw.mb{border-radius:50%;position:relative;
-         background:radial-gradient(circle at 34% 30%,#8fc8ff,var(--ramp) 70%,#0d5fb8);
-         box-shadow:0 0 0 1.5px var(--edge)}
-  .sw.mb::after{content:'';position:absolute;left:4px;top:3.5px;
-                border-left:6px solid #fff;border-top:4px solid transparent;
-                border-bottom:4px solid transparent}
+  /* Your booster RAMP: the ramp swatch's bar in the speed orange. Against the
+     level's orange pad directly above it, and against the blue ramp further
+     down, the two comparisons that matter are both one property apart -
+     same colour, different shape; same shape, different colour. */
+  .sw.mb{height:7px;width:19px;border-radius:3.5px;position:relative;
+         background:linear-gradient(var(--boost),var(--boost-ink));
+         transform:rotate(-20deg);box-shadow:0 0 0 2px var(--edge)}
+  .sw.mb::after{content:'';position:absolute;left:5px;top:1.6px;
+                width:9px;height:2.4px;border-radius:1.2px;
+                background:rgba(255,255,255,.92)}
+  /* A GIFT TARGET: the target's own ring with the chest's present sitting IN
+     it - the ring behind, the little magenta box in the middle, ribboned in
+     gold. Built out of both, deliberately, and nothing sticks out past the
+     ring: what the board draws is what the legend draws. */
+  .sw.gf{border-radius:50%;position:relative;
+         background:radial-gradient(circle,#fff 0 46%,#5fd67c 47%);
+         box-shadow:0 0 0 2px var(--edge)}
+  .sw.gf::after{content:'';position:absolute;left:3.5px;top:4px;width:8px;height:7px;
+                border-radius:1px;background:linear-gradient(135deg,#f07ac4,#a82f76);
+                box-shadow:0 0 0 1px var(--edge)}
+  .sw.gf::before{content:'';position:absolute;left:6.5px;top:3px;width:2px;height:9px;
+                 background:#ffc53a;z-index:1}
   /* The mystery box: the only SQUARE swatch in the legend, because it is the
      only square thing on the board - the silhouette is the whole tell - and
      the one wearing a gold ribbon across it. */

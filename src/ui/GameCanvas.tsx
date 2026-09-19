@@ -176,7 +176,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
 
-    /* 0. the selected booster's own controls, for the same reason the ramp's
+    /* 0. the selected booster ramp's own controls, for the same reason the ramp's
           come first below: a control the player can see has to win over
           whatever it happens to be drawn on top of */
     const selB = controller.selectedBooster;
@@ -190,7 +190,10 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       if (Math.hypot(p.x - knob.x, p.y - knob.y) <= AIM_GRAB) {
         controller.boosterDrag = { mode: 'aim', ix: selB, lx: p.x, ly: p.y }; return;
       }
-      if (Math.hypot(p.x - sb.x, p.y - sb.y) <= sb.r + PICK_PAD) {
+      /* Its body, which is a BAR: the same distance-to-segment test
+         pickBooster runs, so the selected one is grabbed exactly where an
+         unselected one would be. */
+      if (levels.pickBooster(p.x, p.y) === selB) {
         controller.boosterDrag = { mode: 'move', ix: selB, lx: p.x, ly: p.y }; return;
       }
     }

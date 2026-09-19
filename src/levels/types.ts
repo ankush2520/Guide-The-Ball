@@ -15,6 +15,18 @@ export interface Segment { x1: number; y1: number; x2: number; y2: number; }
 export interface Rect { x: number; y: number; w: number; h: number; }
 
 export interface BoosterDef extends Circle { angle: number; speed: number; }
+
+/** A BOOST RAMP: geometrically a plain segment, exactly like a player's ramp,
+    and run through the same collision - only the exit speed differs (see
+    BOOST_RAMP_GAIN). It carries no angle and no length of its own because
+    both are already IN the segment: where it lies and which way it points are
+    its two ends, so moving and aiming one are the same two numbers the
+    renderer and the physics already share.
+
+    Normally the player's, out of the bag. Authorable so the solver gate can
+    inject one headlessly - see tests/items.test.mjs - and so a level could
+    ship with one if a country ever wants that. */
+export type BoostRampDef = Segment;
 export interface WindDef extends Rect { ax?: number; ay?: number; }
 export type SlipperyDef = Rect;
 export interface PortalEnd extends Circle { facing?: number | null; }
@@ -71,6 +83,10 @@ export interface RawLevel {
   spawn: Vec;
   obstacles?: Circle[];
   boosters?: BoosterDef[];
+  /** Boost ramps the LEVEL carries. Empty in every shipped level today: the
+      bar is the player's item, and the composed play level is where theirs
+      are merged in - see LevelManager.composeLevel(). */
+  boostRamps?: BoostRampDef[];
   wind?: WindDef[];
   slippery?: SlipperyDef[];
   portals?: PortalDef[];
@@ -90,6 +106,24 @@ export interface RawLevel {
       proves both halves of it (see tests/items.test.mjs), so it may only be
       set on a level that has been through that gate. */
   needsBooster?: boolean;
+  /* ============================================================
+     A GIFT INSIDE THE TARGET
+
+     The second flavour of mystery box, and the one that is not
+     ON the board at all: the target itself is wrapped, and
+     clearing the level opens it.
+
+     A FLAG, not a prize. What it pays is rolled from the same
+     table the physical chest rolls from, at the moment it is
+     opened (see RewardManager.rollBoxPrize), so a designer marks
+     a board as special without deciding what special is worth -
+     and retuning the prize table never touches level data.
+
+     Absent from almost every level on purpose. It is the beat a
+     designer spends on a milestone, and a game where every
+     target is wrapped has no milestones.
+     ============================================================ */
+  targetGift?: boolean;
 }
 
 /** A level after normalisation: every list present, walls built. The
@@ -98,6 +132,7 @@ export interface RawLevel {
 export interface Level extends RawLevel {
   obstacles: Circle[];
   boosters: BoosterDef[];
+  boostRamps: BoostRampDef[];
   wind: WindDef[];
   slippery: SlipperyDef[];
   portals: PortalDef[];

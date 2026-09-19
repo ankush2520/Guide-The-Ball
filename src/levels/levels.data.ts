@@ -114,11 +114,18 @@ export const RAW_LEVELS: RawLevel[] = [
     obstacles:[{x:158,y:320,r:32},{x:302,y:360,r:34},{x:198,y:470,r:34},{x:344,y:520,r:32}],
     boxes:[{x:47,y:350}],
     target:{x:150,y:726,r:44} },
+  /* THE FIRST WRAPPED TARGET. `targetGift` is a milestone decoration and
+     nothing else - it changes no geometry and no physics, so it can be set on
+     one of the frozen twenty without re-proving anything. Four boards in the
+     whole game carry it: 20, 50, 100 and 150, the last level of an Act. Note
+     that this one also carries a CHEST, which is the point of keeping the two
+     flavours independent - the ball can open the box on the way down and the
+     target can still be unwrapped for clearing it. */
   { id:20, name:"Master's Drop", maxBlocks:3, targetType:'ENCLOSED',
     spawn:{x:92,y:40},
     obstacles:[{x:196,y:330,r:34},{x:300,y:430,r:34},{x:140,y:470,r:28}],
     boxes:[{x:399,y:401}],
-    target:{x:356,y:646,r:32} },
+    target:{x:356,y:646,r:32}, targetGift:true },
 
   /* ============================================================
      GENERATED LEVELS - countries 2 and up.
@@ -347,7 +354,7 @@ export const RAW_LEVELS: RawLevel[] = [
     obstacles:[{x:231,y:509,r:25},{x:391,y:280,r:24},{x:386,y:473,r:30}],
     boxes:[{x:222,y:174}],
     target:{x:77,y:676,r:21},
-    targetMove:{x0:77,x1:200,period:105} },
+    targetMove:{x0:77,x1:200,period:105}, targetGift:true },
 
   /* ---- Country 3: Windemere (levels 51-60) ---- */
   { id:51, name:"Updraught", maxBlocks:2, targetType:'OPEN',
@@ -667,7 +674,7 @@ export const RAW_LEVELS: RawLevel[] = [
     portals:[{id:'p1',a:{x:382,y:250,r:29},b:{x:88,y:480,r:29}}],
     breakables:[{x:380,y:429,r:27}],
     boxes:[{x:55,y:261}],
-    target:{x:199,y:615,r:27} },
+    target:{x:199,y:615,r:27}, targetGift:true },
 
   /* ---- Country 9: Coralis Deep (levels 101-110) ---- */
   { id:101, name:"Abyssal", maxBlocks:2, targetType:'OPEN',
@@ -1007,6 +1014,6 @@ export const RAW_LEVELS: RawLevel[] = [
     breakables:[{x:304,y:471,r:33}],
     stars:[{x:310,y:263},{x:220,y:449}],
     boxes:[{x:348,y:590}],
-    target:{x:160,y:689,r:24} }
+    target:{x:160,y:689,r:24}, targetGift:true }
 /* GEN:END */
 ];

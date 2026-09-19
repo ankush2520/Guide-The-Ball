@@ -99,13 +99,13 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
 
           {rewards.boostersUnlocked && (
             <>
-              <h4 id="shop-boosters-head">Boosters</h4>
+              <h4 id="shop-boosters-head">Booster ramps</h4>
               <p className="shopnote">
-                Place one on any board and it fires the ball along its arrow.
-                You are only charged when a drop that actually <b>fires</b> one
-                goes on to win - misses are free, and so is a win it had no
-                part in. {BOOSTER_PRICE} coins each, and fewer the more you
-                take.
+                An orange bar you lay on any board. It bounces the ball like a
+                ramp and throws it out <b>ten times faster</b>. You are only
+                charged when a drop that actually <b>hits</b> one goes on to
+                win - misses are free, and so is a win it had no part in.
+                {' '}{BOOSTER_PRICE} coins each, and fewer the more you take.
               </p>
               <div className="buyrow">
                 {BOOSTER_BUNDLES.map(b => {
@@ -124,13 +124,13 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
               </div>
               <p className="shopnote" id="shop-boostercount">
                 In your bag: <b>{rewards.extraBoosters}</b>
-                {' '}booster{rewards.extraBoosters === 1 ? '' : 's'}.
+                {' '}booster ramp{rewards.extraBoosters === 1 ? '' : 's'}.
               </p>
             </>
           )}
           {!rewards.boostersUnlocked && (
             <p className="shopnote" id="shop-boosters-locked">
-              Boosters unlock at level {BOOSTER_UNLOCK_LEVEL}.
+              Booster ramps unlock at level {BOOSTER_UNLOCK_LEVEL}.
             </p>
           )}
         </div>

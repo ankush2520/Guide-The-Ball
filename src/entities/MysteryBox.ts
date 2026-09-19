@@ -28,9 +28,14 @@ import { BOX_R } from '../physics/constants';
 import { INK } from '../render/palette';
 
 /* Gift wrap and its ribbon. The wrap is its own family - nothing else on the
-   board is magenta - and the ribbon is the game's gold. */
-const WRAP = { light: '#f07ac4', base: '#d94a9e', dark: '#a82f76' };
-const TIE  = { light: '#ffe07a', base: '#ffc53a', dark: '#e0a112' };
+   board is magenta - and the ribbon is the game's gold.
+
+   Exported because a gift has two homes now: the chest the ball opens on the
+   way past, and the one sitting INSIDE a wrapped target (see Target.draw).
+   Those two must be the same present in the same paper, or the second one is
+   a new thing to learn rather than the same treasure somewhere else. */
+export const WRAP = { light: '#f07ac4', base: '#d94a9e', dark: '#a82f76' };
+export const TIE  = { light: '#ffe07a', base: '#ffc53a', dark: '#e0a112' };
 
 export class MysteryBox extends Entity<BoxDef> {
   readonly kind: EntityKind = 'box';

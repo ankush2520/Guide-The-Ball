@@ -30,6 +30,11 @@ export interface BallState {
   got: boolean[];
   /** Which mystery boxes this drop has opened. */
   gotBox: boolean[];
+  /** Which BOOST RAMPS this drop has fired off, by index into
+      lv.boostRamps. Read by the controller to decide which of the player's
+      bars a winning drop has to pay for - the engine is the only thing that
+      knows whether the ball really hit one. */
+  firedBoost: boolean[];
 
   stars: number;
   boosts: number;

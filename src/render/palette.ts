@@ -16,6 +16,15 @@
 export const INK = '#2a2350';
 
 export const OBSTACLE = { light: '#ff8a97', base: '#f0223f', dark: '#b3102a' };
+/* ORANGE IS SPEED, and it is the one hue the vocabulary above had not spent.
+
+   It is deliberately NOT green. Green is the GOAL and nothing else may wear
+   it: the booster used to be a green-cyan disc, one step off the target's own
+   green, and "is that the thing I am aiming at or the thing that throws me?"
+   is not a question a board may ask. Not the ramp's blue either - a boost
+   ramp is a bar, exactly the ramp's silhouette, so colour is the ONLY thing
+   left to tell the two apart and it has to carry that alone. */
+export const BOOST    = { light: '#ffc078', base: '#ff7a18', dark: '#b8430a' };
 export const TARGET   = { light: '#7fe39a', base: '#2fc95a', dark: '#17963d' };
 export const RAMP     = { light: '#8fc8ff', base: '#1680f0', dark: '#0d5fb8' };
 export const WALL     = { light: '#b4b9d4', base: '#7c83a8', dark: '#5b6188' };

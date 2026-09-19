@@ -38,15 +38,18 @@ export const GLOSSARY: GlossaryEntry[] = [
   { cls: 'bk', has: lv => lv.breakables.length > 0, name: 'Breakable block',
     long: 'Bounces you randomly exactly like an obstacle, then shatters and is gone. It stays ' +
           'gone for your next drop on this level, so a first attempt can be spent clearing a path.' },
-  { cls: 'bs', has: lv => lv.boosters.length > 0, name: 'Booster',
-    long: 'Fires the ball along the arrow at a fixed speed, every single time. Unlike an ' +
-          'obstacle there is nothing random about it - the arrow is exactly the heading you leave on.' },
-  /* Straight after the level's own booster, because they are the same machine
-     and the only thing to learn is which one is yours. */
-  { cls: 'mb', has: lv => lv.boosters.length > 0, name: 'Your booster',
-    long: 'The blue one is one you placed from your bag. It works exactly like the level\'s own: ' +
-          'drag it to move, drag the knob on its nose to aim. It only leaves your bag if the ball ' +
-          'really fires through it AND that drop wins - missing with one costs you nothing.' },
+  { cls: 'bs', has: lv => lv.boosters.length > 0, name: 'Booster pad',
+    long: 'The orange DISC. Fires the ball along its arrow at a fixed speed, every single time. ' +
+          'Unlike an obstacle there is nothing random about it - the arrow is exactly the heading ' +
+          'you leave on.' },
+  /* Straight after the level's own pad, because orange means the same thing on
+     both and the only thing to learn is what the two shapes do differently. */
+  { cls: 'mb', has: lv => lv.boostRamps.length > 0, name: 'Your booster ramp',
+    long: 'The orange BAR, out of your bag. It bounces the ball exactly like a ramp you drew - ' +
+          'the angle you lay it at is the angle it mirrors off - and then throws it out about ' +
+          'TEN TIMES faster, which no ordinary ramp can do. Drag it to move, drag the knob to ' +
+          'turn it. It only leaves your bag if the ball really hits it AND that drop wins - ' +
+          'missing with one costs you nothing.' },
   { cls: 'pt', has: lv => lv.portals.length > 0, name: 'Portal',
     long: 'Two rings of the same colour. Go into one and you come out of the other keeping your ' +
           'direction, unless the exit has an arrow, which turns you to face it.' },
@@ -64,6 +67,12 @@ export const GLOSSARY: GlossaryEntry[] = [
           'balls, a spare ramp, sometimes a booster or a free spin of the wheel. Like a star it ' +
           'never changes where the ball goes, and each one can only be opened ONCE: after that ' +
           'the board shows the empty outline where it was.' },
+  /* Straight after the chest, because it is the same prize out of a different
+     place, and "this target has one" is the only new thing to learn. */
+  { cls: 'gf', has: lv => !!lv.targetGift, name: 'Gift target',
+    long: 'There is a present sitting INSIDE this target - the same one a chest holds. Land in ' +
+          'it and the gift is unwrapped for you before the win card, and it pays the same kind ' +
+          'of prize. Once only, like a chest: clear the board again and the target is empty.' },
   { cls: 'rp', has: () => true, name: 'Your ramp',
     long: 'What you draw: drag anywhere on empty board and the ramp is the line you drag, any ' +
           'length and any angle you like. The ball mirrors off it like a real bounce and loses a ' +

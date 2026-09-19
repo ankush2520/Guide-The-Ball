@@ -12,7 +12,7 @@
    It emits on the bus and never touches React directly; the UI
    subscribes to a version counter and re-reads whatever it needs.
    ============================================================ */
-import type { GameBus, Phase } from '../core/events';
+import type { FlightKind, GameBus, Phase } from '../core/events';
 import { LevelManager, DEL_R, HANDLE_R, AIM_R } from './LevelManager';
 import { RewardManager, prizeLabel } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
@@ -24,7 +24,7 @@ import { clamp } from '../physics/math';
 import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
-import type { BoosterDef, Level, Segment, Vec } from '../levels/types';
+import type { BoostRampDef, Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
 const STEP_MS = STEP_MS_DEFAULT;
@@ -32,7 +32,10 @@ const FLASH_MS = 2600;
 
 const HIT_COLOR: Record<string, string> = {
   ramp: '#1680f0', wall: '#5b6188', obstacle: '#f0223f',
-  breakable: '#e0761c', booster: '#14b28e', portal: '#a54bd6',
+  breakable: '#e0761c', booster: '#ff9d3d', portal: '#a54bd6',
+  /* The boost ramp's own orange, so the sparks off a launch are the colour of
+     the thing that threw the ball rather than of an ordinary bounce. */
+  boost: '#ff7a18',
 };
 
 /* The mechanics tips. The game is plan-first, so a new mechanic is taught the
@@ -56,6 +59,18 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
   { key: 'box',       has: lv => lv.boxes.length > 0,
     text: 'Mystery box: hit it for a random reward.' },
 ];
+
+/* ============================================================
+   "THERE IS A GIFT IN THIS TARGET"
+
+   Not in MECH_TIPS, and the difference is the whole reason: a
+   mechanic tip is taught ONCE, ever, because a mechanic is a rule
+   to learn. A gift in the target is not a rule, it is a fact
+   about the board in front of you - the same class of thing as
+   `needsBooster` - so it is said every time that board is
+   entered, and only while the gift is still there to be had.
+   ============================================================ */
+export const GIFT_TIP = 'There is a gift inside this target - land in it and it is yours.';
 
 /* ============================================================
    THE FIRST-RUN WALKTHROUGH
@@ -135,6 +150,25 @@ export class GameController {
 
   lastResult: DropResult | null = null;
   winCard: WinCard | null = null;
+  /* ============================================================
+     THE GIFT IN THE TARGET, MID-REVEAL
+
+     Set by finish() on a board whose target is wrapped, and the
+     win card is held in `pendingCard` while it is up: the two
+     celebrations are SEQUENTIAL, never stacked. That ordering is
+     why the card is withheld rather than the panel being drawn
+     over it - the confetti and the coin flight both key off
+     `winCard`, so holding the card back holds the whole win beat
+     back with it, and there is no second gate to keep in step.
+
+     The prize is rolled HERE, when the gift is opened, and paid
+     when the panel closes. Nothing is owed in between that a
+     closed tab could lose: the roll is not money until
+     collectGift() hands it to the ledger, and the claim that
+     stops a second gift is written the moment it is claimed.
+     ============================================================ */
+  gift: { kind: FlightKind; n: number } | null = null;
+  private pendingCard: WinCard | null = null;
   flash = '';
 
   readonly squash: Squash = { amt: 0, nx: 0, ny: -1 };
@@ -377,15 +411,16 @@ export class GameController {
   private reactToStep(b: BallState): void {
     const lv = this.levels.playLevel;
 
-    /* Which of the player's boosters the ball is inside. Recorded rather than
-       read back off the engine because the engine counts every booster on the
-       board as one kind of thing, and only the player's are charged for. */
-    const mine = this.levels.placedBoosters;
-    for (let k = 0; k < mine.length; k++) {
-      if (this.boosterFired[k]) continue;
-      const z = mine[k];
-      if (Math.hypot(b.x - z.x, b.y - z.y) <= z.r) this.boosterFired[k] = true;
-    }
+    /* Which of the player's boost ramps have actually fired. Read straight off
+       the engine, which is the only thing that knows: a bar fires on a real
+       Matter contact, and a contact is not something this side can re-derive
+       from a position - the old disc's "is the ball inside it" test has no
+       equivalent for a 14-unit-thick bar a ball crosses in a single frame.
+       `boostOffset` skips any the LEVEL authored: only the player's are
+       charged for. */
+    const off = this.levels.boostOffset;
+    for (let k = 0; k < this.boosterFired.length; k++)
+      if (b.firedBoost[off + k]) this.boosterFired[k] = true;
 
     /* a box the ball opened this step. Before the hit reaction, so a box sat
        against a wall pops on the frame it is touched rather than the one
@@ -570,19 +605,64 @@ export class GameController {
       this.levels.levelIndex, lv.id, this.levels.isLast,
       this.tries, this.levels.rampsUsed, this.levels.levelBudget);
 
-    this.winCard = {
+    const card: WinCard = {
       stars, note, bonus, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
       boosters: boostersUsed,
     };
     this.capture = null;
-    // the confetti starts on this phase change, so the fanfare starts with it
-    Sound.win();
+
+    /* IS THIS TARGET WRAPPED? Claimed here rather than when the panel opens,
+       so the one thing that must never happen twice - a second gift out of the
+       same target - is settled by the same call that decides to show one. */
+    const gift = lv.targetGift && this.rewards.claimGift(this.levels.levelIndex)
+      ? this.rewards.rollBoxPrize(lv.id) : null;
+    if (gift) {
+      this.gift = { kind: gift.kind, n: gift.n };
+      this.pendingCard = card;
+      this.winCard = null;
+      /* NOT the win fanfare: that belongs to the card, and the card is a beat
+         away. The chest's own chime opens the gift instead. */
+      Sound.coin(0);
+    } else {
+      this.winCard = card;
+      // the confetti starts on this phase change, so the fanfare starts with it
+      Sound.win();
+    }
     this.setPhase('over');
     this.hideFlash();
     this.bus.emit('level:cleared',
       { level: lv, index: this.levels.levelIndex, stars, firstClear });
     this.emitEnded(result);
+  }
+
+  /* ============================================================
+     THE GIFT, TAKEN
+
+     Called by the panel once its unwrap has played out. The order
+     matters: the ledger is credited first, so the counters the
+     reward flies INTO are already right when it lands, and then
+     the win card is released - which is what starts the confetti,
+     the payout flight and the stars, all of them a beat late and
+     none of them competing with the gift.
+
+     The FLIGHT itself is the panel's job, not this method's: it
+     launches from the wrapping it just opened, and only the DOM
+     knows where that is. See GiftPanel.
+     ============================================================ */
+  collectGift(): void {
+    const g = this.gift;
+    if (!g) return;
+    this.gift = null;
+    this.rewards.payBoxPrize(g);
+    this.showFlash(g.kind === 'spin'
+      ? 'The target held a free spin! Tap the gear.'
+      : `The target held ${prizeLabel(g.kind, g.n)}!`);
+    this.winCard = this.pendingCard;
+    this.pendingCard = null;
+    Sound.win();
+    this.bus.emit('gift:opened', { kind: g.kind, n: g.n });
+    this.changed();
   }
 
   private emitEnded(result: DropResult): void {
@@ -600,7 +680,7 @@ export class GameController {
     this.selected = -1; this.dragging = null; this.lastResult = null;
     this.selectedBooster = -1; this.boosterDrag = null; this.draft = null;
     this.boxSeen = []; this.boosterFired = [];
-    this.winCard = null;
+    this.winCard = null; this.pendingCard = null; this.gift = null;
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.renderer.invalidateBackdrop();
@@ -618,21 +698,30 @@ export class GameController {
     /* Reaching Solmesa is what puts the first booster in the bag. Announced
        with a flash rather than a modal: it is a gift, not an interruption. */
     if (this.rewards.noteLevelReached(this.levels.level.id))
-      this.showFlash('Boosters unlocked - one is in your bag!');
+      this.showFlash('Booster ramps unlocked - one is in your bag!');
     this.teachNewMechanics();
     this.teachBoosterBoard();
+    this.teachGiftBoard();
   }
 
   nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
 
   /** Replay: drop the same layout again, which costs a ball like any drop. */
-  retry(): void { this.setPhase('plan'); this.winCard = null; this.drop(); }
+  retry(): void {
+    this.setPhase('plan');
+    this.winCard = null; this.pendingCard = null; this.gift = null;
+    this.drop();
+  }
 
   /** Put the board back in the player's hands with the ramps untouched, and
       no ball spent. It was the win card's Adjust button until that card was
       cut to two choices; it stays because it is also how a reset returns to
       planning - see debugHook.reset(). */
-  adjust(): void { this.releaseBall(); this.winCard = null; this.setPhase('plan'); }
+  adjust(): void {
+    this.releaseBall();
+    this.winCard = null; this.pendingCard = null; this.gift = null;
+    this.setPhase('plan');
+  }
 
   private setPhase(p: Phase): void {
     this.phase = p;
@@ -713,8 +802,17 @@ export class GameController {
   private teachBoosterBoard(): void {
     if (!this.levels.level.needsBooster) return;
     this.showFlash(this.rewards.extraBoosters > 0
-      ? 'Ramps cannot reach this one - use a booster.'
-      : 'Ramps cannot reach this one - the shop has boosters.');
+      ? 'Ramps cannot reach this one - use a booster ramp.'
+      : 'Ramps cannot reach this one - the shop has booster ramps.');
+  }
+
+  /** Say so when the board's target holds a gift, every visit, until it has
+      been taken. Announced after the booster line, which is the one that
+      affects whether the board can be solved at all. */
+  private teachGiftBoard(): void {
+    if (!this.levels.level.targetGift) return;
+    if (this.rewards.giftClaimed(this.levels.levelIndex)) return;
+    this.showFlash(GIFT_TIP);
   }
 
   showFlash(text: string): void {
@@ -772,6 +870,11 @@ export class GameController {
          adds to that. */
       gotBox: this.levels.sessionBoxes.map(
         (g, i) => g || !!(this.ball && this.ball.gotBox[i])),
+      /* Asked of the LEDGER, not of the board: whether a wrapped target has
+         already paid out is a fact about the save, and the one mid-win case -
+         the gift is on screen being opened - still counts as taken, because
+         claimGift() has already been called by then. */
+      giftTaken: this.rewards.giftClaimed(this.levels.levelIndex),
       capture: this.capture,
       captureMs: CAPTURE_MS,
       squash: this.squash,
@@ -781,8 +884,8 @@ export class GameController {
          thing drawn and the thing the finger hits cannot disagree. */
       boosters: this.levels.placedBoosters,
       selectedBooster: this.selectedBooster,
-      boosterHandleAt: (b: BoosterDef) => this.levels.boosterHandleAt(b),
-      boosterDeleteAt: (b: BoosterDef) => this.levels.boosterDeleteAt(b),
+      boosterHandleAt: (b: BoostRampDef) => this.levels.boosterHandleAt(b),
+      boosterDeleteAt: (b: BoostRampDef) => this.levels.boosterDeleteAt(b),
       aimR: AIM_R,
       /* read from the same constants the hit-test uses: these were once
          literals, and the × was resized for the finger while still being
@@ -813,7 +916,7 @@ export class GameController {
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
     if (this.selectedBooster >= 0)
-      return 'Drag the booster to move it, the arrow to aim it, × to take it back.';
+      return 'Drag the booster ramp to move it, the knob to turn it, × to take it back.';
     if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
     if (this.levels.rampsLeft <= 0 && this.rewards.extraRamps <= 0)
       return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';

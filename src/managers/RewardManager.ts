@@ -152,11 +152,34 @@ export const COIN_CLEAR = [
   [22, 26, 32],
 ];
 
-/* Replaying a level you have already cleared pays a quarter. Not nothing -
-   grinding a hard board you enjoy should still be worth something - but far
-   too little to make farming level 1 a better plan than playing the game. */
-export const REPLAY_SHARE = 0.25;
-export const REPLAY_MIN = 2;
+/* ============================================================
+   A BOARD PAYS ONCE
+
+   Replaying a cleared level pays NOTHING, and the reason is
+   arithmetic rather than taste.
+
+   A replay costs one ball. A ball costs 2 coins at list price
+   and 1.43 in the largest bundle - so ANY replay payout above
+   about one and a half coins turns a cleared board into a
+   machine that prints coins, which print balls, which print
+   more coins. It ran at a quarter (minimum 2) and paid 4-5
+   coins a drop, which is a positive loop: slow, but a farm only
+   has to be positive to be a farm, and the fastest board in the
+   game is the one the player has already solved.
+
+   There is no rate that is both worth collecting and safe. One
+   coin a replay is safe and beneath noticing; anything a player
+   would cross the room for is farmable. So the honest rule is
+   the simple one: the clear that first beats a board is what it
+   pays, and after that the board is practice. The stars still
+   improve, which is what a replay is actually for.
+
+   Everything else on a level already worked this way - the
+   first-clear ball bonus, the chest, the gift in a target - so
+   this makes the coins the last thing to stop being repeatable,
+   rather than a rule invented for them.
+   ============================================================ */
+export const REPLAY_SHARE = 0;
 
 /** What clearing `levelId` with `stars` pays, first time or on a replay. */
 export function coinsFor(
@@ -166,9 +189,7 @@ export function coinsFor(
 ): number {
   const act = clamp(Math.floor((levelId - 1) / 5), 0, COIN_CLEAR.length - 1);
   const full = COIN_CLEAR[act][clamp(stars, 1, 3) - 1];
-  return firstClear
-    ? full
-    : Math.max(REPLAY_MIN, Math.round(full * REPLAY_SHARE));
+  return firstClear ? full : Math.round(full * REPLAY_SHARE);
 }
 
 /* ---- the wheel ---- */
@@ -320,6 +341,9 @@ export class RewardManager {
   boosterGift = false;
   /** Which levels have had their mystery box opened, by level INDEX. */
   claimedBoxes: Record<number, boolean> = {};
+  /** And which have had the gift in their TARGET opened. Same shape, same
+      once-per-level-for-good rule, separate record - see SaveData.gifts. */
+  claimedGifts: Record<number, boolean> = {};
   /** Spins owed outside the daily cadence. See grantBonusSpin(). */
   bonusSpins = 0;
 
@@ -391,6 +415,30 @@ export class RewardManager {
     return !!this.claimedBoxes[levelIndex];
   }
 
+  /** Has the gift in this level's target already been opened? */
+  giftClaimed(levelIndex: number): boolean {
+    return !!this.claimedGifts[levelIndex];
+  }
+
+  /* ============================================================
+     CLAIMING THE GIFT IN A TARGET
+
+     The chest's rule exactly: once per level, for good, written
+     to storage the moment it is claimed. A board cleared again
+     tomorrow shows no gift, the same way its chest shows an empty
+     outline - treasure is treasure, and a win you can repeat must
+     not be an income.
+
+     Returns false if it was already taken, which is the caller's
+     cue to run the ordinary win with no gift beat at all.
+     ============================================================ */
+  claimGift(levelIndex: number): boolean {
+    if (this.claimedGifts[levelIndex]) return false;
+    this.claimedGifts[levelIndex] = true;
+    this.saveProgress();
+    return true;
+  }
+
   /** Mark it taken, for good. Returns false if it already was, which is the
       caller's cue that this open pays nothing. */
   claimBox(levelIndex: number): boolean {
@@ -448,6 +496,7 @@ export class RewardManager {
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
     this.boosterGift = !!s.boosterGift;
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
+    this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
     /* Which levels have ever been cleared, so the first-clear bonus is paid
        once and an easy level cannot be farmed for balls. Deliberately its own
@@ -531,6 +580,7 @@ export class RewardManager {
     this.tipsSeen = {};
     this.boosterGift = false;
     this.claimedBoxes = {};
+    this.claimedGifts = {};
     this.spinLast = 0;
     this.spinOffered = 0;
     this.bonusSpins = 0;
@@ -577,6 +627,7 @@ export class RewardManager {
       tips: this.tipsSeen,
       boosterGift: this.boosterGift,
       boxes: this.claimedBoxes,
+      gifts: this.claimedGifts,
     });
   }
 
@@ -791,10 +842,10 @@ export class RewardManager {
     if (stars > (this.bestStars[levelIndex] | 0))
       this.bestStars[levelIndex] = stars;
 
-    /* Coins are paid on EVERY clear, unlike the ball bonus - they are the
-       running income the shop is priced against. A replay pays a quarter, so
-       a cleared level is still worth returning to and still nowhere near
-       worth farming. */
+    /* Coins are the running income the shop is priced against, and they are
+       paid by the clear that FIRST beats a board - see coinsFor. A replay
+       pays nothing, because a drop costs a ball and a ball costs coins: any
+       repeat payout at all is a loop that prints both. */
     const coins = coinsFor(levelId, stars, firstClear);
 
     this.saveProgress();
@@ -976,8 +1027,13 @@ export class RewardManager {
   }
 
   /** Hand over what a box rolled. One place, so every kind of box prize is
-      paid the same way and the 'box' reason is what the ledger shows. */
-  payBoxPrize(p: BoxPrize): void {
+      paid the same way and the 'box' reason is what the ledger shows - the
+      chest on the board and the gift inside a target both come through here,
+      which is what keeps the two flavours worth the same thing.
+
+      Takes the kind and the amount rather than a whole table row: the weight
+      is how a prize was PICKED and has nothing to do with paying it. */
+  payBoxPrize(p: { kind: FlightKind; n: number }): void {
     switch (p.kind) {
       case "coins":
         this.grantCoins(p.n, "box");

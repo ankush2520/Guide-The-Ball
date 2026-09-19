@@ -41,6 +41,8 @@ import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
   SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, PORTAL_CD, STAR_R, BOX_R,
   MAX_STEPS, REST_STEPS, REST_PX,
+  BOOST_HT, BOOST_RAMP_GAIN, BOOST_RAMP_CAP, BOOST_DECAY, BOOST_RAMP_CD,
+  BOOST_SUB_PX, BOOST_SUBSTEPS_MAX,
   OB_JITTER, OB_MAX_DEV, H, BOARD,
 } from '../constants';
 
@@ -102,6 +104,21 @@ export class MatterBall implements BallState {
      BOOST_CAP rather than the board's general cap, and the downward clamp is
      off - otherwise the kick is undone by the same step that applied it. */
   boostCd = 0;
+  /* ---- turbo: the boost RAMP's launch, and deliberately its own state ----
+
+     The pads above are frozen physics (23 proved levels), so a launch off a
+     bar gets its own ceiling and its own decay rather than widening theirs.
+     `turboCap` IS the ceiling and the flag at once: above zero the ball is
+     flying, held to that speed instead of the board's cap and exempt from the
+     downward clamp, and it bleeds off by BOOST_DECAY every step until it
+     falls back under the general cap and is switched off. Zero for any drop
+     that never touches a bar, which is what keeps every other level's
+     trajectory bit-identical. */
+  turboCap = 0;
+  /** Per-bar cooldown, so a two-sided bar cannot multiply a ball it has just
+      launched back into itself. */
+  boostRampCd: number[];
+  firedBoost: boolean[];
   portalCd = 0;
   portalHold: { k: number; side: 'a' | 'b' } | null = null;
   broken: boolean[];
@@ -130,6 +147,8 @@ export class MatterBall implements BallState {
     this.px = lv.spawn.x; this.py = lv.spawn.y;
     this.restX = lv.spawn.x; this.restY = lv.spawn.y;
     this.boostIn = falses(lv.boosters.length);
+    this.boostRampCd = lv.boostRamps.map(() => 0);
+    this.firedBoost = falses(lv.boostRamps.length);
     this.broken = broken ? broken.slice() : falses(lv.breakables.length);
     this.got = falses(lv.stars.length);
     this.gotBox = falses(lv.boxes.length);
@@ -157,6 +176,10 @@ export class MatterBall implements BallState {
     // level walls - real collidable geometry, not just a bounds check
     lv.walls.forEach((s, i) => add(segmentBody(s, WALL_HT), 'wall', i));
     lv.obstacles.forEach((o, i) => add(circleBody(o, cfg.restitution), 'obstacle', i));
+    /* Boost ramps: the SAME body a ramp gets, only thicker, because the whole
+       claim of this item is that it bounces you exactly like a ramp. What is
+       different happens after the solve - see the contact loop. */
+    lv.boostRamps.forEach((s, i) => add(segmentBody(s, BOOST_HT), 'boost', i));
 
     this.breakableBodies = lv.breakables.map((o, i) => {
       if (this.broken[i]) return null;          // already gone this session
@@ -194,6 +217,16 @@ export class MatterBall implements BallState {
   set x(v: number) { Body.setPosition(this.body, { x: v, y: this.body.position.y }); }
   get y(): number { return this.body.position.y; }
   set y(v: number) { Body.setPosition(this.body, { x: this.body.position.x, y: v }); }
+  /* Velocity is read straight off `body.velocity`, EXACTLY as it has been
+     since this engine shipped. It is worth stating why, because the obvious
+     "improvement" here changes the game: Matter's resolver applies its
+     impulses to positionPrev and leaves body.velocity untouched, so on a frame
+     with a contact this is the velocity going IN, not the one coming out, and
+     every clamp in this file was tuned against that - swapping in
+     Body.getVelocity() moves the landing point of a boosted drop.
+
+     A subdivided frame is reconciled to these units by stepMatter() before
+     anything reads them, so the subdivision is invisible here. */
   get vx(): number { return this.body.velocity.x; }
   set vx(v: number) { Body.setVelocity(this.body, { x: v, y: this.body.velocity.y }); }
   get vy(): number { return this.body.velocity.y; }
@@ -264,6 +297,63 @@ export class MatterBall implements BallState {
   }
 }
 
+/* ============================================================
+   ONE FRAME OF MATTER, SUBDIVIDED IF THE BALL IS FLYING
+
+   Matter has no continuous collision detection, so a ball that
+   travels further in one step than a bar is thick passes clean
+   through it. Everything the base game and the authored pads can
+   reach is under BOOST_CAP and therefore inside a ramp's
+   thickness, which is why this was one call for the whole of the
+   game's life so far.
+
+   A boost ramp launches past that deliberately, so above
+   BOOST_CAP the frame is run as several smaller Matter steps
+   instead - enough of them that no single one advances more than
+   BOOST_SUB_PX. Two things make that safe rather than a second
+   physics model:
+
+     - Matter's time correction rescales the Verlet velocity when
+       the delta changes, so the ball keeps the speed it had.
+     - Gravity is a force integrated over delta squared, and n
+       steps of DELTA/n accumulate to the same velocity as one of
+       DELTA. Nothing has to be re-tuned for the subdivision.
+
+   And the GATE is what protects every proved level: at or below
+   BOOST_CAP this is the single Engine.update it always was, bit
+   for bit. Only a bar out of the bag can get a ball fast enough
+   to take the other branch.
+   ============================================================ */
+function stepMatter(b: MatterBall): void {
+  const sp = b.speed;
+  /* The epsilon is load-bearing, not tidiness. A booster PAD sets the speed to
+     exactly BOOST_CAP, and hypot(cos(a) * 13, sin(a) * 13) comes back as
+     13.000000000000002 - so a bare `>` test subdivided the frame after every
+     authored pad in the game and moved twenty-three proved levels by a
+     pixel. Only something genuinely faster than the cap may take that branch. */
+  if (sp <= BOOST_CAP + 1e-9) { Engine.update(b.engine, DELTA); return; }
+  const n = Math.min(BOOST_SUBSTEPS_MAX, Math.ceil(sp / BOOST_SUB_PX));
+  for (let i = 0; i < n; i++) {
+    Engine.update(b.engine, DELTA / n);
+    /* Stop the moment the ball is off the board. The remaining substeps would
+       only carry it further out, and the frame's own out-of-bounds test - run
+       after this returns - reads the same answer either way. */
+    if (b.isOutOfBounds()) break;
+  }
+  /* BACK INTO FRAME UNITS. Inside the loop Matter is storing displacement per
+     DELTA/n, so body.velocity is a fraction of the real speed and every clamp
+     that reads it would be reading the wrong number. The true velocity is the
+     displacement the resolver actually left behind - position minus
+     positionPrev, scaled up - and writing it back with the body's delta reset
+     makes body.velocity, positionPrev and the next frame's time correction all
+     agree again. The ball is not moved: only its bookkeeping. */
+  const v = Body.getVelocity(b.body);
+  /* `deltaTime` is real Matter state - it is what Body.update writes and what
+     getVelocity/setVelocity scale by - and simply missing from the typings. */
+  (b.body as unknown as { deltaTime: number }).deltaTime = DELTA;
+  Body.setVelocity(b.body, v);
+}
+
 /* A segment becomes a rotated static rectangle of the thickness the renderer
    draws it at (RAMP_HT / WALL_HT), so what the player sees is what collides. */
 function segmentBody(s: Segment, halfT: number): MBody {
@@ -316,8 +406,19 @@ export class MatterEngine implements PhysicsEngine {
        scatter()), and that has to be computed from the incoming vector. */
     const inVx = b.vx, inVy = b.vy;
 
+    /* Where the ball was when this frame started. Taken here rather than read
+       off b.px/b.py, which belong to the RENDERER's interpolation and are
+       advanced by the controller, not by the simulation - so a headless drop
+       never moves them. The swept pickup tests below need the real start of
+       this frame and nothing else. */
+    const fromX = b.x, fromY = b.y;
+    /* And how many teleports it had made. A portal moves the ball
+       DISCONTINUOUSLY, so the "line it travelled this frame" is not a line at
+       all - see the swept pickup tests below. */
+    const telesIn = b.teleports;
+
     b.pending.length = 0;
-    Engine.update(b.engine, DELTA);
+    stepMatter(b);
 
     /* ---- contacts Matter reported, applied now the solve is over ----
 
@@ -342,6 +443,46 @@ export class MatterEngine implements PhysicsEngine {
         b.segHits++;
         if (cfg.minBounce !== null) enforceMinBounce(b, c.nx, c.ny, cfg.minBounce);
         b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind);
+        inX = b.vx; inY = b.vy;
+      } else if (c.tag.kind === 'boost') {
+        /* ============================================================
+           A BOOST RAMP FIRING
+
+           Matter has already done the bounce - this is the same
+           body a ramp gets - so the HEADING is settled and is not
+           touched here. All that happens is the magnitude: what
+           left is multiplied, held to BOOST_RAMP_CAP, and the
+           ceiling the rest of the step obeys is raised to match.
+
+           Multiplying the OUTGOING vector rather than firing along
+           an authored angle is the whole difference between this
+           item and the pads: where the ball goes is a consequence
+           of how the player laid the bar, exactly as it is for a
+           ramp they drew. The bar adds speed, never a direction.
+           ============================================================ */
+        b.segHits++;
+        if (cfg.minBounce !== null) enforceMinBounce(b, c.nx, c.ny, cfg.minBounce);
+        const k = c.tag.index;
+        if (b.boostRampCd[k] === 0) {
+          /* The multiplier is applied to the speed the ball came IN with, not
+             to what the bounce left behind. Those differ by the restitution,
+             and the promise the item makes - and the glossary prints - is "ten
+             times faster than it went in", so that is the number multiplied.
+             Taking the outgoing speed instead quietly made it nine. */
+          const sp = Math.min(Math.hypot(inX, inY) * BOOST_RAMP_GAIN,
+                              cfg.speedCap === null ? Infinity : BOOST_RAMP_CAP);
+          const m = b.speed;
+          /* A contact that somehow left no velocity at all is fired straight
+             back out along the surface normal: a bar must never swallow a
+             ball, and there is no other direction available. */
+          if (m > 1e-6) b.setVelocity(b.vx / m * sp, b.vy / m * sp);
+          else b.setVelocity(c.nx * sp, c.ny * sp);
+          b.turboCap = Math.max(b.turboCap, sp);
+          b.boostRampCd[k] = BOOST_RAMP_CD;
+          b.firedBoost[k] = true;
+          b.boosts++;
+        }
+        b.noteHit(b.x, b.y, c.nx, c.ny, 'boost');
         inX = b.vx; inY = b.vy;
       } else if (c.tag.kind === 'obstacle' || c.tag.kind === 'breakable') {
         b.hits++;
@@ -408,11 +549,33 @@ export class MatterEngine implements PhysicsEngine {
       b.boostIn[k] = inside;
     }
 
+    /* Did this frame cover more ground than a point test can be trusted with?
+       A turbo ball can jump clean over a star, a fire, or the target itself
+       between two frames, so those three switch to the swept test the boxes
+       already use.
+
+       THREE conditions, and each is load-bearing:
+
+         turboCap  only a boost ramp can make a frame long enough to need
+                   this, and gating on it is what keeps every level proved
+                   against the point tests still proved - a drop that never
+                   touches a bar takes the identical branch it always did.
+         teleports a portal moves the ball across the board in no time at all.
+                   Sweeping that "path" collects every star on the line
+                   between the two ends, which is how three portal levels
+                   started paying out a star nobody had reached.
+         distance  below the tunnelling limit a point test cannot miss
+                   anything anyway, so there is nothing to fix. */
+    const flew = b.turboCap > 0 && b.teleports === telesIn &&
+                 Math.hypot(b.x - fromX, b.y - fromY) > BOOST_CAP;
+    const reached = (o: { x: number; y: number }, r: number) =>
+      (flew ? segNear(fromX, fromY, b.x, b.y, o.x, o.y)
+            : Math.hypot(b.x - o.x, b.y - o.y)) <= r;
+
     // stars are scenery to the physics - they never touch the trajectory
     for (let k = 0; k < lv.stars.length; k++) {
       if (b.got[k]) continue;
-      const st = lv.stars[k];
-      if (Math.hypot(b.x - st.x, b.y - st.y) <= STAR_R + BALL_R) { b.got[k] = true; b.stars++; }
+      if (reached(lv.stars[k], STAR_R + BALL_R)) { b.got[k] = true; b.stars++; }
     }
 
     /* Mystery boxes: scenery too, and for the same reason - a bonus pickup
@@ -432,13 +595,27 @@ export class MatterEngine implements PhysicsEngine {
       }
     }
 
+    for (let k = 0; k < b.boostRampCd.length; k++)
+      if (b.boostRampCd[k] > 0) b.boostRampCd[k]--;
+
     /* The kick outlives the step that applied it. Both clamps below would
        otherwise take it straight back: terminalVy alone drags a downward
-       booster from 24 to 9 in the frame it fired. */
+       booster from 24 to 9 in the frame it fired. A turbo launch is exempt
+       from the downward clamp for exactly the same reason, for as long as its
+       own ceiling is still above the board's. */
     if (b.boostCd > 0) b.boostCd--;
-    if (b.boostCd === 0 && cfg.terminalVy !== null && b.vy > cfg.terminalVy)
+    if (b.boostCd === 0 && b.turboCap === 0 &&
+        cfg.terminalVy !== null && b.vy > cfg.terminalVy)
       b.setVelocity(b.vx, cfg.terminalVy);
     capSpeed(b, cfg);
+    /* The launch bleeding back into the board's own rules. AFTER the clamp, so
+       the frame a bar fires on keeps the full exit speed, and geometric rather
+       than a window that ends: a ceiling that dropped from 90 to 12.7 in one
+       step reads as the ball hitting something invisible. */
+    if (b.turboCap > 0) {
+      b.turboCap *= BOOST_DECAY;
+      if (b.turboCap <= (cfg.speedCap ?? 0)) b.turboCap = 0;
+    }
     b.noteSpeed();
 
     /* ---- fire: contact ends the run, with no bounce to resolve ----
@@ -451,7 +628,7 @@ export class MatterEngine implements PhysicsEngine {
        step, so what ended the run is what the player watched it touch. */
     for (let k = 0; k < lv.fires.length; k++) {
       const f = lv.fires[k];
-      if (Math.hypot(b.x - f.x, b.y - f.y) <= f.r + BALL_R) {
+      if (reached(f, f.r + BALL_R)) {
         b.noteHit(f.x, f.y, 0, -1, 'fire');
         b.result = 'burned';
         return;
@@ -461,7 +638,7 @@ export class MatterEngine implements PhysicsEngine {
     /* The target's position NOW, which on a patrolling board is not where it
        was authored. b.steps is the simulation's own clock - see targetAt. */
     const c = targetAt(lv, b.steps);
-    if (Math.hypot(b.x - c.x, b.y - c.y) <= c.r) { b.result = 'win'; return; }
+    if (reached(c, c.r)) { b.result = 'win'; return; }
     if (b.isOutOfBounds()) { b.result = 'out'; return; }
     b.tickStallWatch();
   }
@@ -495,7 +672,9 @@ function outwardNormal(b: MatterBall, tag: BodyTag, lv: Level,
     const o = tag.kind === 'obstacle' ? lv.obstacles[tag.index] : lv.breakables[tag.index];
     cx = o.x; cy = o.y;
   } else {
-    const s = tag.kind === 'wall' ? lv.walls[tag.index] : ramps[tag.index];
+    const s = tag.kind === 'wall' ? lv.walls[tag.index]
+            : tag.kind === 'boost' ? lv.boostRamps[tag.index]
+            : ramps[tag.index];
     if (!s) return { x: 0, y: -1 };
     const p = closestOnSeg(b.x, b.y, s.x1, s.y1, s.x2, s.y2);
     cx = p.x; cy = p.y;
@@ -524,9 +703,18 @@ function inRect(x: number, y: number, z: { x: number; y: number; w: number; h: n
 
 function capSpeed(b: MatterBall, cfg: MatterConfig): void {
   if (cfg.speedCap === null) return;
-  /* A booster is an authored kick and is allowed to outrun the general cap
-     for its window; nothing is allowed to outrun the tunnelling limit. */
-  const cap = b.boostCd > 0 ? Math.max(cfg.speedCap, BOOST_CAP) : cfg.speedCap;
+  /* Three ceilings, and the ball is held to the highest one in force.
+
+     A booster PAD is an authored kick allowed to outrun the general cap for
+     its window, but never the tunnelling limit BOOST_CAP - it gets no
+     substepping, so 13 units a frame is as fast as it may collide honestly.
+
+     A boost RAMP is allowed past that, because a frame above BOOST_CAP is
+     subdivided (see stepMatter) and stays honest at any speed; its ceiling is
+     the launch itself, decaying back to the general cap. */
+  const cap = Math.max(cfg.speedCap,
+                       b.boostCd > 0 ? BOOST_CAP : 0,
+                       b.turboCap);
   const m = b.speed;
   if (m > cap) { const k = cap / m; b.setVelocity(b.vx * k, b.vy * k); }
 }

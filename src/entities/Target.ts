@@ -2,6 +2,7 @@ import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Circle } from '../levels/types';
 import { targetAt } from '../levels/target';
 import { INK, TARGET } from '../render/palette';
+import { TIE, WRAP } from './MysteryBox';
 
 /* A bullseye portal. Concentric rings, a pulsing core and a few drifting
    motes, so it reads as "land here" and stays alive even before the ball is
@@ -23,7 +24,7 @@ const TARGET_MOTES = 6;       // motes at fixed angles, breathing in and out
 export class Target extends Entity<Circle> {
   readonly kind: EntityKind = 'target';
 
-  draw({ ctx, clock, simT, level }: DrawContext): void {
+  draw({ ctx, clock, simT, level, giftTaken }: DrawContext): void {
     const c = targetAt(level, simT);
     const pulse = 0.5 + 0.5 * Math.sin(clock * 2.3);
 
@@ -83,6 +84,95 @@ export class Target extends Entity<Circle> {
       ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
     }
     ctx.globalAlpha = 1;
+
+    /* ============================================================
+       THE GIFT INSIDE THE TARGET
+
+       A present sitting IN the well, not a ribbon tied round the
+       outside. The flag says the gift is inside this target, so
+       that is what is drawn: the chest's own present - the same
+       magenta paper, the same gold ribbon and bow as the box on
+       the board - shrunk to sit within the rings.
+
+       IT STAYS INSIDE THE RIM. Nothing here crosses c.r: a bow
+       that broke the target's outline made the goal a different
+       shape on four boards, and the outline is what a player
+       reads "land here" off. The rings are all still there
+       around it, so the target is a target that happens to have
+       something in it.
+
+       Gone once the gift has been taken, here or on an earlier
+       visit: a promise the level can no longer keep must not stay
+       on the board.
+       ============================================================ */
+    if (level.targetGift && !giftTaken) {
+      /* Everything below is a fraction of the target's own radius, so a
+         27-unit target and a 46-unit one both get the same present. */
+      const s = c.r;
+      const w = s * 0.82, h = s * 0.72;
+      const half = w / 2, top = -h / 2 + s * 0.09;   // nudged down: the bow
+      const tie = w * 0.22;                          // takes the room above
+      const bob = Math.sin(clock * 2.2) * (s * 0.03);
+
+      ctx.save();
+      ctx.translate(0, bob);
+
+      // a warm glow under it, so the present reads as treasure in a well
+      const bloom = ctx.createRadialGradient(0, 0, s * 0.1, 0, 0, s * 0.8);
+      bloom.addColorStop(0, `rgba(255,197,58,${0.30 + pulse * 0.18})`);
+      bloom.addColorStop(1, 'rgba(255,197,58,0)');
+      ctx.fillStyle = bloom;
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.8, 0, Math.PI * 2); ctx.fill();
+
+      /* THE BOW, drawn first so the box's own outline closes over the bottom
+         of its loops - the two then read as one present rather than as a
+         sticker on a square. The chest does exactly this, for the reason. */
+      const bowY = top - h * 0.12;
+      const loop = w * 0.28;
+      ctx.lineWidth = Math.max(1.2, s * 0.055);
+      ctx.strokeStyle = INK;
+      ctx.lineJoin = 'round';
+      for (const dir of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(0, bowY);
+        ctx.bezierCurveTo(dir * loop, bowY - loop * 0.95,
+                          dir * loop * 1.25, bowY + loop * 0.5,
+                          0, bowY + loop * 0.1);
+        ctx.closePath();
+        const gl = ctx.createLinearGradient(0, bowY - loop, 0, bowY + loop * 0.5);
+        gl.addColorStop(0, TIE.light);
+        gl.addColorStop(1, TIE.base);
+        ctx.fillStyle = gl;
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(0, bowY + loop * 0.08, w * 0.1, 0, Math.PI * 2);
+      ctx.fillStyle = TIE.light; ctx.fill(); ctx.stroke();
+
+      // the wrapped body
+      const body = ctx.createLinearGradient(-half, top, half, top + h);
+      body.addColorStop(0, WRAP.light);
+      body.addColorStop(0.55, WRAP.base);
+      body.addColorStop(1, WRAP.dark);
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.roundRect(-half, top, w, h, s * 0.1); ctx.fill();
+
+      // the ribbon, a cross over both faces - the strongest "this is a
+      // present" cue there is at board size
+      ctx.fillStyle = TIE.base;
+      ctx.fillRect(-tie / 2, top, tie, h);
+      ctx.fillRect(-half, -tie / 2 + s * 0.09, w, tie);
+      ctx.fillStyle = 'rgba(255,255,255,.45)';
+      ctx.fillRect(-tie / 2, top, tie * 0.32, h);
+      ctx.fillRect(-half, -tie / 2 + s * 0.09, w, tie * 0.32);
+
+      // the one pen, round the whole silhouette
+      ctx.lineWidth = Math.max(1.4, s * 0.07);
+      ctx.strokeStyle = INK;
+      ctx.beginPath(); ctx.roundRect(-half, top, w, h, s * 0.1); ctx.stroke();
+
+      ctx.restore();
+    }
     ctx.restore();
   }
 

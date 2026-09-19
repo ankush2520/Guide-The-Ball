@@ -13,7 +13,7 @@
    ============================================================ */
 import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
-import { RAMP_LEN, BOOSTER_R, BOOSTER_SPEED } from '../items/items';
+import { RAMP_LEN, BOOSTER_ANGLE } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
@@ -71,12 +71,18 @@ const physics = {
   /* The canvas palette, so the suite can hold the toon reskin to its own
      contrast rules rather than to a comment. */
   PALETTE: { INK: PAL.INK, OBSTACLE: PAL.OBSTACLE, TARGET: PAL.TARGET,
-             RAMP: PAL.RAMP, WALL: PAL.WALL, BALL: PAL.BALL },
+             RAMP: PAL.RAMP, WALL: PAL.WALL, BALL: PAL.BALL, BOOST: PAL.BOOST },
   isLightSky: (hex: string) => PAL.isLightSky(hex),
   MECH: {
     SPEED_CAP: C.SPEED_CAP, SLIP_REST: C.SLIP_REST, PORTAL_CD: C.PORTAL_CD,
     STAR_R: C.STAR_R, BOX_R: C.BOX_R, WIND_CAP: C.WIND_CAP, RESTITUTION: C.RESTITUTION,
     BOOST_GAIN: C.BOOST_GAIN, BOOST_CAP: C.BOOST_CAP, BOOST_STEPS: C.BOOST_STEPS,
+    /* The boost RAMP's own mechanism, published beside the pads' so a test can
+       hold each to its own rules rather than to numbers copied out of here. */
+    BOOST_HT: C.BOOST_HT, BOOST_LEN: C.BOOST_LEN,
+    BOOST_RAMP_GAIN: C.BOOST_RAMP_GAIN, BOOST_RAMP_CAP: C.BOOST_RAMP_CAP,
+    BOOST_DECAY: C.BOOST_DECAY, BOOST_RAMP_CD: C.BOOST_RAMP_CD,
+    BOOST_SUB_PX: C.BOOST_SUB_PX, BOOST_SUBSTEPS_MAX: C.BOOST_SUBSTEPS_MAX,
   },
   BALLS: { key: BALLS_KEY, start: STARTING_BALLS,
            adReward: AD_REWARD, clearBonus: CLEAR_BONUS.slice() },
@@ -85,9 +91,22 @@ const physics = {
             boosterPrice: BOOSTER_PRICE,
             clearTable: COIN_CLEAR.map(r => r.slice()) },
   /* The booster item and the box table, published so the suite can hold the
-     shipped numbers to the rules rather than to numbers copied out of the UI. */
-  BOOSTER: { unlockLevel: BOOSTER_UNLOCK_LEVEL, r: BOOSTER_R, speed: BOOSTER_SPEED,
+     shipped numbers to the rules rather than to numbers copied out of the UI.
+
+     `bar()` builds the item exactly as the bag does - one fixed length, turned
+     to `deg` about a point - so a headless probe places the thing the player
+     owns rather than a segment that merely resembles it. */
+  BOOSTER: { unlockLevel: BOOSTER_UNLOCK_LEVEL,
+             len: C.BOOST_LEN, ht: C.BOOST_HT,
+             gain: C.BOOST_RAMP_GAIN, cap: C.BOOST_RAMP_CAP,
+             angle: BOOSTER_ANGLE,
              bundles: BOOSTER_BUNDLES.map(b => ({ ...b })) },
+  /** A boost ramp of the item's own length, centred on (cx, cy) at `deg`. */
+  bar(cx: number, cy: number, deg: number) {
+    const a = deg * Math.PI / 180;
+    const hx = Math.cos(a) * C.BOOST_LEN / 2, hy = Math.sin(a) * C.BOOST_LEN / 2;
+    return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy };
+  },
   BOX_PRIZES: BOX_PRIZES.map(p => ({ ...p })),
   SPIN: { key: SPIN_KEY, cooldownMs: SPIN_COOLDOWN_MS, animMs: SPIN_MS,
           prizes: SPIN_PRIZES.map(p => ({ kind: p.kind, n: p.n, w: p.w })) },
@@ -237,6 +256,10 @@ export function installGameHook(s: GameServices): void {
       free: c.itemCount('booster').left,
       selected: c.selectedBooster,
       onBoard: levels.placedBoosters.map(b => ({ ...b })),
+      boostOffset: levels.boostOffset,
+      /* Which of them the LIVE ball has fired off, straight off the engine -
+         the same array the controller charges from. */
+      fired: c.ball ? c.ball.firedBoost.slice() : [],
       inShop: !!document.getElementById('shop-boosters-head'),
       inBag: !!document.getElementById('btn-item-booster'),
     }),
@@ -245,10 +268,12 @@ export function installGameHook(s: GameServices): void {
       levels.aimBoosterTo(ix, { x, y });
       c.boosterAdjusted();
     },
+    /** Put the bar's MIDDLE on (x, y) - which is what "where it is" means for
+        an item that is a segment, and what the drag moves it by. */
     moveBoosterTo: (ix: number, x: number, y: number) => {
       const b = levels.boosterAt(ix);
       if (!b) return;
-      levels.moveBoosterBy(ix, x - b.x, y - b.y);
+      levels.moveBoosterBy(ix, x - (b.x1 + b.x2) / 2, y - (b.y1 + b.y2) / 2);
       c.boosterAdjusted();
     },
     removeBooster: (ix: number) => c.removeBooster(ix),
@@ -264,6 +289,28 @@ export function installGameHook(s: GameServices): void {
     }),
     rollBox: (levelId: number, rnd?: number) =>
       ({ ...rewards.rollBoxPrize(levelId, rnd) }),
+    /* The gift in a target: whether this board has one, whether it is still
+       there, and what the reveal is showing right now. One read, so a test can
+       follow the whole beat without knowing which component draws it. */
+    giftInfo: () => ({
+      wrapped: !!levels.level.targetGift,
+      claimed: { ...rewards.claimedGifts },
+      claimedHere: rewards.giftClaimed(levels.levelIndex),
+      showing: c.gift ? { ...c.gift } : null,
+      panelOpen: !!document.getElementById('giftpanel'),
+      takeDisabled:
+        !!(document.getElementById('btn-gift-take') as HTMLButtonElement | null)?.disabled,
+      prizeText: document.getElementById('gift-prize')?.textContent ?? '',
+      /* The win card is HELD while a gift is up - see GameController.gift - so
+         these two say whether the two beats are correctly sequenced. */
+      cardOpen: !!document.getElementById('card'),
+      winCard: c.winCard ? { ...c.winCard } : null,
+    }),
+    takeGift: () => {
+      const btn = document.getElementById('btn-gift-take') as HTMLButtonElement | null;
+      if (btn && !btn.disabled) { btn.click(); return true; }
+      return false;
+    },
     /* Mark this level's box already taken, so a drop that happens to route
        through it pays nothing. Tests that measure the BALL a drop costs need
        that: a box paying five balls mid-flight is a real thing that happens

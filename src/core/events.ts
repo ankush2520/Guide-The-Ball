@@ -38,6 +38,11 @@ export interface GameEvents extends Record<string, unknown> {
   /* `x`/`y` are BOARD coordinates - where the chest was. The flight layer
      turns them into screen pixels; nothing below the UI has to know how. */
   'box:reward':      { kind: FlightKind; n: number; x: number; y: number };
+  /* The OTHER flavour of mystery box: the gift a wrapped target held, once
+     its reveal has played out and the ledger has been credited. Announced
+     rather than acted on - the panel that showed it has already flown the
+     reward - so anything that wants to watch what a gift paid can. */
+  'gift:opened':     { kind: FlightKind; n: number };
   'breakable:broke': { index: number };
   'portal:used':     { index: number };
   'booster:used':    { index: number };

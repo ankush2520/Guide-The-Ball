@@ -1070,11 +1070,11 @@ console.log(`  sections: ${panelInfo.headings.join(' / ')}`);
 console.log(`  entries: ${panelInfo.lines.map(l => l.name + (l.here ? '*' : '')).join(', ')}`);
 check(panelInfo.lines.length >= 11, 'it documents every thing that can be on a board',
   `${panelInfo.lines.length} entries`);
-for (const w of ['Target','Obstacle','Breakable block','Booster','Portal','Wind','Ice',
+for (const w of ['Target','Obstacle','Breakable block','Booster pad','Portal','Wind','Ice',
                  'Gold star','Your ramp','Wall','Ball'])
   if (!panelInfo.lines.some(l => l.name === w)) bad(`info panel is missing "${w}"`);
-check(panelInfo.lines.some(l => l.name === 'Booster' && l.here),
-  'and flags what is on the level you are looking at', 'booster marked on L21');
+check(panelInfo.lines.some(l => l.name === 'Booster pad' && l.here),
+  'and flags what is on the level you are looking at', 'booster pad marked on L21');
 check(panelInfo.lines.some(l => l.name === 'Portal' && !l.here),
   'without flagging what is not');
 check(['THE BASICS','ON THE BOARD','BALLS','LEVEL RATING'].every(h =>
@@ -1094,7 +1094,7 @@ check(await page.locator('#infopanel').isHidden(), 'Close closes it');
    await rather than clicked through synchronously the way the imperative
    build allowed. */
 const WANT = [['obstacles','Obstacle'], ['breakables','Breakable block'],
-              ['boosters','Booster'],   ['portals','Portal'],
+              ['boosters','Booster pad'], ['portals','Portal'],
               ['wind','Wind'],          ['slippery','Ice'], ['stars','Gold star']];
 const levelCount = await page.evaluate(() => window.__gtb.LEVELS.length);
 const agree = [];
@@ -2124,21 +2124,43 @@ check(!broke.ok && broke.coins === 10,
   'an order you cannot afford is refused whole, not part-filled',
   `${broke.coins} coins still there`);
 
-/* --- clearing pays coins, and a replay pays less --- */
-const pay = await page.evaluate(() => ({
-  firstLow:  window.__gtb.coinsFor(1, 1, true),
-  firstHigh: window.__gtb.coinsFor(1, 3, true),
-  lateHigh:  window.__gtb.coinsFor(30, 3, true),
-  replay:    window.__gtb.coinsFor(1, 3, false),
-}));
+/* --- clearing pays coins, and a board pays ONCE --- */
+const pay = await page.evaluate(() => {
+  const g = window.__gtb;
+  /* The cheapest a ball can ever be bought for: the best bundle's rate, which
+     is what a farm would actually pay for the drop a replay costs. */
+  const cheapestBall = Math.min(...g.BALL_BUNDLES.map(b => b.coins / b.n));
+  return {
+    firstLow:  g.coinsFor(1, 1, true),
+    firstHigh: g.coinsFor(1, 3, true),
+    lateHigh:  g.coinsFor(30, 3, true),
+    replayHigh: g.coinsFor(1, 3, false),
+    replayLate: g.coinsFor(150, 3, false),
+    cheapestBall,
+  };
+});
 console.log(`  level 1: ${pay.firstLow} coins at 1 star, ${pay.firstHigh} at 3` +
-            `; level 30 at 3 stars: ${pay.lateHigh}; replaying level 1: ${pay.replay}`);
+            `; level 30 at 3 stars: ${pay.lateHigh}; replaying level 1: ${pay.replayHigh}`);
 check(pay.firstHigh > pay.firstLow, 'playing well pays more than scraping through',
   `${pay.firstHigh} vs ${pay.firstLow}`);
 check(pay.lateHigh > pay.firstHigh, 'and a late level pays more than an early one',
   `${pay.lateHigh} vs ${pay.firstHigh}`);
-check(pay.replay > 0 && pay.replay < pay.firstHigh / 2,
-  'a replay pays something, but far too little to farm', `${pay.replay} coins`);
+/* ============================================================
+   A REPLAY MAY NOT BE A COIN MACHINE
+
+   Asserted as arithmetic rather than as a number, because that
+   is what the rule IS: a drop costs a ball, a ball costs coins,
+   so a replay that pays more than a ball is worth is a loop that
+   prints coins on the easiest board the player has ever solved.
+   It pays nothing at all today; this fails the moment any rate
+   that could outrun the ball it costs is reintroduced.
+   ============================================================ */
+check(pay.replayHigh === 0 && pay.replayLate === 0,
+  'a replay of a cleared board pays no coins at all - a board pays once',
+  `${pay.replayHigh} on level 1, ${pay.replayLate} on the finale`);
+check(pay.replayHigh < pay.cheapestBall && pay.replayLate < pay.cheapestBall,
+  'so replaying can never earn more than the ball the drop costs',
+  `${pay.replayHigh} coins for a ball worth ${pay.cheapestBall.toFixed(2)}`);
 
 /* --- a spare ramp raises THIS level's budget, and only this level's --- */
 await page.evaluate(() => { window.__gtb.setWallet(0, 2); window.__gtb.setLevel(0); });
@@ -2459,7 +2481,7 @@ check((await page.evaluate(() => window.__gtb.balls())) === beforeJoint - 1,
   `${beforeJoint} -> ${await page.evaluate(() => window.__gtb.balls())}`);
 
 /* ---------------------------------------------------------------- */
-section('14c. Boosters: the item you bring, and only pay for when it works');
+section('14c. Booster ramps: the item you bring, and only pay for when it works');
 
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.skipTutorial(); });
 await topUp();
@@ -2557,30 +2579,41 @@ check(bi.owned === 2 && bi.free === 1 && bi.paid === 0,
   `owned ${bi.owned}, free to place ${bi.free}, paid ${bi.paid}`);
 const bshape = bi.onBoard[0];
 const BOOST = await page.evaluate(() => window.__gtb.BOOSTER);
-check(bshape.r === BOOST.r && bshape.speed === BOOST.speed,
-  'every placed booster is the same size and power - what you choose is where and which way',
-  `r ${bshape.r}, speed ${bshape.speed}`);
+const barLen = Math.hypot(bshape.x2 - bshape.x1, bshape.y2 - bshape.y1);
+check(Math.abs(barLen - BOOST.len) < 0.01,
+  'every placed booster ramp is a BAR of the one fixed length - what you choose ' +
+  'is where it goes and which way it lies',
+  `${barLen.toFixed(1)} units long, the item is ${BOOST.len}`);
+check(Math.abs(bshape.y1 - bshape.y2) < 0.01,
+  'and it arrives lying flat, unaimed, so turning it is the first thing you do',
+  `(${bshape.x1.toFixed(0)},${bshape.y1.toFixed(0)})-(${bshape.x2.toFixed(0)},${bshape.y2.toFixed(0)})`);
 
-/* dragged and aimed by the same two-gesture grammar the ramp uses */
+/* dragged and turned by the same two-gesture grammar the ramp uses. A bar has
+   no centre field of its own, so where it IS and which way it LIES are read
+   back out of its two ends - the same numbers the physics collides with. */
+const barMid = b => ({ x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 });
+const barDeg = b => Math.atan2(b.y2 - b.y1, b.x2 - b.x1) * 180 / Math.PI;
 await page.evaluate(() => window.__gtb.moveBoosterTo(0, 200, 430));
-await page.evaluate(() => window.__gtb.aimBooster(0, 400, 430));
+await page.evaluate(() => window.__gtb.aimBooster(0, 260, 490));
 let onBoard = (await page.evaluate(() => window.__gtb.boosterInfo())).onBoard[0];
-check(Math.abs(onBoard.x - 200) < 1 && Math.abs(onBoard.y - 430) < 1 &&
-      Math.abs(onBoard.angle) < 1,
-  'dragging moves it and dragging the knob aims it',
-  `(${onBoard.x.toFixed(0)},${onBoard.y.toFixed(0)}) at ${onBoard.angle.toFixed(0)}°`);
+check(Math.abs(barMid(onBoard).x - 200) < 1 && Math.abs(barMid(onBoard).y - 430) < 1,
+  'dragging moves it, and turning it pivots about its own middle rather than moving it',
+  `(${barMid(onBoard).x.toFixed(0)},${barMid(onBoard).y.toFixed(0)})`);
+check(Math.abs(barDeg(onBoard) - 45) < 1,
+  'and the knob sets the angle the bar lies at',
+  `${barDeg(onBoard).toFixed(0)}°`);
 /* the same gestures on the real canvas, not just through the hook */
 const bbox = await page.locator('#board').boundingBox();
 await mouseDrag(bbox, { x: 200, y: 430 }, { x: 250, y: 470 });
 onBoard = (await page.evaluate(() => window.__gtb.boosterInfo())).onBoard[0];
-check(Math.abs(onBoard.x - 250) < 14 && Math.abs(onBoard.y - 470) < 14,
+check(Math.abs(barMid(onBoard).x - 250) < 14 && Math.abs(barMid(onBoard).y - 470) < 14,
   'and a real drag on the board moves it too',
-  `(${onBoard.x.toFixed(0)},${onBoard.y.toFixed(0)})`);
+  `(${barMid(onBoard).x.toFixed(0)},${barMid(onBoard).y.toFixed(0)})`);
 
 /* --- a miss costs nothing --- */
 await page.evaluate(() => window.__gtb.setRamps([]));
 await page.evaluate(() => window.__gtb.moveBoosterTo(0, 60, 700));
-await page.evaluate(() => window.__gtb.aimBooster(0, 60, 799));
+await page.evaluate(() => window.__gtb.aimBooster(0, 160, 700));
 await dropBall();
 await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
 bi = await page.evaluate(() => window.__gtb.boosterInfo());
@@ -2594,9 +2627,9 @@ const winCfg = await page.evaluate(() => {
   const ramp = (cx, cy, d, l = 120) => { const a = d * R, hx = Math.cos(a) * l / 2, hy = Math.sin(a) * l / 2;
     return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy }; };
   const lv = g.LEVELS[0], sx = lv.spawn.x;
-  // the booster parked in a corner the ball never visits
-  g.moveBoosterTo(0, 440, 120);
-  g.aimBooster(0, 440, 240);
+  // the bar parked in a corner the ball never visits
+  g.moveBoosterTo(0, 430, 120);
+  g.aimBooster(0, 470, 160);
   for (let ry = lv.spawn.y + 80; ry <= 660; ry += 15)
     for (let th = 25; th <= 155; th += 1.5) {
       const cfg = [ramp(sx, ry, th)];
@@ -2618,13 +2651,13 @@ await page.evaluate(() => window.__gtb.setWallet(999, 0, 2));
 const boostWin = await page.evaluate(() => {
   const g = window.__gtb, R = Math.PI / 180;
   const lv = g.LEVELS[0], sx = lv.spawn.x, t = lv.target;
-  /* Straight down the fall line, so the ball cannot miss it, and swept for an
-     angle that fires it into the target with no ramp at all. */
+  /* Straight across the fall line, so the ball cannot miss it, and swept for an
+     angle that mirrors it into the target with no ramp at all. `bar()` builds
+     the item the bag hands out, so what is proved here is the real thing. */
   for (let by = 220; by <= 520; by += 20)
     for (let ang = -80; ang <= 80; ang += 2) {
-      const j = g.scratch({ ...lv, boosters: [{ x: sx, y: by, r: g.BOOSTER.r,
-                                                angle: ang, speed: g.BOOSTER.speed }] }, 5);
-      if (g.simulate([], 1, j).result === 'win') return { by, ang };
+      const j = g.scratch({ ...lv, boostRamps: [g.bar(sx, by, ang)] }, 5);
+      if (g.simulate([], 1, j).result === 'win') return { by, ang, t: t.r };
     }
   return null;
 });
@@ -2830,6 +2863,147 @@ check(!bsp.ready && !bsp.dailyReady, 'with the token gone the wheel is back on c
 await page.evaluate(() => window.__gtb.reset());
 await page.click('#btn-spin-close').catch(() => {});
 await closeSettings().catch(() => {});
+
+/* ---------------------------------------------------------------- */
+section('14e. A gift inside the target');
+
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.skipTutorial(); });
+await topUp();
+await page.evaluate(() => window.__gtb.setWallet(999, 0, 0));
+
+/* Which boards are wrapped is a designer's choice, so the test finds one
+   rather than naming a level - and holds the choice to being a choice. */
+const gifted = await page.evaluate(() =>
+  window.__gtb.LEVELS.map((l, i) => ({ i, id: l.id, g: !!l.targetGift }))
+    .filter(l => l.g));
+check(gifted.length > 0, 'the game ships at least one wrapped target',
+  gifted.map(l => `level ${l.id}`).join(', '));
+check(gifted.length < 10,
+  'and only a handful - it is a milestone, not a per-level mechanic',
+  `${gifted.length} of ${await page.evaluate(() => window.__gtb.LEVELS.length)}`);
+
+const GIX = gifted[0].i;
+await page.evaluate(i => window.__gtb.setLevel(i), GIX);
+let gi = await page.evaluate(() => window.__gtb.giftInfo());
+check(gi.wrapped && !gi.claimedHere && !gi.panelOpen,
+  `level ${gifted[0].id} says its target is wrapped, and nothing is showing yet`,
+  JSON.stringify({ wrapped: gi.wrapped, claimed: gi.claimedHere }));
+check(/wrapped|gift/i.test(await page.evaluate(() => window.__gtb.state().flash)),
+  'and the board says so on the way in',
+  await page.evaluate(() => window.__gtb.state().flash));
+
+/* A layout that wins this board, found the way every other section finds one. */
+const gWin = await page.evaluate(i => {
+  const g = window.__gtb, R = Math.PI / 180;
+  const ramp = (cx, cy, d, l = 120) => { const a = d * R,
+    hx = Math.cos(a) * l / 2, hy = Math.sin(a) * l / 2;
+    return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy }; };
+  const lv = g.LEVELS[i], sx = lv.spawn.x;
+  for (let ry = lv.spawn.y + 80; ry <= 700; ry += 10)
+    for (let th = 20; th <= 160; th += 1.5)
+      for (const cfg of [[ramp(sx, ry, th)]])
+        if (g.simulate(cfg, 1, i).result === 'win') { g.setRamps(cfg); g.setSeed(1); return true; }
+  return false;
+}, GIX);
+check(gWin, `level ${gifted[0].id} is winnable with one ramp (test setup)`);
+
+const gBefore = await page.evaluate(() => ({ coins: window.__gtb.coins(),
+                                            balls: window.__gtb.balls(),
+                                            ramps: window.__gtb.spareRamps(),
+                                            boosters: window.__gtb.boosterInfo().owned,
+                                            bonus: window.__gtb.bonusSpins() }));
+await dropBall();
+await page.waitForSelector('#giftpanel', { timeout: 25000 });
+gi = await page.evaluate(() => window.__gtb.giftInfo());
+check(!!gi.showing, 'winning it opens the gift panel with a prize behind the wrapping',
+  JSON.stringify(gi.showing));
+check(!gi.cardOpen && !gi.winCard,
+  'and the win card is HELD until the gift is taken - one celebration at a time',
+  gi.cardOpen ? 'both on screen' : 'gift first, card waiting');
+check(gi.prizeText.includes('?'),
+  'the prize is hidden while the box is still being unwrapped', gi.prizeText);
+const stillOwed = await page.evaluate(() => ({ ramps: window.__gtb.spareRamps(),
+                                               boosters: window.__gtb.boosterInfo().owned,
+                                               bonus: window.__gtb.bonusSpins() }));
+check(stillOwed.ramps === gBefore.ramps && stillOwed.boosters === gBefore.boosters &&
+      stillOwed.bonus === gBefore.bonus,
+  'and nothing has been credited yet - the reveal comes first, the ledger after',
+  JSON.stringify(stillOwed));
+
+/* the unwrap plays out, and only then is the button live */
+await page.waitForFunction(() => !window.__gtb.giftInfo().takeDisabled, null, { timeout: 5000 });
+gi = await page.evaluate(() => window.__gtb.giftInfo());
+check(!gi.prizeText.includes('?') && /\d/.test(gi.prizeText),
+  'once the lid is off, the panel names what was inside', gi.prizeText);
+const gShown = gi.showing;
+check(await page.evaluate(() => window.__gtb.takeGift()), 'the Take button is pressable');
+await page.waitForSelector('#giftpanel', { state: 'detached', timeout: 5000 });
+await page.waitForSelector('#card', { timeout: 5000 });
+gi = await page.evaluate(() => window.__gtb.giftInfo());
+check(gi.cardOpen && !gi.showing && !!gi.winCard,
+  'taking it closes the gift and lets the ordinary win card through, stars and all');
+
+const gAfter = await page.evaluate(() => ({ coins: window.__gtb.coins(),
+                                           balls: window.__gtb.balls(),
+                                           ramps: window.__gtb.spareRamps(),
+                                           boosters: window.__gtb.boosterInfo().owned,
+                                           bonus: window.__gtb.bonusSpins() }));
+/* WHICH prize came up is a roll, so the check is that the RIGHT counter moved
+   by the right amount - whichever one the panel named. Coins are exempt from
+   an exact figure because clearing the level pays coins as well. */
+const paid = { coins: gAfter.coins - gBefore.coins, balls: gAfter.balls - gBefore.balls,
+               ramps: gAfter.ramps - gBefore.ramps,
+               boosters: gAfter.boosters - gBefore.boosters,
+               spin: gAfter.bonus - gBefore.bonus };
+const creditedRight =
+  gShown.kind === 'coins' ? paid.coins >= gShown.n
+  : gShown.kind === 'balls' ? paid.balls >= gShown.n - 1   // the drop itself cost one
+  : paid[gShown.kind] === gShown.n;
+check(creditedRight, `and the ${gShown.kind} really arrive in the counter that holds them`,
+  JSON.stringify({ prize: gShown, moved: paid }));
+
+const gLevelId = await page.evaluate(i => window.__gtb.LEVELS[i].id, GIX);
+check(['coins', 'balls', 'ramps', 'boosters', 'spin'].includes(gShown.kind),
+  'the gift pays out of the same pool a chest does', `${gShown.kind} on level ${gLevelId}`);
+
+/* once per level, for good - the chest's own rule */
+check((await page.evaluate(() => window.__gtb.giftInfo())).claimedHere,
+  'the gift is claimed the moment it is opened');
+await page.click('#btn-retry');
+await page.waitForFunction(() => window.__gtb.state().phase !== 'drop', null, { timeout: 25000 });
+check(!(await page.evaluate(() => window.__gtb.giftInfo())).panelOpen,
+  'winning the same board again opens no gift - treasure is not income');
+await page.reload();
+await page.waitForFunction(() => !!window.__gtb);
+await topUp();
+await page.evaluate(i => window.__gtb.setLevel(i), GIX);
+check((await page.evaluate(() => window.__gtb.giftInfo())).claimedHere,
+  'and the claim survives a reload, like a chest\'s');
+
+/* --- and a board WITHOUT the flag wins exactly as it always did --- */
+await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.skipTutorial(); });
+await topUp();
+await page.evaluate(() => window.__gtb.setLevel(0));
+check(!(await page.evaluate(() => window.__gtb.giftInfo())).wrapped,
+  'level 1 is not wrapped (the ordinary case)');
+await page.evaluate(() => {
+  const g = window.__gtb, R = Math.PI / 180;
+  const ramp = (cx, cy, d, l = 120) => { const a = d * R,
+    hx = Math.cos(a) * l / 2, hy = Math.sin(a) * l / 2;
+    return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy }; };
+  const lv = g.LEVELS[0], sx = lv.spawn.x;
+  for (let ry = lv.spawn.y + 80; ry <= 660; ry += 15)
+    for (let th = 25; th <= 155; th += 1.5) {
+      const cfg = [ramp(sx, ry, th)];
+      if (g.simulate(cfg, 1, 0).result === 'win') { g.setRamps(cfg); g.setSeed(1); return; }
+    }
+});
+await dropBall();
+await page.waitForSelector('#card', { timeout: 25000 });
+gi = await page.evaluate(() => window.__gtb.giftInfo());
+check(!gi.panelOpen && !gi.showing && gi.cardOpen,
+  'and it goes straight to the win card with no gift panel anywhere near it');
+await page.evaluate(() => window.__gtb.reset());
 
 /* ---------------------------------------------------------------- */
 /* Portal submission requirements. These are pass/fail gates on the

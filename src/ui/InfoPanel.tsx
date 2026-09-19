@@ -50,12 +50,15 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              buy more with coins.</p>
 
           <h4>Coins</h4>
-          <p><b>Every</b> level you clear pays coins &mdash; more for more stars, and
-             more the deeper you are ({COIN_CLEAR[0][0]}&ndash;{COIN_CLEAR[0][2]} early,
-             up to {COIN_CLEAR[COIN_CLEAR.length - 1][0]}&ndash;
-             {COIN_CLEAR[COIN_CLEAR.length - 1][2]} late). Replaying a level you have
-             already cleared pays a quarter of that. You start with
-             <b>{STARTING_COINS}</b>, and the daily wheel pays coins too.</p>
+          <p>Clearing a level pays coins the <b>first time you beat it</b> &mdash;
+             more for more stars, and more the deeper you are
+             ({COIN_CLEAR[0][0]}&ndash;{COIN_CLEAR[0][2]} early, up to
+             {COIN_CLEAR[COIN_CLEAR.length - 1][0]}&ndash;
+             {COIN_CLEAR[COIN_CLEAR.length - 1][2]} late). Replaying a board you have
+             already cleared pays nothing: a drop costs a ball, so a board you can
+             already beat would otherwise print money. Replays are for a better
+             star rating. You start with <b>{STARTING_COINS}</b>, and the daily
+             wheel pays coins too.</p>
           <p>Coins are spent in the <b>shop</b>, behind the gear:
              <b>{BALL_PRICE}</b> coins a ball, <b>{RAMP_PRICE}</b> coins a spare ramp,
              and both come cheaper by the bundle. Nothing converts back the
@@ -73,18 +76,21 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              budget &mdash; that is always measured against the ramps the level
              itself gave you, so a spare can buy you a solution but never a star.</p>
 
-          <h4>Boosters</h4>
+          <h4>Booster ramps</h4>
           <p>From level <b>{BOOSTER_UNLOCK_LEVEL}</b> you can carry your own
-             <b> boosters</b>, and the first one is free. Open the bag, tap the
-             booster, then drag it where you want it and drag the knob on its
-             nose to point it. The ball leaves along that arrow at a fixed
-             speed, every time.</p>
-          <p>A booster is only taken out of your bag if the ball actually goes
-             <b> through</b> it and that drop <b>wins</b>. Place it, miss, move
-             it, drop again as often as you like &mdash; it costs nothing until
-             it works. More are
-             <b> {BOOSTER_PRICE}</b> coins each in the shop, and a few boards
-             late in the game cannot be solved without one.</p>
+             <b> booster ramps</b>, and the first one is free. Open the bag, tap
+             it, then drag it where you want it and drag the knob to turn it.</p>
+          <p>It is an <b>orange bar</b>, and it bounces the ball exactly like a
+             ramp you drew &mdash; the angle you lay it at is the angle the ball
+             mirrors off. What it adds is <b>speed</b>: the ball comes off it
+             about <b>ten times faster</b> than it went in, which no ordinary
+             ramp can do, since every normal bounce loses a little. That is the
+             one thing it is for, and it is why a few boards late in the game
+             cannot be solved without one.</p>
+          <p>A booster ramp is only taken out of your bag if the ball actually
+             <b> hits</b> it and that drop <b>wins</b>. Place it, miss, move it,
+             drop again as often as you like &mdash; it costs nothing until it
+             works. More are <b>{BOOSTER_PRICE}</b> coins each in the shop.</p>
 
           <h4>Mystery boxes</h4>
           <p>Some boards carry a <b>chest</b>. Hit it with the ball on the way
@@ -94,6 +100,10 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              if you can.</p>
           <p>Each chest can be opened <b>once</b>, and it stays opened &mdash;
              replaying the level shows the empty outline where it was.</p>
+          <p>A few targets have a <b>present sitting inside them</b>. Land in one
+             and the gift is unwrapped for you before the win card, and it pays
+             the same kinds of prize a chest does. Once only, like a chest -
+             clear that board again and the target is empty.</p>
 
           <h4>Level rating</h4>
           <p>Separate from the gold star pickups. Clearing a level earns one to
