@@ -146,7 +146,7 @@ export const BOOST_STEPS = 18;       // 0.3s
 /* Half-thickness, and it is what the body is built at as well as what is
    painted: thicker than a drawn ramp's 4.5, because this one is a machine
    rather than a line, and because a fat bar is a fatter thing for a ball
-   moving ten times normal speed to find. */
+   moving several times normal speed to find. */
 export const BOOST_HT = 7;
 
 /* THE FIXED LENGTH. A ramp is whatever length the drag made it; an item has
@@ -155,20 +155,27 @@ export const BOOST_HT = 7;
    same object at a glance. */
 export const BOOST_LEN = 96;
 
-/* THE MULTIPLIER - the design intent, x10 off the bar.
+/* THE MULTIPLIER, applied to the speed the ball came IN with.
 
-   Tuned, not guessed. It is applied to the speed the bounce LEAVES with and
-   then held to BOOST_RAMP_CAP, so a ball arriving at terminal (9) leaves at
-   ~81-90 and one already flying leaves at the ceiling. See tests/mechanics.mjs
-   for the measured curve and tests/items.test.mjs for the proof that level 30
-   is still solvable with one of these - and still not solvable without. */
-export const BOOST_RAMP_GAIN = 10;
+   It shipped at 10 and came down to 3.5 - 0.35x of that - after the board was
+   played at it: a ten-times launch crossed the whole board in eight frames,
+   which is a ball that has teleported rather than one you watched go. At 3.5
+   a ball arriving at terminal (9) leaves at 31, still nearly three times
+   anything the rest of the board can reach and far past what any bounce can
+   give back, and it stays on screen long enough to read.
+
+   See tests/mechanics.mjs for the measured curve and tests/items.test.mjs for
+   the proof that level 30 is still solvable with one of these - and still not
+   solvable without. */
+export const BOOST_RAMP_GAIN = 3.5;
 
 /* The ceiling on a launch. Not a tunnelling guard - the substepping below is
-   what keeps a 100px/frame ball colliding honestly - but a sanity limit, so
-   two bars in a row cannot compound into a number that eats the step budget
-   in substeps for no visible gain. */
-export const BOOST_RAMP_CAP = 120;
+   what keeps a fast ball colliding honestly - but a sanity limit, so two bars
+   in a row cannot compound into a number that eats the step budget in
+   substeps for no visible gain. Kept at the gain's own scale: the fastest
+   single launch is 3.5 x the general cap, and this is a shade over it, so one
+   bar is never clipped and a chain of them still settles somewhere sane. */
+export const BOOST_RAMP_CAP = 46;
 
 /* How the launch comes back DOWN to the board's own rules. A hard window that
    ended at the general cap snapped the ball from 90 to 12.7 in one frame,

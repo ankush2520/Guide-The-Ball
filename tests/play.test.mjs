@@ -1047,7 +1047,7 @@ await topUp();
 /* The legend only covers the board in front of you and the tips fire once,
    so there has to be somewhere to look things up afterwards. */
 section('8c. Info panel');
-await page.evaluate(() => window.__gtb.setLevel(20));      // a board with a booster
+await page.evaluate(() => window.__gtb.setLevel(20));      // Solmesa's first board
 check(await page.locator('#infopanel').isHidden(), 'the info panel starts closed');
 await openSettings();
 await page.locator('#btn-info').click();
@@ -1073,8 +1073,15 @@ check(panelInfo.lines.length >= 11, 'it documents every thing that can be on a b
 for (const w of ['Target','Obstacle','Breakable block','Booster pad','Portal','Wind','Ice',
                  'Gold star','Your ramp','Wall','Ball'])
   if (!panelInfo.lines.some(l => l.name === w)) bad(`info panel is missing "${w}"`);
-check(panelInfo.lines.some(l => l.name === 'Booster pad' && l.here),
-  'and flags what is on the level you are looking at', 'booster pad marked on L21');
+/* Flagged against something this board really has. It used to be the booster
+   pad, because level 21 came with one; no level carries a pad any more, so the
+   chest - which every level in the game carries - is what proves the marking
+   works. */
+check(panelInfo.lines.some(l => l.name === 'Mystery box' && l.here),
+  'and flags what is on the level you are looking at', 'the chest marked on L21');
+check(!panelInfo.lines.some(l => l.name === 'Booster pad' && l.here),
+  'while the booster PAD is listed but never marked - no level ships one',
+  'documented, never on a board');
 check(panelInfo.lines.some(l => l.name === 'Portal' && !l.here),
   'without flagging what is not');
 check(['THE BASICS','ON THE BOARD','BALLS','LEVEL RATING'].every(h =>

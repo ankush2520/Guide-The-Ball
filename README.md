@@ -83,7 +83,7 @@ place.
 | # | Country | Levels | Mechanic | Backdrop |
 |---|---|---|---|---|
 | 1 | Verdholm | 1-20 | ramps only | toon day sky: pale blue into lavender |
-| 2 | Solmesa | 21-30 | boosters | deep maroon into burnt orange |
+| 2 | Solmesa | 21-30 | the booster ramp you bring | deep maroon into burnt orange |
 | 3 | Windemere | 31-40 | wind zones | muted sage-teal |
 | 4 | Frostvale | 41-50 | slippery zones | navy into ice-blue, whiter glow |
 | 5 | Zunmara Ruins | 51-60 | portals | violet into gold |
@@ -144,7 +144,7 @@ Flavour names layer in later as a pure data change: set `city` on a level and
 | Entity | Behaviour |
 |---|---|
 | `boosters` | The level's own booster **pad**. On entry, sets velocity to a fixed angle and speed. Deterministic, unlike the red obstacles' scatter. Fires once per entry, and the chevron drawn on it is the exact heading you leave on. |
-| `boostRamps` | The player's booster **ramp**, merged in by `LevelManager.playLevel`. Collides exactly like a ramp - same body, same mirror - and then multiplies the exit speed by `BOOST_RAMP_GAIN` (10x what it came in at, held to `BOOST_RAMP_CAP`). The launch decays back under the general cap by `BOOST_DECAY` a step rather than ending in a snap. Authorable, but no shipped level uses one. |
+| `boostRamps` | The player's booster **ramp**, merged in by `LevelManager.playLevel`. Collides exactly like a ramp - same body, same mirror - and then multiplies the exit speed by `BOOST_RAMP_GAIN` (3.5x what it came in at, held to `BOOST_RAMP_CAP`). The launch decays back under the general cap by `BOOST_DECAY` a step rather than ending in a snap. Authorable, but no shipped level uses one. |
 | `wind` | Rectangular, never moves. Constant acceleration while the ball's centre is inside; gone the instant it leaves. |
 | `slippery` | Rectangular. Raises restitution to `SLIP_REST` for bounces resolved inside it. |
 | `portals` | A pair of ends. Direction is preserved unless the exit states a `facing`. |
@@ -590,8 +590,19 @@ It is **orange**, and pointedly not green: the pad it replaces wore a
 green-cyan a step away from the target's own green, and green belongs to the
 goal alone. Not the ramp's blue either - with the same silhouette, colour is
 the only thing left to separate "a bar that turns you" from "a bar that throws
-you". The level's own pads are now orange too: same family, and the shape says
-which is which.
+you".
+
+**And it is the only booster left.** Twenty-three levels carried a circular
+booster PAD - the authored kind, fired on entry along a fixed heading - and
+all twenty-three have had it removed: one game does not need two different
+objects called a booster, and the one the player owns is the one worth
+keeping. Every affected level was re-swept afterwards and all twenty-three are
+still winnable with a single ramp on every obstacle seed, so nothing shipped
+unsolvable. The pad remains a thing the engine can simulate and a level could
+still author (`tests/mechanics.mjs` holds it to its rules), but the generator
+no longer produces one, so a regeneration cannot put them back - and Solmesa,
+which was the booster country, is now the country where the booster RAMP
+unlocks and the free one lands in the bag.
 
 It reaches the physics by being merged into the level the ball plays against
 (`LevelManager.playLevel`, as `boostRamps`) rather than through any new code

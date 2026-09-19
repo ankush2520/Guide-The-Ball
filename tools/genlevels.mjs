@@ -46,37 +46,37 @@ function clear(pt, rad, list, pad = 12){
 const SPECS = {
   2: {
     name: 'Solmesa',
-    /* Boost Ridge teaches one idea: a booster is a promise. The ball goes in,
-       and it leaves on exactly the heading the chevron draws, every time.
-       So the boards are deliberately uncluttered - the booster must be the
-       thing that solves the level, not a hazard among hazards. */
+    /* ============================================================
+       THE COUNTRY WHERE YOU LEARN THE BAR YOU BROUGHT
+
+       Solmesa used to author a BOOSTER PAD on every board - a
+       circular one, fired on entry along a fixed heading - and
+       the gate proved the pad was unavoidable and load-bearing.
+       There are no pads in the game any more (see the note in
+       src/levels/levels.data.ts), so there is nothing here to
+       author and `requireBoost` has gone with them.
+
+       What the country teaches instead is the item: level 21 is
+       where the player's own BOOSTER RAMP unlocks and the free
+       one lands in the bag, and level 30 - hand-tuned, preserved
+       by `needsBooster`, never regenerated - is the board that
+       cannot be solved without it. So these boards stay what they
+       always were, uncluttered and tightening across the ten, and
+       they are the place a player first has a bar to try on one.
+       ============================================================ */
     /* The gate tightens across the world, so 21 is a lesson and 30 is a test.
        maxTol is the ceiling on the winning angle window: without it the
        generator happily produced a level 27 at +/-57 degrees, which is more
        forgiving than level 1 and would have flattened the whole curve. */
     gate: i => ({ minTol: 3, maxTol: 24 - i * 1.2, maxBlind: 0.06,
-                  requireBoost: true, maxObHits: 1.2 }),
+                  maxObHits: 1.2 }),
     make(r, i, n, taken){
       const last = i === n - 1;
       const leftSpawn = i % 2 === 0;
       const spawn = { x: leftSpawn ? rint(r, 70, 150) : rint(r, 330, 410), y: 40 };
-      // the booster sits under the spawn's fall line, so an ordinary first
-      // ramp can feed it - that is the shape the solver sweeps for
-      // directly in the ball's fall line: the booster is not an optional
-      // detour in this world, it is the road. A player's ramp shapes the
-      // approach or catches the exit, but the boost always happens.
-      const bx = spawn.x + rint(r, -12, 12);
-      const by = rint(r, 250, 350);
-      // fire it across the board, downward, toward the far side
-      const toward = leftSpawn ? 1 : -1;
-      const angle = toward > 0 ? rint(r, -34, 22) : rint(r, 158, 214);
-      const boosters = [{ x: clampX(bx, 46), y: by, r: rint(r, 28, 34),
-                          angle, speed: rng(r, 9.5, 12.4) }];
-      /* Far corner from the spawn, and LOW. Horizontal reach is the thing a
-         booster buys that a ramp cannot: put the target far enough across and
-         deep enough down and an unboosted ball simply runs out of board
-         before it gets there. That is what makes the mechanic load-bearing
-         rather than decorative.
+      /* Far corner from the spawn, and LOW - a long horizontal carry, which
+         is the shape these boards always had and the shape a booster ramp is
+         worth bringing to.
          No two levels in a world may share a target spot - ten boards that
          all end in the same corner read as one board played ten times.
          Placement retries here rather than failing the candidate, so a
@@ -96,19 +96,17 @@ const SPECS = {
       while (obstacles.length < want && guard++ < 200){
         const o = { x: rint(r, 60, 420), y: rint(r, 250, 600), r: rint(r, 28, 36) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (!clear(o, o.r, boosters, 22)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 220) continue;
         if (!clear(o, o.r, obstacles, 16)) continue;
         obstacles.push(o);
       }
       return {
         name: pick(r, last ? ['Ridgeline'] : BOOST_NAMES),
-        // two ramps throughout: a third just gives the solver enough rope to
-        // route around the booster, which is the one thing this world teaches
+        // two ramps throughout, which is what makes the long carry a puzzle
         maxBlocks: 2,
         targetType: last ? 'POCKET' : (i >= 6 ? 'SIDE_WALL' : 'OPEN'),
         wallSide: leftSpawn ? 'right' : 'left',
-        spawn, obstacles, boosters, target
+        spawn, obstacles, target
       };
     }
   },
@@ -563,18 +561,19 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
   lv.target = target;
 
   /* Rotated by level index rather than drawn at random, so a country covers
-     its whole pool instead of landing on the same pair six times. */
-  const POOL = ['booster', 'wind', 'slippery', 'portal', 'breakable', 'star'];
+     its whole pool instead of landing on the same pair six times.
+
+     NO 'booster'. The circular pad is not a thing the game ships any more -
+     see the note in src/levels/levels.data.ts - so a mechanic pool that could
+     still roll one would quietly put twenty-three of them back the next time
+     a late country was regenerated. */
+  const POOL = ['wind', 'slippery', 'portal', 'breakable', 'star'];
   const chosen = [];
   for (let k = 0; k < POOL.length && chosen.length < want; k++)
     chosen.push(POOL[(i + k) % POOL.length]);
 
   for (const m of chosen){
-    if (m === 'booster'){
-      const angle = toward > 0 ? rint(r, -30, 20) : rint(r, 160, 210);
-      lv.boosters = [{ x: clampX(spawn.x + rint(r, -12, 12), 46), y: rint(r, 230, 320),
-                       r: rint(r, 28, 34), angle, speed: rng(r, 9.5, 12.4) }];
-    } else if (m === 'wind'){
+    if (m === 'wind'){
       lv.wind = [{ x: 0, y: rint(r, 300, 380), w: W, h: rint(r, 150, 220),
                    ax: toward * rng(r, 0.3, 0.8), ay: 0 }];
     } else if (m === 'slippery'){
@@ -593,7 +592,7 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
     }
   }
 
-  const solids = [lv.boosters, lv.breakables].filter(Boolean).flat()
+  const solids = [lv.breakables].filter(Boolean).flat()
     .concat(lv.portals ? [lv.portals[0].a, lv.portals[0].b] : []);
   const wantOb = last ? 3 : (i < 3 ? 1 : 2);
   let guard = 0;
@@ -772,22 +771,28 @@ async function verify(lv, i){
     if (blind > gate.maxBlind) why.push(`trivial ${(blind*100).toFixed(0)}%`);
     if (seedWin < 1) why.push(`seed-flaky ${(seedWin*100).toFixed(0)}%`);
     if (obHits > gate.maxObHits) why.push(`lottery ${obHits.toFixed(1)} obstacle hits`);
-    /* What "the mechanic matters" is allowed to mean here.
-       The strongest claim - no solution exists without the booster - needs an
+    /* RETIRED: `requireBoost`. It proved that a country's authored booster pad
+       was unavoidable on the natural drop line and that a winning solution
+       routed through it. No board authors a pad any more, so nothing sets the
+       flag and the check is gone with it.
+
+       The reasoning it established is still live, though, because the fire
+       gate below is built in its shape, so it is worth keeping written down.
+       The strongest claim - no solution exists without the mechanic - needs an
        exhaustive multi-ramp search of a stripped board to prove a NEGATIVE,
-       and at this budget it rejected every candidate. So the gate proves two
-       cheaper things that together are honest:
-         1. the booster is UNAVOIDABLE on the natural line: drop with no ramps
-            at all and the ball goes through it. It is the board, not scenery.
+       and at this budget it rejected every candidate. So a gate of this kind
+       proves two cheaper things that together are honest:
+         1. the mechanic is UNAVOIDABLE on the natural line: drop with no ramps
+            at all and the ball meets it. It is the board, not scenery.
          2. a verified winning solution routes through it.
-       What this does NOT prove is that a clever player cannot find a route
+       What that does NOT prove is that a clever player cannot find a route
        around it. In a puzzle game that is an acceptable second solution, not
-       a defect - but it is not the same claim, so it is not made. */
-    if (gate.requireBoost){
-      const bare = simulate([], 1, ix);
-      if (bare.boosts < 1) why.push('booster is off the natural drop line');
-      else if (boosts / seeds.length < 0.99) why.push('no solution routes through it');
-    }
+       a defect - but it is not the same claim, so it is not made.
+
+       The one board that DOES carry the strong negative is level 30, which is
+       hand-tuned rather than generated, and tests/items.test.mjs is where it
+       is proved: no ramp layout anywhere wins it, and one booster ramp out of
+       the bag does. */
     /* FIRE has to be a wall, not furniture. The claim made here is the same
        shape as the booster's and just as honest: the UNRAMPED drop must burn,
        so the hazard is squarely on the line the ball takes when the player

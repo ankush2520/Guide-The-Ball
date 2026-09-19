@@ -42,7 +42,7 @@ console.log('\nBOOSTER — deterministic redirect, fires once on entry');
     'and is deterministic - a different RNG seed changes nothing');
 }
 
-console.log('\nBOOST RAMP — the player\'s bar: bounces like a ramp, leaves ten times faster');
+console.log(`\nBOOST RAMP — the player's bar: bounces like a ramp, leaves x${MECH.BOOST_RAMP_GAIN} faster`);
 {
   /* The item as the bag hands it out, built by the game's own helper so a
      retuned length or thickness moves this test with it. Laid flat under the
@@ -64,8 +64,11 @@ console.log('\nBOOST RAMP — the player\'s bar: bounces like a ramp, leaves ten
   chk(Math.abs(outSp-want)<0.5,
     `it leaves at x${MECH.BOOST_RAMP_GAIN} the speed it arrived at`,
     `${inSp.toFixed(2)} -> ${outSp.toFixed(2)}, want ${want.toFixed(2)}`);
-  chk(outSp>MECH.SPEED_CAP*3,
-    'which is far past anything the board can otherwise reach',
+  /* Against the CAP rather than against a number: the claim is that a launch
+     leaves the board's own speed limit behind, and it has to keep holding
+     when the gain is retuned - which it has been, from 10 to 3.5. */
+  chk(outSp>MECH.SPEED_CAP*2,
+    'which is more than twice anything the board can otherwise reach',
     `${outSp.toFixed(1)} vs the general cap ${MECH.SPEED_CAP.toFixed(1)}`);
   /* IT IS A RAMP, not a launcher: the heading is the mirror of the bounce, so a
      flat bar sends a ball that fell straight down straight back UP. */

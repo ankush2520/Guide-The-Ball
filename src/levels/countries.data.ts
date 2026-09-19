@@ -51,7 +51,7 @@ export const COUNTRIES: Country[] = [
 
   /* Apricot into cream - a warm morning. The booster's teal chevron is still
      the one cool thing on the board. */
-  { id: 2, name: 'Solmesa', from: 21,  to: 30,  mechanic: 'boosters',
+  { id: 2, name: 'Solmesa', from: 21,  to: 30,  mechanic: 'the booster ramp you bring',
     sky: ['#ffe5d6', '#ffeedd', '#fff5e6'], wash: '230,130,80', accent: '#ff8a3d' },
 
   /* Rose-coral heat haze. Breakables are orange and fire is orange-red, so the

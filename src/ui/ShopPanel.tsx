@@ -102,7 +102,7 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
               <h4 id="shop-boosters-head">Booster ramps</h4>
               <p className="shopnote">
                 An orange bar you lay on any board. It bounces the ball like a
-                ramp and throws it out <b>ten times faster</b>. You are only
+                ramp and throws it out <b>three and a half times faster</b>. You are only
                 charged when a drop that actually <b>hits</b> one goes on to
                 win - misses are free, and so is a win it had no part in.
                 {' '}{BOOSTER_PRICE} coins each, and fewer the more you take.

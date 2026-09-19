@@ -29,7 +29,8 @@ export interface ItemDef {
 export const ITEMS: readonly ItemDef[] = [
   { kind: 'booster', name: 'Booster ramp',
     blurb: 'A ramp that FIRES you. Bounces the ball like any ramp, then throws ' +
-           'it out ten times faster. Drag it to move, drag the knob to turn it. ' +
+           'it out about three and a half times faster. Drag it to move, drag ' +
+           'the knob to turn it. ' +
            'Only spent if the ball hits it and you win.' },
 ];
 
@@ -48,7 +49,7 @@ export const RAMP_LEN = 120;
    speed. It is a BAR now - the ramp's own silhouette, the ramp's
    own physics - and what it adds is speed rather than a heading:
    the ball mirrors off it exactly as it would off a ramp you
-   drew, and leaves ten times faster (see BOOST_RAMP_GAIN).
+   drew, and leaves several times faster (see BOOST_RAMP_GAIN).
 
    Why the change is worth it: a heading is something a ramp
    already gives you, so the disc was a second way to do the

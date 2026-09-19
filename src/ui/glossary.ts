@@ -47,7 +47,8 @@ export const GLOSSARY: GlossaryEntry[] = [
   { cls: 'mb', has: lv => lv.boostRamps.length > 0, name: 'Your booster ramp',
     long: 'The orange BAR, out of your bag. It bounces the ball exactly like a ramp you drew - ' +
           'the angle you lay it at is the angle it mirrors off - and then throws it out about ' +
-          'TEN TIMES faster, which no ordinary ramp can do. Drag it to move, drag the knob to ' +
+          'several times faster - about THREE AND A HALF - which no ordinary ramp can do, since ' +
+          'every normal bounce loses a little. Drag it to move, drag the knob to ' +
           'turn it. It only leaves your bag if the ball really hits it AND that drop wins - ' +
           'missing with one costs you nothing.' },
   { cls: 'pt', has: lv => lv.portals.length > 0, name: 'Portal',

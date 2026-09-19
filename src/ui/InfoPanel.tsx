@@ -83,7 +83,7 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
           <p>It is an <b>orange bar</b>, and it bounces the ball exactly like a
              ramp you drew &mdash; the angle you lay it at is the angle the ball
              mirrors off. What it adds is <b>speed</b>: the ball comes off it
-             about <b>ten times faster</b> than it went in, which no ordinary
+             about <b>three and a half times faster</b> than it went in, which no ordinary
              ramp can do, since every normal bounce loses a little. That is the
              one thing it is for, and it is why a few boards late in the game
              cannot be solved without one.</p>
