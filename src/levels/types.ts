@@ -2,12 +2,31 @@
 
 export interface Vec { x: number; y: number; }
 
-/** A circle: obstacles, breakables, the target, and both portal ends. */
+/** A circle: obstacles, breakables and the target. */
 export interface Circle extends Vec { r: number; }
 
 /** A line segment. Player ramps and level walls are both this, and they are
     run through IDENTICAL physics - only the half-thickness differs. */
-export interface Segment { x1: number; y1: number; x2: number; y2: number; }
+export interface Segment {
+  x1: number; y1: number; x2: number; y2: number;
+  /* ---- the player's SPRING, on a ramp the player drew ----
+
+     `spring` is physics: a sprung ramp bounces exactly as it always did, and
+     then multiplies what leaves by SPRING_GAIN. It rides on the segment
+     rather than in a list beside it because a ramp can be moved, reshaped and
+     deleted, and a parallel array would have to be spliced in step with all
+     three - a spring must never end up fitted to a different ramp than the
+     one the player put it on.
+
+     `springPaid` is bookkeeping and the simulator never reads it: a spring is
+     on loan until a drop that actually fired it wins (see GameController),
+     and this is what stops a second win charging for the same one twice.
+
+     Both are absent on every authored segment and on everything the solver
+     builds, so an ordinary ramp is exactly the object it always was. */
+  spring?: boolean;
+  springPaid?: boolean;
+}
 
 /** An axis-aligned rectangle. Zones NEVER move: a region that slides through
     the space a player just drew a ramp in is the bug that got moving targets
@@ -16,22 +35,9 @@ export interface Rect { x: number; y: number; w: number; h: number; }
 
 export interface BoosterDef extends Circle { angle: number; speed: number; }
 
-/** A BOOST RAMP: geometrically a plain segment, exactly like a player's ramp,
-    and run through the same collision - only the exit speed differs (see
-    BOOST_RAMP_GAIN). It carries no angle and no length of its own because
-    both are already IN the segment: where it lies and which way it points are
-    its two ends, so moving and aiming one are the same two numbers the
-    renderer and the physics already share.
-
-    Normally the player's, out of the bag. Authorable so the solver gate can
-    inject one headlessly - see tests/items.test.mjs - and so a level could
-    ship with one if a country ever wants that. */
-export type BoostRampDef = Segment;
 export interface WindDef extends Rect { ax?: number; ay?: number; }
 export type SlipperyDef = Rect;
-export interface PortalEnd extends Circle { facing?: number | null; }
 /** `id` is written by the generator to label a pair; the sim ignores it. */
-export interface PortalDef { id?: string; a: PortalEnd; b: PortalEnd; }
 export type BreakableDef = Circle;
 export type StarDef = Vec;
 
@@ -86,10 +92,8 @@ export interface RawLevel {
   /** Boost ramps the LEVEL carries. Empty in every shipped level today: the
       bar is the player's item, and the composed play level is where theirs
       are merged in - see LevelManager.composeLevel(). */
-  boostRamps?: BoostRampDef[];
   wind?: WindDef[];
   slippery?: SlipperyDef[];
-  portals?: PortalDef[];
   breakables?: BreakableDef[];
   stars?: StarDef[];
   fires?: FireDef[];
@@ -101,11 +105,11 @@ export interface RawLevel {
   /** Absent on every level that came before it, which is what keeps a static
       target a zero-migration default. */
   targetMove?: TargetMove;
-  /** This board cannot be solved with ramps alone: it needs a booster out of
-      the player's own bag. A capstone marker, and a CLAIM - the solver sweep
+  /** This board cannot be solved with a plain ramp: it needs a SPRING out of
+      the player's own bag on one of them. A capstone marker, and a CLAIM - the solver sweep
       proves both halves of it (see tests/items.test.mjs), so it may only be
       set on a level that has been through that gate. */
-  needsBooster?: boolean;
+  needsSpring?: boolean;
   /* ============================================================
      A GIFT INSIDE THE TARGET
 
@@ -132,10 +136,8 @@ export interface RawLevel {
 export interface Level extends RawLevel {
   obstacles: Circle[];
   boosters: BoosterDef[];
-  boostRamps: BoostRampDef[];
   wind: WindDef[];
   slippery: SlipperyDef[];
-  portals: PortalDef[];
   breakables: BreakableDef[];
   stars: StarDef[];
   fires: FireDef[];

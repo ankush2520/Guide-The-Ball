@@ -19,13 +19,13 @@
    a ramp, drag an end to reshape it, drag the middle to move it,
    × to delete.
 
-   A placed BOOSTER is handled by the same grammar, deliberately:
-   tap to select, drag the body to move, drag the knob on its
-   nose to aim, × to take it back. It is tested BEFORE the ramps,
-   so a booster sitting over one can still be picked up - what is
-   on top is what you get. It is the one thing here that is NOT
-   drawn: an item comes out of the bag with its shape already
-   decided, and only its place and heading are the player's.
+   A SPRING out of the bag needs no grammar of its own at all,
+   which is most of why it replaced the bar. It has no position,
+   no length and no heading to set - it goes on a ramp - so the
+   whole gesture is ONE TAP on one of the player's own lines,
+   tested before everything else while it is armed. A tap that
+   lands anywhere else puts it back in the bag rather than
+   fitting it somewhere meaningless.
 
    All hit-testing is done in BOARD coordinates, so a grab radius
    means the same thing whatever size the canvas is displayed at.
@@ -35,7 +35,7 @@ import { useGame, useGameVersion } from '../core/GameContext';
 import { H, RAMP_HT, BOARD, PLAY } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
 import { unviewX, unviewY } from '../render/view';
-import { DEL_GRAB, PICK_PAD, AIM_GRAB } from '../managers/LevelManager';
+import { DEL_GRAB, PICK_PAD } from '../managers/LevelManager';
 
 /* `children` is painted ON the board (the status caption). Nothing sits
    under the board any more - the level chip moved into the HUD, and the
@@ -171,7 +171,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   const armTouchGuard = () => {
     if (touchGuard.current) return;
     const h = (e: TouchEvent) => {
-      if (controller.dragging || controller.boosterDrag || controller.draft)
+      if (controller.dragging || controller.draft)
         e.preventDefault();
     };
     touchGuard.current = h;
@@ -225,36 +225,14 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
 
-    /* 0. the selected booster ramp's own controls, for the same reason the ramp's
-          come first below: a control the player can see has to win over
-          whatever it happens to be drawn on top of */
-    const selB = controller.selectedBooster;
-    const sb = selB >= 0 ? levels.boosterAt(selB) : undefined;
-    if (sb) {
-      const del = levels.boosterDeleteAt(sb);
-      if (Math.hypot(p.x - del.x, p.y - del.y) <= DEL_GRAB) {
-        controller.removeBooster(selB); return;
-      }
-      const knob = levels.boosterHandleAt(sb);
-      if (Math.hypot(p.x - knob.x, p.y - knob.y) <= AIM_GRAB) {
-        controller.boosterDrag = { mode: 'aim', ix: selB, lx: p.x, ly: p.y }; return;
-      }
-      /* Its body, which is a BAR: the same distance-to-segment test
-         pickBooster runs, so the selected one is grabbed exactly where an
-         unselected one would be. */
-      if (levels.pickBooster(p.x, p.y) === selB) {
-        controller.boosterDrag = { mode: 'move', ix: selB, lx: p.x, ly: p.y }; return;
-      }
-    }
-
-    /* 0b. any other placed booster: the tap selects it, and the same gesture
-           can go straight on to dragging it */
-    const pickB = levels.pickBooster(p.x, p.y);
-    if (pickB >= 0) {
-      controller.selectedBooster = pickB;
-      controller.selected = -1;
-      controller.boosterDrag = { mode: 'move', ix: pickB, lx: p.x, ly: p.y };
-      controller.notifyRampsChanged();
+    /* 0. A SPRING IS ARMED. It beats every other reading of a tap, including
+          the controls of whatever happens to be selected: the player has just
+          said "this one goes on a ramp", and the next thing they touch is the
+          answer. On a ramp it fits; anywhere else it goes back in the bag. */
+    if (controller.armedSpring) {
+      const onRamp = levels.pickRamp(p.x, p.y);
+      if (onRamp >= 0) controller.fitSpring(onRamp);
+      else controller.disarmSpring();
       return;
     }
 
@@ -293,8 +271,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           drawing or dropping straight off a deselect is a move the player did
           not ask for. Otherwise it is a ramp if it travels and the drop if it
           does not, decided on release. */
-    if (controller.selected >= 0 || controller.selectedBooster >= 0) {
-      controller.selected = -1; controller.selectedBooster = -1;
+    if (controller.selected >= 0) {
+      controller.selected = -1;
       controller.notifyRampsChanged();
       return;
     }
@@ -307,16 +285,6 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const p = toBoard(e);
-    const bd = controller.boosterDrag;
-    if (bd) {
-      if (!levels.boosterAt(bd.ix)) { controller.boosterDrag = null; return; }
-      if (bd.mode === 'move') levels.moveBoosterBy(bd.ix, p.x - bd.lx, p.y - bd.ly);
-      else levels.aimBoosterTo(bd.ix, p);
-      if (p.x !== bd.lx || p.y !== bd.ly) dragMoved.current = true;
-      bd.lx = p.x; bd.ly = p.y;
-      e.preventDefault();
-      return;
-    }
     const drag = controller.dragging;
     if (drag) {
       if (!levels.rampAt(drag.ix)) { controller.dragging = null; return; }
@@ -345,11 +313,6 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     dropTouchGuard();
     const t = tap.current;
     tap.current = null;
-    if (controller.boosterDrag) {
-      controller.boosterDrag = null;
-      controller.boosterAdjusted();
-      return;
-    }
     if (controller.dragging) {
       controller.dragging = null;
       if (dragMoved.current) controller.rampAdjusted();
@@ -382,7 +345,6 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
            dropTouchGuard();
            tap.current?.ripple?.remove(); tap.current = null;
            controller.dragging = null;
-           controller.boosterDrag = null;
            controller.cancelDraft();
            controller.notifyRampsChanged();
          }}>

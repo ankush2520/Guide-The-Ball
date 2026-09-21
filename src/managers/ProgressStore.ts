@@ -25,9 +25,12 @@ export interface SaveData {
   tutorialSeen?: boolean;
   obstacleTipSeen?: boolean;
   tips?: Record<string, boolean>;
-  /** The one free booster, handed over the first time level 21 is reached.
+  /** The one free spring, handed over the first time level 21 is reached.
       A flag rather than a count: it records that the gift HAPPENED, which is
       the only thing that must never happen twice. */
+  springGift?: boolean;
+  /** What that flag was called when the item was a booster ramp. Read on load
+      so an old save does not hand out a second free one. */
   boosterGift?: boolean;
   /** Which levels have had their mystery box opened. A box is treasure, not
       income: claimed once per level, for good, so replaying an easy board
@@ -57,7 +60,7 @@ export interface SpinData {
      for the next 24 hours. */
   offered: number;
 }
-export interface WalletData { coins: number | null; ramps: number; boosters: number; }
+export interface WalletData { coins: number | null; ramps: number; springs: number; }
 
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -112,18 +115,22 @@ export class ProgressStore {
 
   /** `coins: null` means the game has never been opened - see loadBalls(). */
   loadWallet(): WalletData {
-    const raw = readJSON<{ coins?: unknown; ramps?: unknown; boosters?: unknown }>(WALLET_KEY, {});
+    const raw = readJSON<{ coins?: unknown; ramps?: unknown;
+                           springs?: unknown; boosters?: unknown }>(WALLET_KEY, {});
     const coins = (typeof raw.coins === 'number' && isFinite(raw.coins))
       ? Math.max(0, raw.coins | 0) : null;
     const num = (v: unknown) =>
       (typeof v === 'number' && isFinite(v)) ? Math.max(0, v | 0) : 0;
-    /* `boosters` is absent from every wallet written before they existed, and
+    /* `springs` is absent from every wallet written before they existed, and
        reads as zero - which is exactly right: a save from before the item
        shipped owns none of them. */
-    return { coins, ramps: num(raw.ramps), boosters: num(raw.boosters) };
+    /* A wallet written before the spring replaced the booster ramp carries
+       the old key. One for one, so nobody loses what they owned. */
+    return { coins, ramps: num(raw.ramps),
+             springs: num(raw.springs ?? raw.boosters) };
   }
-  saveWallet(coins: number, ramps: number, boosters = 0): void {
-    writeJSON(WALLET_KEY, { coins, ramps, boosters });
+  saveWallet(coins: number, ramps: number, springs = 0): void {
+    writeJSON(WALLET_KEY, { coins, ramps, springs });
   }
 }
 

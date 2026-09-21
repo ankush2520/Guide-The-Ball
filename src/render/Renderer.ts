@@ -11,11 +11,12 @@
    touches the render path.
    ============================================================ */
 import { H, BALL_R, RAMP_HT, STEP_MS_DEFAULT } from './constants';
-import { BOARD, BOOST_HT, BOOST_LEN } from '../physics/constants';
-import type { BoostRampDef, Level, Vec } from '../levels/types';
-import type { DrawContext, Entity } from '../entities/Entity';
+import { BOARD } from '../physics/constants';
+import type { Level } from '../levels/types';
+import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
 import { RAMP_STYLE } from '../entities/Ramp';
+import { drawSpring } from './Spring';
 import { Backdrop } from './Backdrop';
 import { drawStarfield } from './Starfield';
 import { drawClouds } from './Clouds';
@@ -65,12 +66,8 @@ export interface RenderState {
   deleteButtonAt: (s: Segment) => { x: number; y: number };
   handleR: number;
   delR: number;
-  /** The player's own boost ramps, and the grips of whichever is selected. */
-  boosters: readonly BoostRampDef[];
-  selectedBooster: number;
-  boosterHandleAt: (b: BoostRampDef) => Vec;
-  boosterDeleteAt: (b: BoostRampDef) => Vec;
-  aimR: number;
+  /** Whether a spring is out of the bag waiting for a ramp to be tapped. */
+  armedSpring: boolean;
   /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
       the board adds only what has to sit ON the board - see drawCoach. */
   tutorial: { step: string | null };
@@ -205,10 +202,17 @@ export class Renderer {
 
     if (s.phase === 'plan' && s.selected >= 0 && s.selected < s.ramps.length)
       this.drawSelection(s, s.ramps[s.selected]);
-    if (s.phase === 'plan' && s.selectedBooster >= 0
-        && s.selectedBooster < s.boosters.length)
-      this.drawBoosterSelection(s, s.boosters[s.selectedBooster], g,
-        s.entities.find(e => e.kind === 'myboost' && e.index === s.selectedBooster));
+    /* A SPRING WAITING FOR A RAMP. While one is armed every ramp wears a
+       pulsing halo, because the next tap is going to land on one of them and
+       the board should say which shapes are eligible before the finger moves.
+       Nothing else on the board changes: the spring is not on anything yet. */
+    if (s.phase === 'plan' && s.armedSpring) this.drawSpringArmed(s);
+
+    /* THE SPRINGS, LAST of everything that belongs to a ramp. Both the
+       selection halo and the armed-spring halo redraw the ramp they pick out,
+       so a coil painted with the ramps would be buried the moment its own
+       ramp was selected - which is exactly when the player is looking at it. */
+    for (const r of s.ramps) if (r.spring) drawSpring(ctx, r, s.clock);
 
     if (s.phase === 'plan') this.drawSpawnMarker(s.level);
     if (s.tutorial.step) this.drawCoach(s);
@@ -222,70 +226,25 @@ export class Renderer {
   }
 
   /* ============================================================
-     THE BOOST RAMP BEING EDITED
+     A SPRING LOOKING FOR A RAMP
 
-     The same grammar as the selected ramp, so one lesson covers
-     both: a gold halo saying "this is the one", a grip you drag,
-     and the big red × that takes it back. It is the same SHAPE as
-     a selected ramp now, so the halo is drawn the same way too -
-     a fat amber line down the bar rather than a ring, which is
-     what a ring around a 96-unit bar could never be.
-
-     What still differs is the third control, and it is the whole
-     item: a ramp turns by either END, which also changes its
-     length; a boost ramp has ONE fixed length, so it turns by a
-     single knob on a stalk past its leading end and pivots about
-     its middle. The dashed line through it is the plane the ball
-     will mirror off - drawn out both ways, because a bar has two
-     faces and the ball may arrive at either.
+     Armed, not placed. Every ramp on the board gets a breathing
+     halo in the spring's own brass, which is the whole prompt:
+     these are the things the next tap may land on. A board with
+     no ramps cannot arm one at all (see placeItem), so this is
+     never an empty promise.
      ============================================================ */
-  private drawBoosterSelection(s: RenderState, b: BoostRampDef,
-                               g: DrawContext, ent?: Entity): void {
+  private drawSpringArmed(s: RenderState): void {
     const ctx = this.ctx;
-    const cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
-    const a = Math.atan2(b.y2 - b.y1, b.x2 - b.x1);
-    const knob = s.boosterHandleAt(b);
+    const pulse = 0.55 + 0.45 * Math.sin(s.clock * 5);
     ctx.save();
-
-    /* The halo, the same amber the selected ramp wears - and like the ramp's,
-       the thing it picks out is drawn again ON TOP of it. */
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,210,63,.75)';
-    ctx.lineWidth = BOOST_HT * 2 + 16;
-    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
-    ent?.draw(g);
-
-    /* THE MIRROR LINE. A dashed ray along the bar's own plane, both ways,
-       crawling outward so it reads as live. This is the promise the bar makes
-       - the surface the ball leaves along - drawn before it is taken rather
-       than explained afterwards. */
-    ctx.strokeStyle = 'rgba(42,35,80,.34)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([9, 8]);
-    ctx.lineDashOffset = -(s.clock * 34) % 17;
-    const reach = 150;
-    for (const dir of [-1, 1]) {
-      const from = BOOST_LEN / 2 + 8;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * dir * from, cy + Math.sin(a) * dir * from);
-      ctx.lineTo(cx + Math.cos(a) * dir * reach, cy + Math.sin(a) * dir * reach);
-      ctx.stroke();
+    ctx.strokeStyle = `rgba(214,158,46,${(0.35 + 0.35 * pulse).toFixed(3)})`;
+    ctx.lineWidth = RAMP_HT * 2 + 14;
+    for (const r of s.ramps) {
+      ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke();
     }
-    ctx.setLineDash([]);
-
-    // the stalk, so the knob is visibly PART of this bar
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(b.x2, b.y2);
-    ctx.lineTo(knob.x, knob.y);
-    ctx.stroke();
-
-    ctx.beginPath(); ctx.arc(knob.x, knob.y, s.aimR, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffd23f'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
-
-    this.drawDeleteButton(s.boosterDeleteAt(b), s.delR);
+    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
     ctx.restore();
   }
 

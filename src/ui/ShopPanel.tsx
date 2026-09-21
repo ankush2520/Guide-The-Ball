@@ -2,7 +2,7 @@
    THE SHOP
 
    One direction only: coins buy balls, spare ramps and
-   boosters, and nothing sells them back. That is what keeps the
+   springs, and nothing sells them back. That is what keeps the
    wallet legible - a coin is always worth exactly what this
    panel says.
 
@@ -12,11 +12,11 @@
    afford say so by being disabled rather than by failing when
    pressed.
 
-   The BOOSTER section is not here at all before level 21. It is
+   The SPRING section is not here at all before level 21. It is
    not greyed out and it is not teased: an item the player has
    never seen on a board cannot be shopped for, and a locked row
    in a shop is just an advertisement. The wallet refuses the
-   purchase as well - see buyBoosters - because a section that
+   purchase as well - see buySprings - because a section that
    merely is not rendered is not a rule.
 
    The bundles and their prices live on RewardManager, not here.
@@ -26,8 +26,8 @@
    two must come from one table.
    ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
-import { BALL_PRICE, RAMP_PRICE, BOOSTER_PRICE, BOOSTER_UNLOCK_LEVEL,
-         BALL_BUNDLES, RAMP_BUNDLES, BOOSTER_BUNDLES,
+import { BALL_PRICE, RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
+         BALL_BUNDLES, RAMP_BUNDLES, SPRING_BUNDLES,
          type Bundle } from '../managers/RewardManager';
 
 /* How much better than buying singles this row is, as whole percent. The
@@ -97,40 +97,40 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
             ramp{rewards.extraRamps === 1 ? '' : 's'}.
           </p>
 
-          {rewards.boostersUnlocked && (
+          {rewards.springsUnlocked && (
             <>
-              <h4 id="shop-boosters-head">Booster ramps</h4>
+              <h4 id="shop-springs-head">Springs</h4>
               <p className="shopnote">
-                An orange bar you lay on any board. It bounces the ball like a
-                ramp and throws it out <b>three and a half times faster</b>. You are only
-                charged when a drop that actually <b>hits</b> one goes on to
-                win - misses are free, and so is a win it had no part in.
-                {' '}{BOOSTER_PRICE} coins each, and fewer the more you take.
+                A brass coil that fits onto a ramp <b>you</b> drew and makes it
+                throw <b>four times harder</b>. You are only charged when a drop
+                that actually <b>bounces off</b> one goes on to win - misses are
+                free, and so is a win it had no part in.
+                {' '}{SPRING_PRICE} coins each, and fewer the more you take.
               </p>
               <div className="buyrow">
-                {BOOSTER_BUNDLES.map(b => {
-                  const cost = rewards.boosterCost(b.n);
-                  const off = saving(b, BOOSTER_PRICE);
+                {SPRING_BUNDLES.map(b => {
+                  const cost = rewards.springCost(b.n);
+                  const off = saving(b, SPRING_PRICE);
                   return (
-                    <button key={b.n} className="buybtn" id={`btn-buy-boosters-${b.n}`}
+                    <button key={b.n} className="buybtn" id={`btn-buy-springs-${b.n}`}
                             disabled={!rewards.canAfford(cost)}
-                            onClick={() => rewards.buyBoosters(b.n)}>
-                      <b><i className="boostmark" />{b.n}</b>
+                            onClick={() => rewards.buySprings(b.n)}>
+                      <b><i className="springmark" />{b.n}</b>
                       <span className="price"><i className="coin" />{cost}</span>
                       {off > 0 && <span className="save">{off}% off</span>}
                     </button>
                   );
                 })}
               </div>
-              <p className="shopnote" id="shop-boostercount">
-                In your bag: <b>{rewards.extraBoosters}</b>
-                {' '}booster ramp{rewards.extraBoosters === 1 ? '' : 's'}.
+              <p className="shopnote" id="shop-springcount">
+                In your bag: <b>{rewards.springs}</b>
+                {' '}spring{rewards.springs === 1 ? '' : 's'}.
               </p>
             </>
           )}
-          {!rewards.boostersUnlocked && (
-            <p className="shopnote" id="shop-boosters-locked">
-              Booster ramps unlock at level {BOOSTER_UNLOCK_LEVEL}.
+          {!rewards.springsUnlocked && (
+            <p className="shopnote" id="shop-springs-locked">
+              Springs unlock at level {SPRING_UNLOCK_LEVEL}.
             </p>
           )}
         </div>

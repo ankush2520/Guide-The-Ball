@@ -16,11 +16,14 @@
     --bg:#dcefff; --bg-2:#efe9ff;
     --panel:#ffffff; --panel-2:#fff6e3; --ink:#2a2350; --muted:#6a6690;
     --obstacle:#f0223f; --target:#17963d; --ramp:#1680f0; --wall:#7c83a8;
-    /* ORANGE IS SPEED - the booster ramp, and nothing else. Deliberately not
-       green (that is the goal) and not the ramp's blue (that is a bar that
-       only turns you): see src/render/palette.ts, which the canvas reads the
-       same values from. */
+    /* ORANGE IS SPEED - the level's own booster pad, and nothing else.
+       Deliberately not green (that is the goal) and not the ramp's blue: see
+       src/render/palette.ts, which the canvas reads the same values from. */
     --boost:#ff7a18; --boost-ink:#b8430a;
+    /* BRASS IS THE SPRING, the one thing the player fits to a ramp of their
+       own. Machinery rather than speed, so it is not the pad's orange; and it
+       sits ON the blue ramp, so it can be neither blue nor green. */
+    --spring:#d69e2e; --spring-ink:#8a5f12; --spring-lit:#ffd98a;
     --ball:#ffffff; --accent:#ffb400;
     /* gold is a FILL colour: on white it is under 2:1. Gold text uses this. */
     --gold-ink:#8a5200;
@@ -260,19 +263,26 @@
   .rampmark{width:16px;height:5px;border-radius:3px;flex:none;display:inline-block;
             background:var(--ramp);box-shadow:0 0 0 1.5px var(--edge);
             transform:rotate(-18deg)}
-  /* The booster ramp's chip mark: the same bar the board paints, at chip size.
-     It is the RAMP mark's shape now - which is the honest thing, because the
-     item is a ramp - so colour is what separates the two rows, exactly as it
-     is on the board. Tilted the other way from .rampmark so a row holding
-     both still reads as two different things. */
-  .boostmark{width:17px;height:6px;border-radius:3px;flex:none;
-             display:inline-block;position:relative;
-             background:linear-gradient(var(--boost),var(--boost-ink));
-             box-shadow:0 0 0 1.5px var(--edge);
-             transform:rotate(16deg)}
-  .boostmark::after{content:'';position:absolute;left:5.5px;top:1.2px;
-                    width:6px;height:2px;border-radius:1px;
-                    background:rgba(255,255,255,.9)}
+  /* THE SPRING'S CHIP MARK - a coil, at chip size.
+
+     A zig-zag, which is the one shape that says "this compresses" at 17px:
+     the board draws the same thing bigger, and the promise both are making is
+     about FORCE, not about direction. Built from a repeating gradient rather
+     than an SVG so it costs nothing and scales with the row it is in. */
+  .springmark{width:18px;height:9px;flex:none;
+              display:inline-block;position:relative;border-radius:2px;
+              background:
+                repeating-linear-gradient(60deg,
+                  var(--spring) 0 2px, var(--spring-ink) 2px 3.4px,
+                  transparent 3.4px 5.4px),
+                linear-gradient(var(--spring-lit),var(--spring));
+              box-shadow:0 0 0 1.5px var(--edge)}
+  /* the plate the ball would meet, which is what stops the zig-zag reading as
+     a torn edge - the board draws this too */
+  .springmark::after{content:'';position:absolute;left:0;right:0;top:-2px;
+                     height:2.5px;border-radius:1.5px;
+                     background:var(--spring-lit);
+                     box-shadow:0 0 0 1.2px var(--edge)}
   .counter.coins{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
   .counter.coins b{color:var(--gold-ink)}
 
@@ -799,13 +809,17 @@
            box-shadow:0 0 0 2px var(--edge)}
   .flyramp{width:26px;height:8px;border-radius:4px;background:var(--ramp);
            box-shadow:0 0 0 2px var(--edge)}
-  /* the booster ramp as the board draws it: an orange bar, chevroned */
-  .flyboost{width:26px;height:9px;border-radius:4.5px;
-            background:linear-gradient(var(--boost),var(--boost-ink));
-            box-shadow:0 0 0 2px var(--edge);position:relative}
-  .flyboost::after{content:'';position:absolute;left:8px;top:2.5px;
-                   width:10px;height:3px;border-radius:1.5px;
-                   background:rgba(255,255,255,.92)}
+  /* a spring in flight: the chip mark's coil, bigger */
+  .flyspring{width:24px;height:12px;border-radius:2px;position:relative;
+             background:
+               repeating-linear-gradient(60deg,
+                 var(--spring) 0 2.6px, var(--spring-ink) 2.6px 4.2px,
+                 transparent 4.2px 7px),
+               linear-gradient(var(--spring-lit),var(--spring));
+             box-shadow:0 0 0 2px var(--edge)}
+  .flyspring::after{content:'';position:absolute;left:0;right:0;top:-3px;
+                    height:3px;border-radius:2px;background:var(--spring-lit);
+                    box-shadow:0 0 0 1.6px var(--edge)}
   /* a free spin: the wheel's own gold, quartered like a wedge */
   .flyspin{width:19px;height:19px;border-radius:50%;
            background:conic-gradient(#ffd76b 0 25%,#d98b0c 0 50%,#ffd76b 0 75%,#d98b0c 0);
@@ -877,17 +891,24 @@
                   border-radius:6px;background:linear-gradient(#5aaaff,var(--ramp));
                   box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
                   transform:rotate(-20deg)}
-  /* The booster ramp as the board draws it: the ramp tile's own bar, in orange
-     and a little fatter - which is exactly the difference on the board. */
-  .boostart{background:#ffeede}
-  .boostart::after{content:'';position:absolute;left:6px;right:6px;top:20px;height:13px;
-                   border-radius:7px;
-                   background:linear-gradient(var(--boost),var(--boost-ink));
-                   box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
-                   transform:rotate(-20deg)}
-  .boostart::before{content:'';position:absolute;left:16px;top:24px;z-index:1;
-                    width:20px;height:3.5px;border-radius:2px;
-                    background:rgba(255,255,255,.92);transform:rotate(-20deg)}
+  /* THE SPRING AS THE BOARD DRAWS IT, which means drawing the RAMP too: the
+     whole item is "this goes on a line you drew", and a coil floating on its
+     own in the bag would be the one picture that fails to say so. Blue bar,
+     brass coil standing on it, exactly the stack the board paints. */
+  .springart{background:#fff6e3}
+  .springart::after{content:'';position:absolute;left:6px;right:6px;top:26px;height:9px;
+                    border-radius:5px;background:var(--ramp);
+                    box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
+                    transform:rotate(-14deg)}
+  .springart::before{content:'';position:absolute;left:15px;top:13px;z-index:1;
+                     width:22px;height:11px;border-radius:2px;
+                     background:
+                       repeating-linear-gradient(60deg,
+                         var(--spring) 0 2.4px, var(--spring-ink) 2.4px 3.8px,
+                         transparent 3.8px 6.4px),
+                       linear-gradient(var(--spring-lit),var(--spring));
+                     box-shadow:0 0 0 2px var(--edge);
+                     transform:rotate(-14deg)}
   .shopcard .big,.shopcard .sub{text-align:center}
   .shopcard .sub{margin-bottom:10px}
   .coinamt{color:var(--gold-ink);font-weight:900;white-space:nowrap}
@@ -1033,8 +1054,6 @@
          border:2px solid var(--edge)}
   .sw.sl{height:11px;border-radius:3px;background:#bfeaff;
          border:2px solid var(--edge)}
-  .sw.pt{border-radius:50%;background:radial-gradient(circle,hsl(285,100%,85%),hsl(285,70%,55%));
-         box-shadow:0 0 0 2px var(--edge)}
   /* Fire: same danger family as .sw.ob, and pointedly not the same shape. The
      obstacle swatch is a smooth lit sphere; this one is a teardrop with a
      white-hot tip, so the legend shows the difference the board does. */
@@ -1046,16 +1065,19 @@
   .sw.mt{border-radius:50%;background:radial-gradient(circle,var(--target) 0 30%,#fff 31% 55%,#5fd67c 56%);
          box-shadow:0 0 0 2px var(--edge),
                     -8px 0 0 -5px var(--edge), 8px 0 0 -5px var(--edge)}
-  /* Your booster RAMP: the ramp swatch's bar in the speed orange. Against the
-     level's orange pad directly above it, and against the blue ramp further
-     down, the two comparisons that matter are both one property apart -
-     same colour, different shape; same shape, different colour. */
-  .sw.mb{height:7px;width:19px;border-radius:3.5px;position:relative;
-         background:linear-gradient(var(--boost),var(--boost-ink));
-         transform:rotate(-20deg);box-shadow:0 0 0 2px var(--edge)}
-  .sw.mb::after{content:'';position:absolute;left:5px;top:1.6px;
-                width:9px;height:2.4px;border-radius:1.2px;
-                background:rgba(255,255,255,.92)}
+  /* YOUR SPRING: the ramp swatch's own blue bar with the brass coil on it,
+     which is the one comparison that matters - same bar as the ramp two rows
+     down, plus the thing you fit to it. */
+  .sw.sp{height:7px;width:19px;border-radius:3.5px;position:relative;
+         background:var(--ramp);box-shadow:0 0 0 2px var(--edge)}
+  .sw.sp::after{content:'';position:absolute;left:3px;top:-6px;
+                width:13px;height:6px;border-radius:1.5px;
+                background:
+                  repeating-linear-gradient(60deg,
+                    var(--spring) 0 1.8px, var(--spring-ink) 1.8px 2.8px,
+                    transparent 2.8px 4.6px),
+                  linear-gradient(var(--spring-lit),var(--spring));
+                box-shadow:0 0 0 1.5px var(--edge)}
   /* A GIFT TARGET: the target's own ring with the chest's present sitting IN
      it - the ring behind, the little magenta box in the middle, ribboned in
      gold. Built out of both, deliberately, and nothing sticks out past the

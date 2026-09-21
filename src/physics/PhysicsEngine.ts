@@ -34,11 +34,13 @@ export interface BallState {
       lv.boostRamps. Read by the controller to decide which of the player's
       bars a winning drop has to pay for - the engine is the only thing that
       knows whether the ball really hit one. */
-  firedBoost: boolean[];
+  /** Which of the player's ramps fired a spring this drop, by ramp index. */
+  firedSpring: boolean[];
+  /** Times a sprung ramp has launched the ball this drop. */
+  springs: number;
 
   stars: number;
   boosts: number;
-  teleports: number;
   boxes: number;
 
   result: DropResult | null;

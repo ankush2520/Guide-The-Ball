@@ -3,7 +3,7 @@
 
    The single description of every thing that can be on a board.
    It replaced a hand-written list under the board, which is what
-   let Solmesa ship a booster the game never explained anywhere.
+   let Solmesa ship an item the game never explained anywhere.
 
    The panel marks whatever is on the CURRENT board, so the list
    is always complete but never generic.
@@ -42,18 +42,17 @@ export const GLOSSARY: GlossaryEntry[] = [
     long: 'The orange DISC. Fires the ball along its arrow at a fixed speed, every single time. ' +
           'Unlike an obstacle there is nothing random about it - the arrow is exactly the heading ' +
           'you leave on.' },
-  /* Straight after the level's own pad, because orange means the same thing on
-     both and the only thing to learn is what the two shapes do differently. */
-  { cls: 'mb', has: lv => lv.boostRamps.length > 0, name: 'Your booster ramp',
-    long: 'The orange BAR, out of your bag. It bounces the ball exactly like a ramp you drew - ' +
-          'the angle you lay it at is the angle it mirrors off - and then throws it out about ' +
-          'several times faster - about THREE AND A HALF - which no ordinary ramp can do, since ' +
-          'every normal bounce loses a little. Drag it to move, drag the knob to ' +
-          'turn it. It only leaves your bag if the ball really hits it AND that drop wins - ' +
-          'missing with one costs you nothing.' },
-  { cls: 'pt', has: lv => lv.portals.length > 0, name: 'Portal',
-    long: 'Two rings of the same colour. Go into one and you come out of the other keeping your ' +
-          'direction, unless the exit has an arrow, which turns you to face it.' },
+  /* The player's own item, straight after the level's own pad: the two are
+     different shapes doing different jobs, and the only thing to learn is
+     which is which. This one is always listed - it is in the bag, not on the
+     board - so `has` is never true and it never gets the "on this level" mark. */
+  { cls: 'sp', has: () => false, name: 'Spring',
+    long: 'The brass COIL out of your bag, and the only thing in the game that can give the ' +
+          'ball back speed it has lost - every ordinary bounce loses a little. It does not go ' +
+          'on the board: it goes on a RAMP YOU DREW, and makes that ramp throw FOUR TIMES ' +
+          'harder. Open the bag, tap Use, then tap the ramp you want it on. It only leaves ' +
+          'your bag if the ball really bounces off it AND that drop wins - a spring that sat ' +
+          'on a ramp the ball never touched costs you nothing.' },
   { cls: 'wd', has: lv => lv.wind.length > 0, name: 'Wind',
     long: 'Pushes the ball steadily while it is inside the band, and stops the moment it leaves. ' +
           'The drifting streaks show which way it blows.' },
@@ -65,7 +64,7 @@ export const GLOSSARY: GlossaryEntry[] = [
           'and never affects winning. Your best count per level is remembered.' },
   { cls: 'bx', has: lv => lv.boxes.length > 0, name: 'Mystery box',
     long: 'A chest. Touch it with the ball mid-drop and it pays out something random - coins, ' +
-          'balls, a spare ramp, sometimes a booster or a free spin of the wheel. Like a star it ' +
+          'balls, a spare ramp, sometimes a spring or a free spin of the wheel. Like a star it ' +
           'never changes where the ball goes, and each one can only be opened ONCE: after that ' +
           'the board shows the empty outline where it was.' },
   /* Straight after the chest, because it is the same prize out of a different

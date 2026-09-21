@@ -47,7 +47,7 @@ const SPECS = {
   2: {
     name: 'Solmesa',
     /* ============================================================
-       THE COUNTRY WHERE YOU LEARN THE BAR YOU BROUGHT
+       THE COUNTRY WHERE YOU LEARN THE SPRING YOU BROUGHT
 
        Solmesa used to author a BOOSTER PAD on every board - a
        circular one, fired on entry along a fixed heading - and
@@ -57,12 +57,13 @@ const SPECS = {
        author and `requireBoost` has gone with them.
 
        What the country teaches instead is the item: level 21 is
-       where the player's own BOOSTER RAMP unlocks and the free
-       one lands in the bag, and level 30 - hand-tuned, preserved
-       by `needsBooster`, never regenerated - is the board that
-       cannot be solved without it. So these boards stay what they
-       always were, uncluttered and tightening across the ten, and
-       they are the place a player first has a bar to try on one.
+       where the player's own SPRING unlocks and the free one
+       lands in the bag, and level 30 - hand-tuned, preserved by
+       `needsSpring`, never regenerated - is the board that cannot
+       be solved without it. So these boards stay what they always
+       were, uncluttered and tightening across the ten, and they
+       are the place a player first has a spring to try on a ramp
+       of their own.
        ============================================================ */
     /* The gate tightens across the world, so 21 is a lesson and 30 is a test.
        maxTol is the ceiling on the winning angle window: without it the
@@ -75,8 +76,8 @@ const SPECS = {
       const leftSpawn = i % 2 === 0;
       const spawn = { x: leftSpawn ? rint(r, 70, 150) : rint(r, 330, 410), y: 40 };
       /* Far corner from the spawn, and LOW - a long horizontal carry, which
-         is the shape these boards always had and the shape a booster ramp is
-         worth bringing to.
+         is the shape these boards always had and the shape a spring is worth
+         bringing to.
          No two levels in a world may share a target spot - ten boards that
          all end in the same corner read as one board played ten times.
          Placement retries here rather than failing the candidate, so a
@@ -338,45 +339,68 @@ const SPECS = {
 
   5: {
     name: 'Zunmara Ruins',
-    /* A portal pair is a shortcut across the board, so the target goes where
-       falling alone cannot reach it - the far side, high enough that the ball
-       would run out of board before drifting there. */
-    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.1, maxBlind: 0.055,
-                  requirePortal: true, maxObHits: 1.2 }),
+    /* ============================================================
+       THE COUNTRY THAT IS A SHAPE, NOT A MECHANIC
+
+       Zunmara was the PORTAL country: one pair per board, and a
+       target parked across the board where falling alone could
+       not reach it, because the portal was the shortcut that got
+       you there. Portals were removed from the game, so there is
+       nothing here to author - and a target placed for a shortcut
+       that no longer exists is simply unreachable.
+
+       What replaces it is the GAUNTLET: no new mechanic at all,
+       just a cluster of obstacles standing between the fall line
+       and a target tucked against a side wall. Every other
+       country in the set is defined by a thing the board DOES;
+       this one is defined by how little room it leaves, which is
+       what keeps it from reading as Verdholm with more rocks.
+
+       The gate is the ordinary one - winnable on every seed, not
+       by luck, not by accident - plus maxObHits held low, so a
+       solution has to thread the cluster rather than pinball
+       through it.
+       ============================================================ */
+    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.1, maxBlind: 0.05, maxObHits: 1.0 }),
     make(r, i, n, taken){
       const last = i === n - 1;
       const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 80, 160) : rint(r, 320, 400), y: 40 };
-      // mouth on the fall line, exit across the board and lower
-      const ax = clampX(spawn.x + rint(r, -14, 14), 46);
-      const ay = rint(r, 230, 330);
-      const bx = leftSpawn ? rint(r, 290, 420) : rint(r, 60, 190);
-      const by = rint(r, 420, 560);
-      const portals = [{ id: 'p1', a: { x: ax, y: ay, r: rint(r, 26, 32) },
-                         b: { x: bx, y: by, r: rint(r, 26, 32) } }];
+      const spawn = { x: leftSpawn ? rint(r, 90, 170) : rint(r, 310, 390), y: 40 };
+      /* The target is across the board from the spawn, against the far wall -
+         reachable by a fall and a deflection, unlike the portal-era boards,
+         but never straight down. */
       let target = null;
-      for (let a = 0; a < 200 && !target; a++){
-        const tx = clampX(bx + rint(r, -90, 90), 56);
-        const ty = rint(r, 640, 745);
+      for (let a = 0; a < 220 && !target; a++){
+        const tx = leftSpawn ? rint(r, 300, 430) : rint(r, 50, 180);
+        const ty = rint(r, 630, 740);
+        if (Math.abs(tx - spawn.x) < 140) continue;
         if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 37) };
       }
       if (!target) return null;
+
+      /* THE CLUSTER. More obstacles than anywhere else this early, packed
+         into the middle band so the gaps between them are the level. They are
+         kept off the target's mouth and off the first 200px of the fall, so
+         the board is a thing to be threaded rather than a lid. */
       const obstacles = [];
-      const want = last ? 3 : (i < 3 ? 1 : 2);
+      const want = last ? 6 : 4 + Math.floor(i / 4);
       let guard = 0;
-      while (obstacles.length < want && guard++ < 200){
-        const o = { x: rint(r, 60, 420), y: rint(r, 300, 620), r: rint(r, 26, 34) };
+      while (obstacles.length < want && guard++ < 400){
+        const o = { x: rint(r, 55, 425), y: rint(r, 250, 610), r: rint(r, 22, 31) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (!clear(o, o.r, [portals[0].a, portals[0].b], 24)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
+        /* the tight pad is the point: 10px between rims is a gap a ball can
+           be aimed through, where the usual 16 is a corridor it falls down */
+        if (!clear(o, o.r, obstacles, 10)) continue;
         obstacles.push(o);
       }
-      return { name: pick(r, last ? ['The Gateway'] : PORTAL_NAMES), maxBlocks: 2,
+      if (obstacles.length < want - 1) return null;
+
+      return { name: pick(r, last ? ['The Gauntlet'] : RUIN_NAMES), maxBlocks: 2,
                targetType: last ? 'SIDE_WALL' : 'OPEN',
                wallSide: leftSpawn ? 'right' : 'left',
-               spawn, obstacles, portals, target };
+               spawn, obstacles, target };
     }
   },
 
@@ -567,7 +591,7 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
      see the note in src/levels/levels.data.ts - so a mechanic pool that could
      still roll one would quietly put twenty-three of them back the next time
      a late country was regenerated. */
-  const POOL = ['wind', 'slippery', 'portal', 'breakable', 'star'];
+  const POOL = ['wind', 'slippery', 'breakable', 'star'];
   const chosen = [];
   for (let k = 0; k < POOL.length && chosen.length < want; k++)
     chosen.push(POOL[(i + k) % POOL.length]);
@@ -578,11 +602,6 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
                    ax: toward * rng(r, 0.3, 0.8), ay: 0 }];
     } else if (m === 'slippery'){
       lv.slippery = [{ x: 0, y: rint(r, 430, 500), w: W, h: rint(r, 150, 220) }];
-    } else if (m === 'portal'){
-      const bx = leftSpawn ? rint(r, 280, 410) : rint(r, 70, 200);
-      lv.portals = [{ id: 'p1',
-                      a: { x: clampX(spawn.x + rint(r, -12, 12), 46), y: rint(r, 210, 280), r: rint(r, 26, 31) },
-                      b: { x: bx, y: rint(r, 430, 540), r: rint(r, 26, 31) } }];
     } else if (m === 'breakable'){
       lv.breakables = [{ x: rint(r, 90, 390), y: rint(r, 340, 560), r: rint(r, 26, 33) }];
     } else if (m === 'star'){
@@ -592,8 +611,7 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
     }
   }
 
-  const solids = [lv.breakables].filter(Boolean).flat()
-    .concat(lv.portals ? [lv.portals[0].a, lv.portals[0].b] : []);
+  const solids = [lv.breakables].filter(Boolean).flat();
   const wantOb = last ? 3 : (i < 3 ? 1 : 2);
   let guard = 0;
   while (lv.obstacles.length < wantOb && guard++ < 240){
@@ -611,7 +629,7 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
 
 const WIND_NAMES = ['Crosswind','The Drift','Squall','Headwind','Bluster','Leeward','Updraught'];
 const ICE_NAMES  = ['Glasswork','Skid','The Rink','Hoarfrost','Slick','Frostbite','Glide'];
-const PORTAL_NAMES = ['Threshold','The Loop','Shortcut','Wayhouse','Passage','Relay','Doorstep'];
+const RUIN_NAMES = ['Threshold','The Narrows','Stonework','Wayhouse','Passage','Colonnade','Doorstep'];
 const STAR_NAMES = ['Stargazer','The Trail','Night Watch','Scatter','Lantern','Wanderer'];
 const COMBO_NAMES = ['Crossfire','Neon Run','Double Bill','Interchange','Static','Downtown'];
 const DEEP_NAMES = ['Undertow','Reef Run','Abyssal','Riptide','The Shoal','Deepwater'];
@@ -672,8 +690,8 @@ async function verify(lv, i){
     /* Does ANY ramp anywhere solve this board? Used twice: once on the level
        itself, and once on a copy with the featured mechanic deleted. If the
        stripped copy is still solvable, the mechanic is decoration and the
-       candidate is rejected - "a solution uses the booster" is a much weaker
-       claim than "the booster is the only way through", and it was the weaker
+       candidate is rejected - "a solution uses the item" is a much weaker
+       claim than "the item is the only way through", and it was the weaker
        one this gate used to make. */
     const solvableAnywhere = (slot, lvl, coarse) => {
       const j = g.scratch(lvl, slot);
@@ -702,8 +720,8 @@ async function verify(lv, i){
       }
     }
     /* Pass 2: anywhere on the board. Pass 1 only looks under the spawn,
-       which is where the ball falls - but a booster (and later a portal or a
-       wind zone) throws it out of that column, so the ramp that solves the
+       which is where the ball falls - but a wind zone (and a bounce off a
+       first ramp) throws it out of that column, so the ramp that solves the
        level is frequently nowhere near it. Coarse to find, then refine. */
     if (!best){
       for (let rx = 60; rx <= 420 && tol1 < 12; rx += 40)
@@ -744,11 +762,11 @@ async function verify(lv, i){
 
     /* fairness: the winning route must not be a lottery off a random bounce -
        this is the level 20 lesson, encoded */
-    let hits = 0, w = 0, boosts = 0, teles = 0, picked = 0;
+    let hits = 0, w = 0, boosts = 0, picked = 0;
     for (const s of seeds){
       const r = simulate(solution, s, ix);
       hits += r.hits; if (r.result === 'win') w++;
-      boosts += r.boosts; teles += r.teleports; picked += r.stars;
+      boosts += r.boosts; picked += r.stars;
     }
     const obHits = hits / seeds.length, seedWin = w / seeds.length;
 
@@ -791,14 +809,14 @@ async function verify(lv, i){
 
        The one board that DOES carry the strong negative is level 30, which is
        hand-tuned rather than generated, and tests/items.test.mjs is where it
-       is proved: no ramp layout anywhere wins it, and one booster ramp out of
-       the bag does. */
+       is proved: no ramp layout anywhere wins it, and the same ramp with a
+       spring on it does. */
     /* FIRE has to be a wall, not furniture. The claim made here is the same
-       shape as the booster's and just as honest: the UNRAMPED drop must burn,
+       shape as the spring's and just as honest: the UNRAMPED drop must burn,
        so the hazard is squarely on the line the ball takes when the player
        does nothing, and routing around it is the level. What it does not
        claim is that no route ignores the fire entirely - that would need the
-       same exhaustive negative the booster gate declined to prove.
+       same exhaustive negative the spring gate declined to prove.
 
        Note this gate can only ever be reached by a candidate that already
        HAS a verified winning solution, above. A fire that walls off every
@@ -823,11 +841,6 @@ async function verify(lv, i){
       const onLine = zones.some(z => sx >= z.x && sx <= z.x + z.w);
       if (!onLine) why.push(`${gate.requireZone} zone is off the natural drop line`);
     }
-    /* A PORTAL is load-bearing when the winning route actually goes through
-       it. Unlike a zone this one leaves a counter, so it is measured rather
-       than inferred. */
-    if (gate.requirePortal && teles / seeds.length < 0.99)
-      why.push('no solution routes through the portal');
     /* STARS never touch the trajectory - that is the mechanic - so the thing
        to prove is not that they matter but that they are REACHABLE. A star
        no route can collect is scenery that looks like content. */
@@ -838,7 +851,7 @@ async function verify(lv, i){
        happening at once, and a generator that quietly dropped one would still
        produce a perfectly winnable - and completely off-brief - board. */
     if (gate.minMechanics){
-      const n = [L.boosters, L.wind, L.slippery, L.portals, L.breakables,
+      const n = [L.boosters, L.wind, L.slippery, L.breakables,
                  L.fires, L.stars].filter(a => a.length > 0).length
               + (L.targetMove ? 1 : 0);
       if (n < gate.minMechanics) why.push(`only ${n} mechanics, wanted ${gate.minMechanics}`);
@@ -852,7 +865,7 @@ async function verify(lv, i){
     }
     return { ok: why.length === 0, why: why.join(', '),
              tol1, sols2, blind, obHits, seedWin,
-             boosts: boosts / seeds.length, teles: teles / seeds.length,
+             boosts: boosts / seeds.length,
              picked: picked / seeds.length };
   }, [lv, gate]);
 }
@@ -873,13 +886,13 @@ let totalTries = 0;
    place that says which boards are hand-written. */
 const DATA_SRC = fs.readFileSync(path.join(root, 'src/levels/levels.data.ts'), 'utf8');
 const PRESERVED = new Set(
-  (DATA_SRC.match(/\{ id:(\d+),[^}]*needsBooster\s*:\s*true/g) || [])
+  (DATA_SRC.match(/\{ id:(\d+),[^}]*needsSpring\s*:\s*true/g) || [])
     .map(m => +m.match(/id:(\d+)/)[1]));
 
 /* WHICH TARGETS ARE WRAPPED, read out of the data file the same way.
 
    `targetGift` is a designer's decoration on a milestone board - it changes no
-   geometry, so unlike `needsBooster` it is no reason to skip regenerating the
+   geometry, so unlike `needsSpring` it is no reason to skip regenerating the
    level. It IS a reason to write the flag back out afterwards: a regeneration
    that silently unwrapped level 100's target would take a milestone away and
    nothing would fail. See fmt() below. */
@@ -944,10 +957,6 @@ if (WRITE){
     if (lv.slippery && lv.slippery.length)
       out += `    slippery:[${lv.slippery.map(z =>
         `{x:${num(z.x)},y:${num(z.y)},w:${num(z.w)},h:${num(z.h)}}`).join(',')}],\n`;
-    if (lv.portals && lv.portals.length)
-      out += `    portals:[${lv.portals.map(p =>
-        `{id:'${p.id}',a:{x:${num(p.a.x)},y:${num(p.a.y)},r:${num(p.a.r)}},` +
-        `b:{x:${num(p.b.x)},y:${num(p.b.y)},r:${num(p.b.r)}${p.b.facing!=null?`,facing:${num(p.b.facing)}`:''}}}`).join(',')}],\n`;
     if (lv.breakables && lv.breakables.length)
       out += `    breakables:[${lv.breakables.map(circ).join(',')}],\n`;
     if (lv.stars && lv.stars.length)
@@ -994,12 +1003,12 @@ if (WRITE){
     .map(blk => blk.replace(/(?:,?\s*\/\*[\s\S]*?\*\/)+\s*$/, ''))
     .map(blk => blk.replace(/,\s*$/, ''))
     /* HAND-TUNED BOSSES SURVIVE A REGENERATION. A level carrying
-       `needsBooster` was authored by hand against a claim the generator
+       `needsSpring` was authored by hand against a claim the generator
        cannot make - that no ramp layout solves it - and re-rolling it would
        quietly replace a proved board with an ordinary one. Kept, and its slot
        skipped above. */
     .filter(blk => { const id = +blk.match(/id:(\d+)/)[1];
-                     if (/needsBooster\s*:\s*true/.test(blk)) return true;
+                     if (/needsSpring\s*:\s*true/.test(blk)) return true;
                      return id < FROM || id > TO; })
     .map(blk => '  ' + blk.replace(/^\s+/, ''));
   const blocks = keep.concat(accepted.map(fmt))

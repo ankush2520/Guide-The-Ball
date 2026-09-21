@@ -52,7 +52,10 @@ const placed = await page.evaluate(() => {
   };
 
   const out = [];
-  for (let li = 0; li < LEVELS.length; li++) {
+  /* Captured BEFORE the loop: the scratch board below appends to LEVELS, and
+     a bound read each time round would walk into the scratch slots. */
+  const N = LEVELS.length;
+  for (let li = 0; li < N; li++) {
     const lv = LEVELS[li];
     const sx = lv.spawn.x;
 
@@ -80,7 +83,6 @@ const placed = await page.evaluate(() => {
       ...lv.fires.map(o => ({ ...o, pad: 16 })),
       ...lv.breakables.map(o => ({ ...o, pad: 12 })),
       ...lv.boosters.map(o => ({ ...o, pad: 14 })),
-      ...lv.portals.flatMap(p => [{ ...p.a, pad: 14 }, { ...p.b, pad: 14 }]),
       { ...lv.target, pad: 34 },      // never on the target or its mouth
     ];
     const ok = (x, y) => {
@@ -104,7 +106,7 @@ const placed = await page.evaluate(() => {
        much the box is a DETOUR, which is the only thing that makes collecting
        one a decision. Ties break toward the middle of the board, where a spot
        is reachable from more layouts than a corner is. */
-    let best = null;
+    const cands = [];
     for (const path of paths) {
       if (path.tag === 'bare') continue;
       for (let i = 4; i < path.pts.length; i += 2) {
@@ -115,8 +117,22 @@ const placed = await page.evaluate(() => {
         for (const q of bare) near = Math.min(near, Math.hypot(q.x - x, q.y - y));
         const mid = 1 - Math.abs(y - CONSTS.H * 0.5) / (CONSTS.H * 0.5);
         const score = Math.min(near, 220) + mid * 40;
-        if (!best || score > best.score) best = { x, y, score, near: Math.round(near) };
+        cands.push({ x, y, score, near: Math.round(near) });
       }
+    }
+    cands.sort((a, b) => b.score - a.score);
+
+    /* ---- and PROVE the winner is not free ----
+       onBareLine() above measures against the traced samples, which are
+       points; the engine collects a box against the ball's swept path, which
+       is the line THROUGH them. A spot can clear every sample and still be
+       swept up by the drop between two of them - so the chosen spot is put on
+       a scratch board and the do-nothing drop is actually run at it. Anything
+       the bare drop collects is discarded and the next best taken. */
+    let best = null;
+    for (const c of cands.slice(0, 40)) {
+      const probe = { ...lv, boxes: [{ x: c.x, y: c.y }] };
+      if (g.simulate([], 1, g.scratch(probe, 1)).boxes === 0) { best = c; break; }
     }
     out.push(best
       ? { id: lv.id, x: best.x, y: best.y, detour: best.near }

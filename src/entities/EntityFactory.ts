@@ -14,13 +14,12 @@
    (see Entity), so the factory is a view over the level, never
    a copy of it.
    ============================================================ */
-import type { BoostRampDef, Level } from '../levels/types';
+import type { Level } from '../levels/types';
 import { Entity, type EntityKind } from './Entity';
 import { Obstacle } from './Obstacle';
 import { FireObstacle } from './FireObstacle';
 import { Breakable } from './Breakable';
 import { Booster } from './Booster';
-import { Portal } from './Portal';
 import { WindZone } from './WindZone';
 import { SlipperyZone } from './SlipperyZone';
 import { StarPickup } from './StarPickup';
@@ -28,7 +27,6 @@ import { Target } from './Target';
 import { Wall } from './Wall';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
-import { BoostRamp } from './BoostRamp';
 
 /* The registry is inherently heterogeneous - every entry pairs a different
    def type with the class that draws it - so the constructor signature is
@@ -51,12 +49,10 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   fire:      { ctor: FireObstacle, pick: lv => lv.fires },
   breakable: { ctor: Breakable,    pick: lv => lv.breakables },
   booster:   { ctor: Booster,      pick: lv => lv.boosters },
-  portal:    { ctor: Portal,       pick: lv => lv.portals },
   star:      { ctor: StarPickup,   pick: lv => lv.stars },
   box:       { ctor: MysteryBox,   pick: lv => lv.boxes },
-  // 'ramp' and 'myboost' are deliberately absent: both are player-made, not
-  // level data, and are built one at a time by createRamp()/
-  // createBoostRamp().
+  // 'ramp' is deliberately absent: it is player-made, not level data, and is
+  // built one at a time by createRamp().
 };
 
 export class EntityFactory {
@@ -69,7 +65,7 @@ export class EntityFactory {
 
   /** Every entity a level contains, already sorted into paint order.
       A stable sort keeps same-layer kinds in registry order, which is what
-      puts breakables under boosters under portals under stars. */
+      puts breakables under boosters under stars. */
   static createFromLevel(lv: Level): Entity[] {
     const out: Entity[] = [];
     for (const kind of Object.keys(REGISTRY) as EntityKind[]) {
@@ -86,11 +82,6 @@ export class EntityFactory {
     return new Ramp(seg, index);
   }
 
-  /** The player's other entity. Off the registry for the same reason the ramp
-      is: it comes out of the bag, not out of the level. */
-  static createBoostRamp(def: BoostRampDef, index = 0): BoostRamp {
-    return new BoostRamp(def, index);
-  }
 }
 
 export { Entity };

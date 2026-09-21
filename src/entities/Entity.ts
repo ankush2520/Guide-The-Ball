@@ -46,9 +46,9 @@ export type EntityKind =
   | 'target'
   | 'wall'
   | 'obstacle' | 'fire'
-  | 'breakable' | 'booster' | 'portal' | 'star' | 'box'
+  | 'breakable' | 'booster' | 'star' | 'box'
   /* the two the PLAYER makes */
-  | 'ramp' | 'myboost';
+  | 'ramp';
 
 /* Paint order, low to high. Zones are GROUND: they sit under everything so
    the ball, the ramps and the obstacles all read as being ON the board
@@ -60,15 +60,14 @@ export const LAYER: Record<EntityKind, number> = {
   /* Fire shares the obstacle's layer: they are the same class of furniture
      and are read against each other, so neither may cover the other. */
   obstacle: 3, fire: 3,
-  breakable: 4, booster: 4, portal: 4, star: 4,
+  breakable: 4, booster: 4, star: 4,
   /* A mystery box rides with the other pickups, and after the star in
      registry order so two that overlap read box-over-star - the box is the
      rarer thing and the one worth noticing. */
   box: 4,
   /* What the player placed paints ON TOP of the board's own furniture, so a
      booster dropped over an obstacle is visibly in front of it. */
-  ramp: 5, myboost: 5,
-};
+  ramp: 5,};
 
 export abstract class Entity<TDef = unknown> {
   abstract readonly kind: EntityKind;

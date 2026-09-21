@@ -83,10 +83,10 @@ place.
 | # | Country | Levels | Mechanic | Backdrop |
 |---|---|---|---|---|
 | 1 | Verdholm | 1-20 | ramps only | toon day sky: pale blue into lavender |
-| 2 | Solmesa | 21-30 | the booster ramp you bring | deep maroon into burnt orange |
+| 2 | Solmesa | 21-30 | the spring you bring | deep maroon into burnt orange |
 | 3 | Windemere | 31-40 | wind zones | muted sage-teal |
 | 4 | Frostvale | 41-50 | slippery zones | navy into ice-blue, whiter glow |
-| 5 | Zunmara Ruins | 51-60 | portals | violet into gold |
+| 5 | Zunmara Ruins | 51-60 | the gauntlet - dense obstacles | violet into gold |
 | 6 | Emberkeep | 61-70 | breakable blocks | black into fiery red |
 | 7 | Nocturne Sands | 71-80 | collectible stars | deep indigo-black |
 | 8 | Neonaka | 81-90 | two mechanics combined | magenta-cyan, the most saturated |
@@ -144,10 +144,9 @@ Flavour names layer in later as a pure data change: set `city` on a level and
 | Entity | Behaviour |
 |---|---|
 | `boosters` | The level's own booster **pad**. On entry, sets velocity to a fixed angle and speed. Deterministic, unlike the red obstacles' scatter. Fires once per entry, and the chevron drawn on it is the exact heading you leave on. |
-| `boostRamps` | The player's booster **ramp**, merged in by `LevelManager.playLevel`. Collides exactly like a ramp - same body, same mirror - and then multiplies the exit speed by `BOOST_RAMP_GAIN` (3.5x what it came in at, held to `BOOST_RAMP_CAP`). The launch decays back under the general cap by `BOOST_DECAY` a step rather than ending in a snap. Authorable, but no shipped level uses one. |
+| a ramp's `spring` | The player's **spring**, fitted to a ramp they drew. Not a body of its own: the ramp collides exactly as it always did, and then the exit speed is multiplied by `SPRING_GAIN` (4x what it came in at, held to `SPRING_CAP`). The launch decays back under the general cap by `SPRING_DECAY` a step rather than ending in a snap. |
 | `wind` | Rectangular, never moves. Constant acceleration while the ball's centre is inside; gone the instant it leaves. |
 | `slippery` | Rectangular. Raises restitution to `SLIP_REST` for bounces resolved inside it. |
-| `portals` | A pair of ends. Direction is preserved unless the exit states a `facing`. |
 | `breakables` | Bounces exactly like an obstacle - same code - then is gone for the rest of the session. |
 | `stars` | Pickups. Never touch the trajectory; the suite asserts a run is bit-identical with and without them. |
 | `boxes` | Mystery boxes. Same deal as stars - scenery to the physics - which is what made it safe to add one to all 150 levels, Verdholm's frozen twenty included. Collected on the ball's *swept segment*, not its position, because a boosted ball covers 20px a step and would otherwise pass through one. |
@@ -158,10 +157,9 @@ TERMINAL_VY)` - the fastest the base game can already go. That makes it a
 while stopping boosters and wind from compounding into speeds that tunnel
 through ramps and destroy the constant-feel trajectory model.
 
-Two ordering rules inside a substep are load-bearing: a portal fires on where
-the ball *arrived*, before anything can bounce it back out; and a booster
-fires *after* collisions, so it always wins the substep. A booster that can be
-cancelled by the wall it is pushing you into is unreadable.
+One ordering rule inside a substep is load-bearing: a booster fires *after*
+collisions, so it always wins the substep. A booster that can be cancelled by
+the wall it is pushing you into is unreadable.
 
 **A boost ramp is the one thing allowed past `BOOST_CAP`**, and the frame pays
 for it: above that speed `stepMatter()` runs the frame as several smaller
@@ -174,8 +172,7 @@ proved levels: an authored pad tops out *at* `BOOST_CAP`, so only a bar out of
 the bag ever takes that branch, and every other drop runs the identical single
 step it was proved with. The pickup and hazard tests switch to the swept form
 on those frames for the same reason (`flew` in `MatterEngine.step`), gated on
-the turbo state and on no portal having fired, since a teleport's "path" is
-not a path.
+the turbo state alone.
 
 `npm run mech` runs the per-mechanic isolation tests on purpose-built boards.
 
@@ -262,7 +259,7 @@ re-rolled: it was authored by hand against a claim the generator cannot make
 (see Items, below), and re-rolling it would swap a proved board for an
 ordinary one.
 
-Because the solver must find ramps a booster or portal throws the ball
+Because the solver must find ramps a booster or a wind zone throws the ball
 towards, it sweeps the whole board, not just the spawn column. `tests/levels.mjs`
 still only sweeps the spawn column, so from Solmesa on its "1-ramp band"
 column often reads `none` for a level that is perfectly solvable - the
@@ -572,49 +569,54 @@ Two things are not authored into a level, so each one makes a claim the level
 data cannot check for itself. `npm test` runs `tests/items.test.mjs`, which
 proves both against the real simulator.
 
-**Booster ramps** unlock at level 21, the first board of Solmesa, and the
-player is given one free the first time they get there (once, ever - a
-persisted flag). Before that the item does not exist: not in the bag, not in
-the shop, and not in a mystery box's prize table.
+**Springs** unlock at level 21, the first board of Solmesa, and the player is
+given one free the first time they get there (once, ever - a persisted flag).
+Before that the item does not exist: not in the bag, not in the shop, and not
+in a mystery box's prize table.
 
-The item is a **bar**, not a pad, and the distinction is the whole design. It
-is the ramp's silhouette and the ramp's physics - the ball mirrors off it
-exactly as it would off one the player drew - and what it adds is *speed*: the
-ball leaves at ten times the speed it arrived with. That is the one thing no
-ramp can give you, since every bounce in the game is lossy, which is what
-makes this a puzzle piece rather than a second way to aim. It was a disc with
-an arrow once; an arrow is a heading, and a heading is what the expressive
-tool already does.
+The item goes **on a ramp the player drew**, and that is the whole design. It
+has no position, no length and no angle of its own, because all three were
+already decided when they drew the line - so taking one out of the bag places
+nothing. It *arms*, and the next tap on one of their own ramps is where it
+goes. What it adds is *speed*: that ramp now throws the ball out at four times
+the speed it arrived with. That is the one thing no ramp can give you, since
+every bounce in the game is lossy, which is what makes this a puzzle piece
+rather than a second way to aim.
 
-It is **orange**, and pointedly not green: the pad it replaces wore a
-green-cyan a step away from the target's own green, and green belongs to the
-goal alone. Not the ramp's blue either - with the same silhouette, colour is
-the only thing left to separate "a bar that turns you" from "a bar that throws
-you".
+It was a **bar** once - a second piece of board that came out of the bag with
+its own fixed length, dragged and turned into place - and before that a disc
+with an arrow. Both made the player decide a second time what the ramp had
+already decided. The spring adds the one thing a ramp cannot and adds nothing
+else, so it never competes with the expressive tool.
 
-**And it is the only booster left.** Twenty-three levels carried a circular
-booster PAD - the authored kind, fired on entry along a fixed heading - and
-all twenty-three have had it removed: one game does not need two different
-objects called a booster, and the one the player owns is the one worth
-keeping. Every affected level was re-swept afterwards and all twenty-three are
-still winnable with a single ramp on every obstacle seed, so nothing shipped
-unsolvable. The pad remains a thing the engine can simulate and a level could
-still author (`tests/mechanics.mjs` holds it to its rules), but the generator
-no longer produces one, so a regeneration cannot put them back - and Solmesa,
-which was the booster country, is now the country where the booster RAMP
-unlocks and the free one lands in the bag.
+It is **brass**, and pointedly not green: green belongs to the goal alone. Not
+the ramp's blue either - it sits *on* a blue ramp, so it has to read as a
+different kind of thing from the line it is bolted to. The shape is a coil,
+because a coil says "this compresses", which is a promise about force rather
+than about direction.
 
-It reaches the physics by being merged into the level the ball plays against
-(`LevelManager.playLevel`, as `boostRamps`) rather than through any new code
-path, exactly as the old disc was.
+**And it is the only booster-like thing the player owns.** Twenty-three levels
+once carried a circular booster PAD - the authored kind, fired on entry along
+a fixed heading - and all twenty-three have had it removed. The pad remains a
+thing the engine can simulate and a level could still author
+(`tests/mechanics.mjs` holds it to its rules), but the generator no longer
+produces one, so a regeneration cannot put them back - and Solmesa, which was
+the booster country, is now the country where the SPRING unlocks and the free
+one lands in the bag.
 
-The one rule that is deliberately *not* the spare ramp's: **a booster is only
+It reaches the physics as a flag on the segment (`spring` on a `Segment`),
+which is why there is no merged copy of the level any more: the ramps the
+engine is already handed carry the item, and a spring can never end up fitted
+to a different ramp than the one the player put it on - moving, reshaping or
+deleting that ramp takes the spring with it.
+
+The one rule that is deliberately *not* the spare ramp's: **a spring is only
 charged for when a drop that actually fired it goes on to win.** A spare ramp
 is spent the moment it leaves the drawer, because what it buys is a bigger
-budget on this board whatever happens next. A booster buys the solve, so
-placing, missing, nudging and dropping again costs nothing - and neither does
-winning with one parked somewhere the ball never went, which would make "you
-only pay when it works" a lie in the one case a player would notice.
+budget on this board whatever happens next. A spring buys the solve, so
+fitting, missing, moving and dropping again costs nothing - and neither does
+winning with one on a ramp the ball never touched, which would make "you only
+pay when it works" a lie in the one case a player would notice.
 
 **Level 30 requires one.** Its target sits at the height the ball is dropped
 from, right across the board: a ramp only redirects what is already falling,
@@ -622,11 +624,11 @@ every bounce is lossy and the fall is speed-clamped, so the ball can never
 climb back to the height it started at - and it would have to, to be over
 there. The gate proves both halves and the level may not ship if either fails:
 no win from an exhaustive single-ramp sweep of the whole board at 1.5 degrees
-nor from 60,000 random two- and three-ramp layouts, and a win from one booster
-ramp out of the bag on all seven seeds, from at least ten different
-placements. The claim got sharper when the item did: an ordinary ramp in that
-spot cannot solve the board and a bar in the same spot can, so what the level
-needs is the *speed*, not the extra surface.
+nor from 60,000 random two- and three-ramp layouts, and a win from one sprung
+ramp on all seven seeds, from at least ten different positions. Because a
+spring rides on a ramp, the two halves now sweep **the same ramps** and differ
+only by the flag - a controlled comparison rather than two searches, so the
+only thing that can account for one winning and the other not is the *speed*.
 That negative is a search, not a proof - but it is a far wider search than a
 player can run by hand, and the board is built so the answer is obvious by
 construction.

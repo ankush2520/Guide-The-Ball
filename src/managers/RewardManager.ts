@@ -56,25 +56,24 @@ export const CLEAR_BONUS = [1, 2, 2, 3];
 export const STARTING_COINS = 100;
 export const BALL_PRICE = 2;
 export const RAMP_PRICE = 15;
-/* Twice a spare ramp, and the factor is the point: a booster is worth two of
+/* Twice a spare ramp, and the factor is the point: a spring is worth two of
    them, which is a price a player can hold in their head. It is also the one
-   item that is only CHARGED FOR WHEN IT WORKS - see spendExtraBooster - so
-   what it really prices is a solved board, not an attempt at one. */
-export const BOOSTER_PRICE = 30;
+   item that is only CHARGED FOR WHEN IT WORKS - see spendSpring - so what it
+   really prices is a solved board, not an attempt at one. */
+export const SPRING_PRICE = 30;
 
-/* ---- boosters unlock with Solmesa ---- */
+/* ---- springs unlock with Solmesa ---- */
 
-/* Boosters are Solmesa's mechanic, and the country opens at level 21. Before
-   that the item does not exist anywhere: not in the shop, not in the bag, and
-   not in a mystery box's prize table. A player meets the booster as a thing
-   on the BOARD first (levels 21-30 are built around one), and only then as a
-   thing they can own - which is the order that makes it teachable. */
-export const BOOSTER_UNLOCK_LEVEL = 21;
+/* Solmesa is where the game stops being only about WHERE the ball goes and
+   starts being about how fast, and the country opens at level 21. Before that
+   the spring does not exist anywhere: not in the shop, not in the bag, and
+   not in a mystery box's prize table. */
+export const SPRING_UNLOCK_LEVEL = 21;
 /** The same gate as an index into LEVELS, which is what progress is kept in. */
-export const BOOSTER_UNLOCK_INDEX = BOOSTER_UNLOCK_LEVEL - 1;
+export const SPRING_UNLOCK_INDEX = SPRING_UNLOCK_LEVEL - 1;
 /** What reaching level 21 for the first time is worth: one, free, on the
     house. An item nobody has ever held is an item nobody buys. */
-export const BOOSTER_GIFT = 1;
+export const SPRING_GIFT = 1;
 
 /* ---- what the shop sells ---- */
 
@@ -113,10 +112,10 @@ export const RAMP_BUNDLES: readonly Bundle[] = [
 /* The ramp table at twice the price, quantity for quantity, so the two shop
    sections state the same offer and a player only has to learn it once: four
    for the price of three, fourteen for the price of ten. */
-export const BOOSTER_BUNDLES: readonly Bundle[] = [
-  { n: 1, coins: BOOSTER_PRICE },
-  { n: 4, coins: BOOSTER_PRICE * 3 },
-  { n: 14, coins: BOOSTER_PRICE * 10 },
+export const SPRING_BUNDLES: readonly Bundle[] = [
+  { n: 1, coins: SPRING_PRICE },
+  { n: 4, coins: SPRING_PRICE * 3 },
+  { n: 14, coins: SPRING_PRICE * 10 },
 ];
 
 /** What `n` of something costs: the bundle price when `n` is exactly a bundle,
@@ -197,7 +196,7 @@ export function coinsFor(
 export const SPIN_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const SPIN_MS = 4200; // length of the spin animation
 
-/** What the WHEEL can pay. A booster is not on it: the wheel is a daily
+/** What the WHEEL can pay. A spring is not on it: the wheel is a daily
     fixture from level 1, and it may not hand out an item that does not exist
     until level 21. Mystery boxes can, because they know what level they are
     on - see BOX_PRIZES. */
@@ -242,7 +241,7 @@ export function unitValue(kind: PrizeKind): number {
       ? BALL_PRICE
       : kind === "ramps"
         ? RAMP_PRICE
-        : BOOSTER_PRICE;
+        : SPRING_PRICE;
 }
 
 /** What a wedge is worth in coins, which is the only way to compare them. */
@@ -254,7 +253,7 @@ export const PRIZE_UNIT: Record<FlightKind, string> = {
   coins: "coin",
   balls: "ball",
   ramps: "ramp",
-  boosters: "booster",
+  springs: "spring",
   spin: "free spin",
 };
 
@@ -270,7 +269,7 @@ export function prizeLabel(kind: FlightKind, n: number): string {
    percentage - the same convention the wheel's wedges use.
 
    Weighted, not uniform: coins are the common drop and carry
-   the table, a booster or a free spin is the one you tell
+   the table, a spring or a free spin is the one you tell
    someone about. Retuning the drop rates is editing these
    numbers and nothing else - rollBoxPrize() reads the table and
    knows nothing about what is in it.
@@ -292,7 +291,7 @@ export const BOX_PRIZES: readonly BoxPrize[] = [
   { kind: "coins", n: 25, w: 16 },
   { kind: "ramps", n: 1, w: 14 },
   { kind: "balls", n: 5, w: 10 },
-  { kind: "boosters", n: 1, w: 6 },
+  { kind: "springs", n: 1, w: 6 },
   { kind: "spin", n: 1, w: 4 },
 ];
 
@@ -334,11 +333,11 @@ export class RewardManager {
   coins = STARTING_COINS;
   /** Spare ramps, spendable on ANY level on top of its own budget. */
   extraRamps = 0;
-  /** Boosters in the bag. Unlike a ramp, one is only CHARGED FOR when the
-      drop that used it wins - see spendExtraBooster. */
-  extraBoosters = 0;
-  /** Whether the one free booster has been handed over yet. */
-  boosterGift = false;
+  /** Springs in the bag. Unlike a ramp, one is only CHARGED FOR when the drop
+      that used it wins - see spendSpring. */
+  springs = 0;
+  /** Whether the one free spring has been handed over yet. */
+  springGift = false;
   /** Which levels have had their mystery box opened, by level INDEX. */
   claimedBoxes: Record<number, boolean> = {};
   /** And which have had the gift in their TARGET opened. Same shape, same
@@ -386,7 +385,7 @@ export class RewardManager {
 
      Read off the REAL high-water mark, never `highest` - that
      getter is the dev unlock's view and reports the last level
-     in the game, which would open the shop's booster section on
+     in the game, which would open the shop's spring section on
      a brand new save.
 
      Two ways in, and they answer different questions. `_highest`
@@ -395,18 +394,18 @@ export class RewardManager {
      flag is the record of actually having been there, which is
      what covers arriving by the picker.
      ============================================================ */
-  get boostersUnlocked(): boolean {
-    return this.boosterGift || this._highest >= BOOSTER_UNLOCK_INDEX;
+  get springsUnlocked(): boolean {
+    return this.springGift || this._highest >= SPRING_UNLOCK_INDEX;
   }
 
   /** Called whenever a level is entered. The first time that level is 21 or
-      deeper, the free booster is handed over - once, ever, and persisted, so
+      deeper, the free spring is handed over - once, ever, and persisted, so
       every later visit to Solmesa passes straight through here. */
   noteLevelReached(levelId: number): boolean {
-    if (this.boosterGift || levelId < BOOSTER_UNLOCK_LEVEL) return false;
-    this.boosterGift = true;
+    if (this.springGift || levelId < SPRING_UNLOCK_LEVEL) return false;
+    this.springGift = true;
     this.saveProgress();
-    this.grantBoosters(BOOSTER_GIFT, "grant");
+    this.grantSprings(SPRING_GIFT, "grant");
     return true;
   }
 
@@ -494,7 +493,7 @@ export class RewardManager {
     this.tutorialSeen = !!s.tutorialSeen;
     this.obstacleTipSeen = !!s.obstacleTipSeen;
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
-    this.boosterGift = !!s.boosterGift;
+    this.springGift = !!s.springGift;
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -529,12 +528,12 @@ export class RewardManager {
     if (w.coins === null) {
       this.coins = STARTING_COINS;
       this.extraRamps = 0;
-      this.extraBoosters = 0;
+      this.springs = 0;
       this.saveWallet();
     } else {
       this.coins = w.coins;
       this.extraRamps = w.ramps;
-      this.extraBoosters = w.boosters;
+      this.springs = w.springs;
     }
 
     this.loadSpin();
@@ -553,8 +552,8 @@ export class RewardManager {
       delta: 0,
       reason: "load",
     });
-    this.bus.emit("boosters:changed", {
-      boosters: this.extraBoosters,
+    this.bus.emit("springs:changed", {
+      springs: this.springs,
       delta: 0,
       reason: "load",
     });
@@ -578,7 +577,7 @@ export class RewardManager {
     this.tutorialSeen = false;
     this.obstacleTipSeen = false;
     this.tipsSeen = {};
-    this.boosterGift = false;
+    this.springGift = false;
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -591,7 +590,7 @@ export class RewardManager {
     progressStore.saveBalls(this.balls);
     this.coins = STARTING_COINS;
     this.extraRamps = 0;
-    this.extraBoosters = 0;
+    this.springs = 0;
     this.saveWallet();
     this.bus.emit("balls:changed", {
       balls: this.balls,
@@ -608,8 +607,8 @@ export class RewardManager {
       delta: 0,
       reason: "load",
     });
-    this.bus.emit("boosters:changed", {
-      boosters: this.extraBoosters,
+    this.bus.emit("springs:changed", {
+      springs: this.springs,
       delta: 0,
       reason: "load",
     });
@@ -625,7 +624,7 @@ export class RewardManager {
       tutorialSeen: this.tutorialSeen,
       obstacleTipSeen: this.obstacleTipSeen,
       tips: this.tipsSeen,
-      boosterGift: this.boosterGift,
+      springGift: this.springGift,
       boxes: this.claimedBoxes,
       gifts: this.claimedGifts,
     });
@@ -668,7 +667,7 @@ export class RewardManager {
   /* ---------------- the wallet ---------------- */
 
   private saveWallet(): void {
-    progressStore.saveWallet(this.coins, this.extraRamps, this.extraBoosters);
+    progressStore.saveWallet(this.coins, this.extraRamps, this.springs);
   }
 
   private setCoins(n: number, delta: number, reason: CoinChangeReason): void {
@@ -698,18 +697,18 @@ export class RewardManager {
     delta: number,
     reason: RampChangeReason,
   ): void {
-    this.extraBoosters = Math.max(0, n);
+    this.springs = Math.max(0, n);
     this.saveWallet();
-    this.bus.emit("boosters:changed", {
-      boosters: this.extraBoosters,
+    this.bus.emit("springs:changed", {
+      springs: this.springs,
       delta,
       reason,
     });
   }
 
-  grantBoosters(n: number, reason: RampChangeReason = "grant"): void {
+  grantSprings(n: number, reason: RampChangeReason = "grant"): void {
     if (!(n > 0)) return;
-    this.setBoosters(this.extraBoosters + n, n, reason);
+    this.setBoosters(this.springs + n, n, reason);
   }
 
   /* ---------------- the shop ---------------- */
@@ -720,8 +719,8 @@ export class RewardManager {
   rampCost(n: number): number {
     return priced(RAMP_BUNDLES, n, RAMP_PRICE);
   }
-  boosterCost(n: number): number {
-    return priced(BOOSTER_BUNDLES, n, BOOSTER_PRICE);
+  springCost(n: number): number {
+    return priced(SPRING_BUNDLES, n, SPRING_PRICE);
   }
   canAfford(cost: number): boolean {
     return cost > 0 && this.coins >= cost;
@@ -750,12 +749,12 @@ export class RewardManager {
   /** Refuses outright before level 21, the same way it refuses an order the
       wallet cannot cover. The shop hides the section as well, but the gate
       belongs HERE: a panel that is merely not rendered is not a rule. */
-  buyBoosters(n: number): boolean {
-    if (!this.boostersUnlocked) return false;
-    const cost = this.boosterCost(n);
+  buySprings(n: number): boolean {
+    if (!this.springsUnlocked) return false;
+    const cost = this.springCost(n);
     if (!this.canAfford(cost)) return false;
     this.setCoins(this.coins - cost, -cost, "buy");
-    this.setBoosters(this.extraBoosters + (n | 0), n | 0, "buy");
+    this.setBoosters(this.springs + (n | 0), n | 0, "buy");
     return true;
   }
 
@@ -776,28 +775,28 @@ export class RewardManager {
      moment it is taken out of the drawer, because what it buys
      is a bigger budget on this board whatever happens next.
 
-     A booster buys the SOLVE. Placing one costs nothing, missing
+     A spring buys the SOLVE. Fitting one costs nothing, missing
      with one costs nothing - the player is free to drop, watch,
      move it and drop again all day - and it is only taken out of
      the bag when the drop it was part of actually wins. Which is
      why this is its own path and not a second caller of the
      ramp's: the two are spent at different moments on purpose.
      ============================================================ */
-  spendExtraBooster(): boolean {
-    if (this.extraBoosters <= 0) return false;
-    this.setBoosters(this.extraBoosters - 1, -1, "use");
+  spendSpring(): boolean {
+    if (this.springs <= 0) return false;
+    this.setBoosters(this.springs - 1, -1, "use");
     return true;
   }
 
   /** Test-only, like setBallsForTest. */
-  setWalletForTest(coins: number, ramps: number, boosters?: number): void {
+  setWalletForTest(coins: number, ramps: number, springs?: number): void {
     const c = Math.max(0, coins | 0),
       r = Math.max(0, ramps | 0);
     this.setCoins(c, c - this.coins, "grant");
     this.setRamps(r, r - this.extraRamps, "grant");
-    if (boosters !== undefined) {
-      const b = Math.max(0, boosters | 0);
-      this.setBoosters(b, b - this.extraBoosters, "grant");
+    if (springs !== undefined) {
+      const b = Math.max(0, springs | 0);
+      this.setBoosters(b, b - this.springs, "grant");
     }
   }
 
@@ -1009,8 +1008,8 @@ export class RewardManager {
       than re-rolled: a prize that cannot be paid must not be able to come up
       at all, or the weights stop meaning what BOX_PRIZES says they mean. */
   boxTableFor(levelId: number): readonly BoxPrize[] {
-    const ok = this.boostersUnlocked && levelId >= BOOSTER_UNLOCK_LEVEL;
-    return ok ? BOX_PRIZES : BOX_PRIZES.filter((p) => p.kind !== "boosters");
+    const ok = this.springsUnlocked && levelId >= SPRING_UNLOCK_LEVEL;
+    return ok ? BOX_PRIZES : BOX_PRIZES.filter((p) => p.kind !== "springs");
   }
 
   /** Weighted pick over that table - the same walk the wheel uses. */
@@ -1044,8 +1043,8 @@ export class RewardManager {
       case "ramps":
         this.grantRamps(p.n, "box");
         break;
-      case "boosters":
-        this.grantBoosters(p.n, "box");
+      case "springs":
+        this.grantSprings(p.n, "box");
         break;
       case "spin":
         this.grantBonusSpin(p.n);

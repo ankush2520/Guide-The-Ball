@@ -42,37 +42,44 @@ console.log('\nBOOSTER — deterministic redirect, fires once on entry');
     'and is deterministic - a different RNG seed changes nothing');
 }
 
-console.log(`\nBOOST RAMP — the player's bar: bounces like a ramp, leaves x${MECH.BOOST_RAMP_GAIN} faster`);
+console.log(`\nSPRING — fitted to the player's own ramp, leaves x${MECH.SPRING_GAIN} faster`);
 {
-  /* The item as the bag hands it out, built by the game's own helper so a
-     retuned length or thickness moves this test with it. Laid flat under the
-     spawn: the ball arrives at terminal velocity straight down, so what comes
-     off the bar is the cleanest possible reading of the mechanic. */
-  const bar=await p.evaluate(()=>window.__gtb.bar(240,300,0));
-  const plain=await run({...base});
-  const t=await run({...base, boostRamps:[bar]});
-  const ix=t.samples.findIndex(s=>s.boosts===1);
+  /* THE ITEM IS A FLAG ON A RAMP. There is no helper to build one any more,
+     because there is no shape to build: a sprung ramp is the ramp the player
+     drew with `spring` on it, and that is exactly what is passed here. Laid
+     flat under the spawn, so the ball arrives at terminal velocity straight
+     down and what comes off is the cleanest possible reading of the mechanic. */
+  const flat={x1:180,y1:300,x2:300,y2:300};
+  const sprung={...flat,spring:true};
+  const plain=await run({...base},[flat]);
+  const t=await run({...base},[sprung]);
+  const ix=t.samples.findIndex(s=>s.springs===1);
   const inSp=ix>0?t.samples[ix-1].sp:0, outSp=ix>=0?t.samples[ix].sp:0;
-  chk(ix>=0,'the bar fires when the ball reaches it');
-  chk(Math.abs(plain.samples[ix]?.sp-CONSTS.TERMINAL_VY)<0.2,
-    'the same drop without one is at terminal velocity there',
-    `${plain.samples[ix]?.sp.toFixed(2)} vs ${CONSTS.TERMINAL_VY}`);
+  chk(ix>=0,'the spring fires when the ball reaches the ramp it is on');
+  /* The SAME ramp without the spring is the control: this is the one
+     comparison that says the spring is doing the work and not the line. */
+  chk(plain.samples.every(s=>s.springs===0),
+    'the same ramp without one never fires');
+  chk(Math.abs(plain.samples[ix]?.sp-CONSTS.TERMINAL_VY*CONSTS.RESTITUTION)<1.2,
+    'and leaves the ball slower than it arrived, the way every bounce does',
+    `${plain.samples[ix]?.sp.toFixed(2)} off a plain ramp vs ${outSp.toFixed(2)} off a sprung one`);
   /* THE WHOLE CLAIM, and asserted against the constant rather than a number:
      the exit speed is the ENTRY speed times the gain, held to the item's own
      ceiling. A ramp can only ever give back less than it took. */
-  const want=Math.min(inSp*MECH.BOOST_RAMP_GAIN, MECH.BOOST_RAMP_CAP);
+  const want=Math.min(inSp*MECH.SPRING_GAIN, MECH.SPRING_CAP);
   chk(Math.abs(outSp-want)<0.5,
-    `it leaves at x${MECH.BOOST_RAMP_GAIN} the speed it arrived at`,
+    `it leaves at x${MECH.SPRING_GAIN} the speed it arrived at`,
     `${inSp.toFixed(2)} -> ${outSp.toFixed(2)}, want ${want.toFixed(2)}`);
   /* Against the CAP rather than against a number: the claim is that a launch
      leaves the board's own speed limit behind, and it has to keep holding
-     when the gain is retuned - which it has been, from 10 to 3.5. */
+     when the gain is retuned. */
   chk(outSp>MECH.SPEED_CAP*2,
     'which is more than twice anything the board can otherwise reach',
     `${outSp.toFixed(1)} vs the general cap ${MECH.SPEED_CAP.toFixed(1)}`);
-  /* IT IS A RAMP, not a launcher: the heading is the mirror of the bounce, so a
-     flat bar sends a ball that fell straight down straight back UP. */
-  chk(t.samples[ix].vy<0,'and it mirrors like a ramp - a flat bar throws the ball back up',
+  /* IT IS STILL A RAMP: the heading is the mirror of the bounce, so a flat one
+     sends a ball that fell straight down straight back UP. The spring adds
+     speed and never a direction. */
+  chk(t.samples[ix].vy<0,'and it still mirrors like a ramp - a flat one throws the ball back up',
     `vy ${t.samples[ix].vy.toFixed(1)}`);
 
   // the launch bleeds back into the board's own rules rather than stopping dead
@@ -81,37 +88,34 @@ console.log(`\nBOOST RAMP — the player's bar: bounces like a ramp, leaves x${M
   for(let i=1;i<decay.length;i++) if(decay[i]>decay[i-1]+1e-9) falling=false;
   chk(falling,'the launch decays every step instead of ending in a snap',
     decay.slice(0,6).map(v=>v.toFixed(0)).join(' -> '));
-  /* Each step is BOOST_DECAY of the last, which is what "it settles" is made
-     of. Measured on this board and not on the settling itself, because a ball
-     launched straight up off a flat bar leaves the top of the board long
-     before it is done slowing down - the cage below is where it really lands. */
   let ratios=[];
   for(let i=1;i<6;i++) ratios.push(decay[i]/decay[i-1]);
-  chk(ratios.every(r=>Math.abs(r-MECH.BOOST_DECAY)<0.02),
-    `at the rate the constant states - x${MECH.BOOST_DECAY} a step`,
+  chk(ratios.every(r=>Math.abs(r-MECH.SPRING_DECAY)<0.02),
+    `at the rate the constant states - x${MECH.SPRING_DECAY} a step`,
     ratios.map(r=>r.toFixed(3)).join(' '));
 
-  chk(t.samples[t.samples.length-1].boosts===1,
-    'one contact is one launch - a two-sided bar does not multiply a ball it just fired',
-    `${t.samples[t.samples.length-1].boosts} launch(es)`);
-  const r2=await run({...base, boostRamps:[bar]},[],7);
+  chk(t.samples[t.samples.length-1].springs===1,
+    'one contact is one launch - a two-sided ramp does not multiply a ball it just fired',
+    `${t.samples[t.samples.length-1].springs} launch(es)`);
+  const r2=await run({...base},[sprung],7);
   chk(JSON.stringify(r2.samples.map(s=>[s.x,s.y]))===JSON.stringify(t.samples.map(s=>[s.x,s.y])),
     'and it is deterministic - a different RNG seed changes nothing');
 
-  /* NO TUNNELLING, which is the one thing a ten-times launch could break.
-     A sealed cage of ramps, a bar inside it, and the ball must never get out:
-     leaving is passing through 9 units of ramp, and nothing else. */
+  /* NO TUNNELLING, which is the one thing a four-times launch could break.
+     A sealed cage of ramps, two sprung ones inside it, and the ball must never
+     get out: leaving is passing through 9 units of ramp, and nothing else. */
   const cage=[{x1:30,y1:120,x2:450,y2:120},{x1:30,y1:700,x2:450,y2:700},
               {x1:30,y1:120,x2:30,y2:700},{x1:450,y1:120,x2:450,y2:700}];
   const caged={...base,spawn:{x:240,y:140},target:{x:20,y:60,r:8}};
+  const at=(cx,cy,deg,len=120)=>{const a=deg*Math.PI/180,hx=Math.cos(a)*len/2,hy=Math.sin(a)*len/2;
+    return {x1:cx-hx,y1:cy-hy,x2:cx+hx,y2:cy+hy,spring:true};};
   let out=0,runs=0,peak=0;
   for(let ang=0;ang<180;ang+=15)
     for(const seed of [1,5]){
-      const bars=await p.evaluate(a=>[window.__gtb.bar(240,300,a),window.__gtb.bar(240,520,-a)],ang);
       const r=await p.evaluate(([lv,ramps,seed])=>{
         const ix=window.__gtb.scratch(lv);
         return window.__gtb.simulate(ramps,seed,ix);
-      },[{...caged,boostRamps:bars},cage,seed]);
+      },[caged,[...cage,at(240,300,ang),at(240,520,-ang)],seed]);
       runs++; peak=Math.max(peak,r.spdMax);
       if(r.result==='out') out++;
     }
@@ -122,14 +126,14 @@ console.log(`\nBOOST RAMP — the player's bar: bounces like a ramp, leaves x${M
   const cageTrace=await p.evaluate(([lv,ramps])=>{
     const ix=window.__gtb.scratch(lv);
     return window.__gtb.trace(ramps,1,ix);
-  },[{...caged,boostRamps:[await p.evaluate(()=>window.__gtb.bar(240,300,20))]},cage]);
-  const fired=cageTrace.samples.findIndex(s=>s.boosts===1);
+  },[caged,[...cage,at(240,300,20)]]);
+  const fired=cageTrace.samples.findIndex(s=>s.springs===1);
   const back=cageTrace.samples.slice(fired).findIndex(s=>s.sp<=MECH.SPEED_CAP+1e-6);
   chk(fired>=0&&back>0,'and a launch that stays on the board settles back under the general cap',
     back>0?`${back} steps after firing`:'it never settled');
-  chk(peak>MECH.BOOST_RAMP_CAP*0.9,'and the cage really did get it up to speed',
-    `peak ${peak.toFixed(0)} against the item's ceiling ${MECH.BOOST_RAMP_CAP}`);
-  chk(peak<=MECH.BOOST_RAMP_CAP+1e-6,'two bars compounding are still held to that ceiling',
+  chk(peak>MECH.SPRING_CAP*0.9,'and the cage really did get it up to speed',
+    `peak ${peak.toFixed(0)} against the item's ceiling ${MECH.SPRING_CAP}`);
+  chk(peak<=MECH.SPRING_CAP+1e-6,'two springs compounding are still held to that ceiling',
     `peak ${peak.toFixed(2)}`);
 }
 
@@ -163,26 +167,6 @@ console.log('\nSLIPPERY_ZONE — keeps more of the bounce');
     `apex ${apex(dry).toFixed(1)}px vs ${apex(slip).toFixed(1)}px (lower y = higher)`);
   chk(MECH.SLIP_REST>MECH.RESTITUTION,'and the constant really is less lossy',
     `${MECH.SLIP_REST} vs ${MECH.RESTITUTION}`);
-}
-
-console.log('\nPORTAL — paired, direction preserved, no ping-pong');
-{
-  const pl={...base, portals:[{id:'p1',a:{x:240,y:300,r:26},b:{x:100,y:500,r:26}}]};
-  const t=await run(pl);
-  const jump=t.samples.findIndex(s=>s.teleports===1);
-  chk(jump>0,'the ball teleports');
-  const pre=t.samples[jump-1], post=t.samples[jump];
-  chk(Math.abs(post.x-100)<12,'it arrives at the paired exit',`x=${post.x.toFixed(1)}`);
-  chk(Math.abs(post.vx-pre.vx)<1e-9&&Math.abs(post.vy-pre.vy)<0.4,
-    'carrying its direction through unchanged');
-  chk(t.samples[t.samples.length-1].teleports<=2,
-    'and does not ping-pong between the pair',
-    `${t.samples[t.samples.length-1].teleports} teleport(s), cooldown ${MECH.PORTAL_CD} substeps`);
-  const faced=await run({...base,
-    portals:[{id:'p1',a:{x:240,y:300,r:26},b:{x:100,y:400,r:26,facing:0}}]});
-  const j2=faced.samples.findIndex(s=>s.teleports===1);
-  chk(j2>0&&faced.samples[j2].vx>4,'an exit facing rotates the ball to it',
-    `vx=${faced.samples[j2].vx.toFixed(2)} after a facing of 0 deg (right)`);
 }
 
 console.log('\nBREAKABLE — bounces like an obstacle, then is gone');

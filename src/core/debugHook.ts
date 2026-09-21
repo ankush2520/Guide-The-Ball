@@ -13,7 +13,7 @@
    ============================================================ */
 import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
-import { RAMP_LEN, BOOSTER_ANGLE } from '../items/items';
+import { RAMP_LEN } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
@@ -24,7 +24,7 @@ import * as PAL from '../render/palette';
 import type { GameServices } from './GameContext';
 import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
          STARTING_COINS, BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
-         BOOSTER_PRICE, BOOSTER_BUNDLES, BOOSTER_UNLOCK_LEVEL, BOX_PRIZES,
+         SPRING_PRICE, SPRING_BUNDLES, SPRING_UNLOCK_LEVEL, BOX_PRIZES,
          COIN_CLEAR, coinsFor,
          SPIN_PRIZES, SPIN_COOLDOWN_MS, SPIN_MS } from '../managers/RewardManager';
 import { BALLS_KEY, SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
@@ -80,39 +80,30 @@ const physics = {
              RAMP: PAL.RAMP, WALL: PAL.WALL, BALL: PAL.BALL, BOOST: PAL.BOOST },
   isLightSky: (hex: string) => PAL.isLightSky(hex),
   MECH: {
-    SPEED_CAP: C.SPEED_CAP, SLIP_REST: C.SLIP_REST, PORTAL_CD: C.PORTAL_CD,
+    SPEED_CAP: C.SPEED_CAP, SLIP_REST: C.SLIP_REST,
     STAR_R: C.STAR_R, BOX_R: C.BOX_R, WIND_CAP: C.WIND_CAP, RESTITUTION: C.RESTITUTION,
     BOOST_GAIN: C.BOOST_GAIN, BOOST_CAP: C.BOOST_CAP, BOOST_STEPS: C.BOOST_STEPS,
-    /* The boost RAMP's own mechanism, published beside the pads' so a test can
+    /* The SPRING's own mechanism, published beside the pads' so a test can
        hold each to its own rules rather than to numbers copied out of here. */
-    BOOST_HT: C.BOOST_HT, BOOST_LEN: C.BOOST_LEN,
-    BOOST_RAMP_GAIN: C.BOOST_RAMP_GAIN, BOOST_RAMP_CAP: C.BOOST_RAMP_CAP,
-    BOOST_DECAY: C.BOOST_DECAY, BOOST_RAMP_CD: C.BOOST_RAMP_CD,
+    SPRING_GAIN: C.SPRING_GAIN, SPRING_CAP: C.SPRING_CAP,
+    SPRING_DECAY: C.SPRING_DECAY, SPRING_CD: C.SPRING_CD,
     BOOST_SUB_PX: C.BOOST_SUB_PX, BOOST_SUBSTEPS_MAX: C.BOOST_SUBSTEPS_MAX,
   },
   BALLS: { key: BALLS_KEY, start: STARTING_BALLS,
            adReward: AD_REWARD, clearBonus: CLEAR_BONUS.slice() },
   WALLET: { key: WALLET_KEY, startCoins: STARTING_COINS,
             ballPrice: BALL_PRICE, rampPrice: RAMP_PRICE,
-            boosterPrice: BOOSTER_PRICE,
+            springPrice: SPRING_PRICE,
             clearTable: COIN_CLEAR.map(r => r.slice()) },
-  /* The booster item and the box table, published so the suite can hold the
-     shipped numbers to the rules rather than to numbers copied out of the UI.
+  /* The spring and the box table, published so the suite can hold the shipped
+     numbers to the rules rather than to numbers copied out of the UI.
 
-     `bar()` builds the item exactly as the bag does - one fixed length, turned
-     to `deg` about a point - so a headless probe places the thing the player
-     owns rather than a segment that merely resembles it. */
-  BOOSTER: { unlockLevel: BOOSTER_UNLOCK_LEVEL,
-             len: C.BOOST_LEN, ht: C.BOOST_HT,
-             gain: C.BOOST_RAMP_GAIN, cap: C.BOOST_RAMP_CAP,
-             angle: BOOSTER_ANGLE,
-             bundles: BOOSTER_BUNDLES.map(b => ({ ...b })) },
-  /** A boost ramp of the item's own length, centred on (cx, cy) at `deg`. */
-  bar(cx: number, cy: number, deg: number) {
-    const a = deg * Math.PI / 180;
-    const hx = Math.cos(a) * C.BOOST_LEN / 2, hy = Math.sin(a) * C.BOOST_LEN / 2;
-    return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy };
-  },
+     There is no builder here any more. The item has no shape of its own: a
+     sprung ramp is a ramp with `spring: true` on it, which a headless probe
+     writes onto whatever ramp it was going to draw anyway. */
+  SPRING: { unlockLevel: SPRING_UNLOCK_LEVEL,
+            gain: C.SPRING_GAIN, cap: C.SPRING_CAP,
+            bundles: SPRING_BUNDLES.map(b => ({ ...b })) },
   BOX_PRIZES: BOX_PRIZES.map(p => ({ ...p })),
   SPIN: { key: SPIN_KEY, cooldownMs: SPIN_COOLDOWN_MS, animMs: SPIN_MS,
           prizes: SPIN_PRIZES.map(p => ({ kind: p.kind, n: p.n, w: p.w })) },
@@ -156,7 +147,7 @@ const physics = {
     while (!b.result && out.length < 900) {
       engine.step(b, lv, ramps);
       out.push({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, sp: Math.hypot(b.vx, b.vy),
-                 boosts: b.boosts, teleports: b.teleports, stars: b.stars,
+                 boosts: b.boosts, springs: b.springs, stars: b.stars,
                  broken: b.broken.filter(Boolean).length });
     }
     const traced = { result: b.result, steps: b.steps, samples: out };
@@ -223,7 +214,7 @@ export function installGameHook(s: GameServices): void {
         result: b ? b.result : c.lastResult,
         ball: b ? { x: b.x, y: b.y, px: b.px, py: b.py, vx: b.vx, vy: b.vy,
                     hits: b.hit.n, speed: b.speed } : null,
-        mech: b ? { boosts: b.boosts, teleports: b.teleports, stars: b.stars,
+        mech: b ? { boosts: b.boosts, springs: b.springs, stars: b.stars,
                     broken: b.broken.slice() }
                 : { broken: levels.sessionBroken.slice() },
       };
@@ -244,45 +235,47 @@ export function installGameHook(s: GameServices): void {
     setBalls: (n: number) => rewards.setBallsForTest(n),
     coins: () => rewards.coins,
     spareRamps: () => rewards.extraRamps,
-    setWallet: (coins: number, ramps: number, boosters?: number) =>
-      rewards.setWalletForTest(coins, ramps, boosters),
+    setWallet: (coins: number, ramps: number, springs?: number) =>
+      rewards.setWalletForTest(coins, ramps, springs),
+    wallet: () => ({ coins: rewards.coins, ramps: rewards.extraRamps,
+                     springs: rewards.springs }),
+    /** Slide a ramp, which is what a drag on its middle does. */
+    moveRamp: (ix: number, dx: number, dy: number) => {
+      levels.moveRampBy(ix, dx, dy);
+      c.notifyRampsChanged();
+    },
     buyBalls: (n: number) => rewards.buyBalls(n),
     buyRamps: (n: number) => rewards.buyRamps(n),
-    buyBoosters: (n: number) => rewards.buyBoosters(n),
-    boosterCost: (n: number) => rewards.boosterCost(n),
+    buySprings: (n: number) => rewards.buySprings(n),
+    springCost: (n: number) => rewards.springCost(n),
     /* Everything about the booster item in one read: what is owned, what is
        on this board, whether the shop and the bag may show it at all. */
-    boosterInfo: () => ({
-      owned: rewards.extraBoosters,
-      unlocked: rewards.boostersUnlocked,
-      gifted: rewards.boosterGift,
-      placed: levels.boostersUsed,
-      paid: levels.boostersPaid,
-      paidFlags: levels.boosterPaid.slice(),
-      free: c.itemCount('booster').left,
-      selected: c.selectedBooster,
-      onBoard: levels.placedBoosters.map(b => ({ ...b })),
-      boostOffset: levels.boostOffset,
+    springInfo: () => ({
+      owned: rewards.springs,
+      unlocked: rewards.springsUnlocked,
+      gifted: rewards.springGift,
+      fitted: levels.springsUsed,
+      paid: levels.springsPaid,
+      free: c.itemCount('spring').left,
+      armed: c.armedSpring,
+      /** Which ramp indices carry one. */
+      onRamps: levels.rampList
+        .map((r: Segment, i: number) => (r.spring ? i : -1)).filter((i: number) => i >= 0),
       /* Which of them the LIVE ball has fired off, straight off the engine -
          the same array the controller charges from. */
-      fired: c.ball ? c.ball.firedBoost.slice() : [],
-      inShop: !!document.getElementById('shop-boosters-head'),
-      inBag: !!document.getElementById('btn-item-booster'),
+      fired: c.ball ? c.ball.firedSpring.slice() : [],
+      inShop: !!document.getElementById('shop-springs-head'),
+      inBag: !!document.getElementById('btn-item-spring'),
     }),
-    placeBooster: () => c.placeItem('booster'),
-    aimBooster: (ix: number, x: number, y: number) => {
-      levels.aimBoosterTo(ix, { x, y });
-      c.boosterAdjusted();
+    /** Arm one, exactly as the bag's Use button does. */
+    takeSpring: () => c.placeItem('spring'),
+    /** ...and land it on a ramp, exactly as the next tap would. */
+    fitSpring: (rampIx: number) => c.fitSpring(rampIx),
+    unfitSpring: (rampIx: number) => {
+      const owed = levels.unspringRamp(rampIx);
+      c.notifyRampsChanged();
+      return owed;
     },
-    /** Put the bar's MIDDLE on (x, y) - which is what "where it is" means for
-        an item that is a segment, and what the drag moves it by. */
-    moveBoosterTo: (ix: number, x: number, y: number) => {
-      const b = levels.boosterAt(ix);
-      if (!b) return;
-      levels.moveBoosterBy(ix, x - (b.x1 + b.x2) / 2, y - (b.y1 + b.y2) / 2);
-      c.boosterAdjusted();
-    },
-    removeBooster: (ix: number) => c.removeBooster(ix),
     /* Mystery boxes: what this board carries, what has been claimed, and the
        table a given level is allowed to roll on. */
     boxInfo: () => ({
@@ -404,7 +397,7 @@ export function installGameHook(s: GameServices): void {
     skipTutorial: () => c.tutorialSkip(),
     tutorialNext: () => c.tutorialNext(),
     /** Take an item out of the bag, exactly as the tray does. */
-    placeItem: (kind: 'booster' = 'booster') => c.placeItem(kind),
+    placeItem: (kind: 'spring' = 'spring') => c.placeItem(kind),
     /* Drawing a ramp, as one gesture rather than three calls - the suite
        drives the real pointer handlers as well, and this is for the places
        that only need a ramp on the board. */

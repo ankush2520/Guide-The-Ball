@@ -171,54 +171,49 @@ export const BOOST_CAP = 13;
 export const BOOST_STEPS = 18;       // 0.3s
 
 /* ============================================================
-   THE PLAYER'S BOOST RAMP
+   THE PLAYER'S SPRING
 
-   The item out of the bag is a BAR now, not a pad: the ramp's
-   silhouette, and the ramp's physics - the ball mirrors off it
-   exactly as it does off one the player drew. The one difference
-   is what leaves: the exit speed is MULTIPLIED, where a ramp
-   only redirects.
+   The item out of the bag is not a piece of board any more. It
+   is a SPRING, and it goes ON A RAMP THE PLAYER DREW: the ramp
+   keeps its own position, length, angle and physics, and the one
+   thing that changes is how hard it throws.
 
-   None of this touches the authored pads above. Twenty-three
-   shipped levels were proved winnable against BOOST_GAIN and
-   BOOST_CAP, so those two numbers - and the path that reads them
-   - are frozen, and everything here is a second, independent
-   mechanism that only a bar out of the bag can arm.
+   That is what makes it a different question from the ramp
+   itself. A ramp decides WHERE the ball goes and every bounce in
+   this game is lossy, so no amount of drawing can give the ball
+   back speed it has lost. The spring is the only thing in the
+   game that can, and it is bolted to the player's own line
+   rather than to a shape the item chose - so the aiming is
+   theirs and the power is the item's.
+
+   None of this touches the authored booster PADS, which are a
+   level's own furniture and a different mechanic (see
+   BOOST_GAIN above). Those are frozen and no shipped level
+   carries one.
    ============================================================ */
-
-/* Half-thickness, and it is what the body is built at as well as what is
-   painted: thicker than a drawn ramp's 4.5, because this one is a machine
-   rather than a line, and because a fat bar is a fatter thing for a ball
-   moving several times normal speed to find. */
-export const BOOST_HT = 7;
-
-/* THE FIXED LENGTH. A ramp is whatever length the drag made it; an item has
-   one shape, and choosing where it goes and which way it lies is the whole
-   move. Shorter than the solver's 120-unit ramp so the two never read as the
-   same object at a glance. */
-export const BOOST_LEN = 96;
 
 /* THE MULTIPLIER, applied to the speed the ball came IN with.
 
-   It shipped at 10 and came down to 3.5 - 0.35x of that - after the board was
-   played at it: a ten-times launch crossed the whole board in eight frames,
-   which is a ball that has teleported rather than one you watched go. At 3.5
-   a ball arriving at terminal (9) leaves at 31, still nearly three times
-   anything the rest of the board can reach and far past what any bounce can
-   give back, and it stays on screen long enough to read.
+   Four times. A ball arriving at terminal (9) leaves at 36, which is nearly
+   three times anything the rest of the board can reach and far past what any
+   bounce can give back - and it is still slow enough to watch. The predecessor
+   of this item shipped at 10 and came down to 3.5 after the board was played
+   at it: a ten-times launch crossed the whole board in eight frames, which is
+   a ball that has teleported rather than one you watched go.
 
    See tests/mechanics.mjs for the measured curve and tests/items.test.mjs for
-   the proof that level 30 is still solvable with one of these - and still not
+   the proof that level 30 is solvable with one of these and still not
    solvable without. */
-export const BOOST_RAMP_GAIN = 3.5;
+export const SPRING_GAIN = 4;
 
 /* The ceiling on a launch. Not a tunnelling guard - the substepping below is
-   what keeps a fast ball colliding honestly - but a sanity limit, so two bars
-   in a row cannot compound into a number that eats the step budget in
-   substeps for no visible gain. Kept at the gain's own scale: the fastest
-   single launch is 3.5 x the general cap, and this is a shade over it, so one
-   bar is never clipped and a chain of them still settles somewhere sane. */
-export const BOOST_RAMP_CAP = 46;
+   what keeps a fast ball colliding honestly - but a sanity limit, so two
+   sprung ramps in a row cannot compound into a number that eats the step
+   budget in substeps for no visible gain. Kept at the gain's own scale: the
+   fastest single launch is 4x the general cap (50.9), and this is a shade
+   over it, so one spring is never clipped and a chain of them still settles
+   somewhere sane. */
+export const SPRING_CAP = 52;
 
 /* How the launch comes back DOWN to the board's own rules. A hard window that
    ended at the general cap snapped the ball from 90 to 12.7 in one frame,
@@ -226,23 +221,23 @@ export const BOOST_RAMP_CAP = 46;
    off geometrically instead, so the ball visibly settles. At 0.86 a 90-unit
    launch is back under the general cap in about 13 steps (~0.2s), which is
    roughly the time it takes to cross the board. */
-export const BOOST_DECAY = 0.86;
+export const SPRING_DECAY = 0.86;
 
-/* Steps before the same bar may fire again. A bar is two-sided and a turbo
-   ball can come back through it within a frame or two of leaving; without
-   this, one bar and one unlucky angle is a ball multiplying itself every
-   other step. Long enough to have left, short enough that a genuine second
-   pass across the board still gets its kick. */
-export const BOOST_RAMP_CD = 12;
+/* Steps before the same spring may fire again. A ramp is two-sided and a
+   turbo ball can come back through it within a frame or two of leaving;
+   without this, one spring and one unlucky angle is a ball multiplying itself
+   every other step. Long enough to have left, short enough that a genuine
+   second pass across the board still gets its kick. */
+export const SPRING_CD = 12;
 
 /* ---- how a turbo ball is kept colliding ----
 
    Matter runs one 1/60s step with no continuous collision detection, so a
-   ball moving further than a bar is thick passes clean THROUGH it. BOOST_CAP
+   ball moving further than a ramp is thick passes clean THROUGH it. BOOST_CAP
    above is that limit for the authored pads: 13 units a frame, inside a
    ramp's 9-unit thickness.
 
-   A boost ramp deliberately exceeds it, so the frame is SUBDIVIDED instead:
+   A spring deliberately exceeds it, so the frame is SUBDIVIDED instead:
    the engine runs as many Matter steps as it takes to keep each one under
    BOOST_SUB_PX. Matter's own time correction rescales the Verlet velocity
    when the delta changes, and gravity integrates to the same total over the
@@ -255,14 +250,6 @@ export const BOOST_SUB_PX = 3;
 export const BOOST_SUBSTEPS_MAX = 48;
 
 export const SLIP_REST = 0.985;      // restitution inside a slippery zone
-
-/* Substeps of immunity after a teleport. This alone is NOT enough: the ball
-   arrives at the centre of the exit and is still well inside it when the
-   count runs out, so a pair with any distance between them ping-pongs. The
-   real guard is portalHold - the exit will not fire again until the ball has
-   actually left it. The cooldown remains as a second line for a level that
-   puts two ends close enough to touch. */
-export const PORTAL_CD = 12;
 
 export const STAR_R = 13;            // star collection radius (plus the ball's)
 /* A mystery box is a PRESENT, and a present has to be big enough to read as

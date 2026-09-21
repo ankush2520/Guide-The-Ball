@@ -51,7 +51,7 @@ export const COUNTRIES: Country[] = [
 
   /* Apricot into cream - a warm morning. The booster's teal chevron is still
      the one cool thing on the board. */
-  { id: 2, name: 'Solmesa', from: 21,  to: 30,  mechanic: 'the booster ramp you bring',
+  { id: 2, name: 'Solmesa', from: 21,  to: 30,  mechanic: 'the spring you bring',
     sky: ['#ffe5d6', '#ffeedd', '#fff5e6'], wash: '230,130,80', accent: '#ff8a3d' },
 
   /* Rose-coral heat haze. Breakables are orange and fire is orange-red, so the
@@ -74,9 +74,10 @@ export const COUNTRIES: Country[] = [
   { id: 4, name: 'Frostvale', from: 61,  to: 70,  mechanic: 'slippery zones',
     sky: ['#d2f1f7', '#e3f7fa', '#f4fcfd'], wash: '90,180,215', accent: '#27b0e0' },
 
-  /* Lilac settling into warm sandstone: the two-colour split is the point,
-     because portals come in pairs. */
-  { id: 5, name: 'Zunmara Ruins', from: 71,  to: 80,  mechanic: 'portals',
+  /* Lilac settling into warm sandstone - a ruin at dusk. It was the portal
+     country, and the two-colour split was the pair; what is left is the
+     dusk, which suits a gauntlet of broken stone just as well. */
+  { id: 5, name: 'Zunmara Ruins', from: 71,  to: 80,  mechanic: 'the gauntlet - dense obstacles',
     sky: ['#f0e5fb', '#f1e6fb', '#fbf3e3'], wash: '150,100,215', accent: '#f5a623' },
 
   /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,

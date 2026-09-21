@@ -11,7 +11,7 @@ Country 1 (levels 1-20) is the original hand-designed plan, frozen. Countries 2-
 | 2 | 21-30 | Solmesa | sunbaked American Southwest mesa | Boosters |
 | 3 | 31-40 | Windemere | windswept Mongolian/Patagonian steppe | Wind zones (randomized gusts — direction/strength vary per level, not just static push) |
 | 4 | 41-50 | Frostvale | Nordic/Siberian tundra | Slippery zones |
-| 5 | 51-60 | Zunmara Ruins | lost Incan/Mayan-style ruins | Portals |
+| 5 | 51-60 | Zunmara Ruins | lost Incan/Mayan-style ruins | The gauntlet - dense obstacles |
 | 6 | 61-70 | Emberkeep | Icelandic/Hawaiian volcanic fortress | Breakable blocks + **fire obstacles** (new — see below) |
 | 7 | 71-80 | Nocturne Sands | starlit Saharan/Atacama desert | Collectible stars |
 | 8 | 81-90 | Neonaka | Tokyo/Seoul-style neon city | Combine 2 mechanics |
@@ -44,7 +44,6 @@ The reward is rolled at collection time from one weighted table — coins, balls
 - **Boosters** — deterministic-direction speed bumper. Also a player-owned item from level 21; see Booster economy above.
 - **Wind zones** — static region, constant push while ball is inside. Windemere (country 3) uses a randomized variant: gust direction/strength vary by level instead of being fixed, for extra unpredictability within an otherwise solvable, deterministic-per-seed drop.
 - **Slippery zones** — less speed lost on bounces inside.
-- **Portals** — paired teleporters, direction preserved.
 - **Breakable blocks** — obstacle that vanishes after first hit, stays broken for the session.
 - **Collectible stars** — optional scoring pickups, no effect on win/lose.
 - **Fire obstacles** (new, Emberkeep) — an instant-fail hazard, distinct from the standard red obstacle. The standard obstacle bounces the ball off in a random direction (a nuisance); a fire obstacle ends the drop as an immediate loss on contact, no bounce. Needs its own visual identity (flame/ember styling, not just a recolored red circle) so the player can tell "this one kills me" apart from "this one just deflects me" at a glance — critical since red is already the established danger color in this game, so the two hazard types need to read as different severities without breaking the existing red = danger convention.

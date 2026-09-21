@@ -64,7 +64,7 @@ const FAN = 19;
    the same ones the HUD, the shop and the win card use.
 
    The last two land on BUTTONS rather than on counters, because that is
-   honestly where those two things live: a booster goes into the bag, and a
+   honestly where those two things live: a spring goes into the bag, and a
    free spin goes to the gear, which is the wheel's door and lights up the
    moment the token arrives. Neither has a number to merge with, so each
    arrival is the button's own bump instead. */
@@ -72,7 +72,7 @@ const LANDS: Record<FlightKind, { to: string; mark: string }> = {
   coins:    { to: '.counter.coins .coin', mark: 'flycoin' },
   balls:    { to: '.counter.balls .pip',  mark: 'flyball' },
   ramps:    { to: '.counter.ramps',       mark: 'flyramp' },
-  boosters: { to: '#btn-inventory',       mark: 'flyboost' },
+  springs:  { to: '#btn-inventory',       mark: 'flyspring' },
   spin:     { to: '#btn-settings',        mark: 'flyspin' },
 };
 
@@ -207,7 +207,7 @@ const TOOK: Record<FlightKind, string> = {
   coins: '.counter.coins',
   balls: '.counter.balls',
   ramps: '.counter.ramps',
-  boosters: '#btn-inventory',
+  springs: '#btn-inventory',
   spin: '#btn-settings',
 };
 

@@ -5,7 +5,7 @@
    Matter owns collision detection, contact resolution,
    restitution and integration; this file's job is to build a
    world from a Level, run it a frame at a time, and layer the
-   game's own mechanics (boosters, portals, wind, ice,
+   game's own mechanics (boosters, wind, ice,
    breakables, pickups) on top.
 
    WHAT IS AND IS NOT MATTER
@@ -39,9 +39,9 @@ import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '.
 import { mulberry32, falses, closestOnSeg } from '../math';
 import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
-  SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, PORTAL_CD, STAR_R, BOX_R,
+  SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, STAR_R, BOX_R,
   MAX_STEPS, REST_STEPS, REST_PX,
-  BOOST_HT, BOOST_RAMP_GAIN, BOOST_RAMP_CAP, BOOST_DECAY, BOOST_RAMP_CD,
+  SPRING_GAIN, SPRING_CAP, SPRING_DECAY, SPRING_CD,
   BOOST_SUB_PX, BOOST_SUBSTEPS_MAX,
   OB_JITTER, OB_MAX_DEV, PLAY } from '../constants';
 
@@ -116,15 +116,16 @@ export class MatterBall implements BallState {
   turboCap = 0;
   /** Per-bar cooldown, so a two-sided bar cannot multiply a ball it has just
       launched back into itself. */
-  boostRampCd: number[];
-  firedBoost: boolean[];
-  portalCd = 0;
-  portalHold: { k: number; side: 'a' | 'b' } | null = null;
+
+  /** Which of the player's ramps this drop has actually fired a spring on.
+      Indexed by RAMP index, sized when the ramps are added (see syncRamps). */
+  firedSpring: boolean[] = [];
+  springCd: number[] = [];
   broken: boolean[];
   justBroke: number[] = [];
   got: boolean[];
   gotBox: boolean[];
-  stars = 0; boosts = 0; teleports = 0; boxes = 0;
+  stars = 0; boosts = 0; springs = 0; boxes = 0;
 
   restX: number; restY: number; restAt = 0;
   restMin = Infinity;
@@ -146,8 +147,6 @@ export class MatterBall implements BallState {
     this.px = lv.spawn.x; this.py = lv.spawn.y;
     this.restX = lv.spawn.x; this.restY = lv.spawn.y;
     this.boostIn = falses(lv.boosters.length);
-    this.boostRampCd = lv.boostRamps.map(() => 0);
-    this.firedBoost = falses(lv.boostRamps.length);
     this.broken = broken ? broken.slice() : falses(lv.breakables.length);
     this.got = falses(lv.stars.length);
     this.gotBox = falses(lv.boxes.length);
@@ -175,10 +174,6 @@ export class MatterBall implements BallState {
     // level walls - real collidable geometry, not just a bounds check
     lv.walls.forEach((s, i) => add(segmentBody(s, WALL_HT), 'wall', i));
     lv.obstacles.forEach((o, i) => add(circleBody(o, cfg.restitution), 'obstacle', i));
-    /* Boost ramps: the SAME body a ramp gets, only thicker, because the whole
-       claim of this item is that it bounces you exactly like a ramp. What is
-       different happens after the solve - see the contact loop. */
-    lv.boostRamps.forEach((s, i) => add(segmentBody(s, BOOST_HT), 'boost', i));
 
     this.breakableBodies = lv.breakables.map((o, i) => {
       if (this.broken[i]) return null;          // already gone this session
@@ -293,7 +288,7 @@ export class MatterBall implements BallState {
       steps: this.steps, hits: this.hits, segHits: this.segHits,
       spdMin: this.spdMin, spdMax: this.spdMax, vyMax: this.vyMax,
       restMin: this.restMin, secs: this.steps / 60,
-      stars: this.stars, boosts: this.boosts, teleports: this.teleports,
+      stars: this.stars, boosts: this.boosts, springs: this.springs,
       boxes: this.boxes,
       broken: this.broken.slice(), bounces: this.bounces,
       x: this.x, y: this.y,
@@ -416,10 +411,6 @@ export class MatterEngine implements PhysicsEngine {
        never moves them. The swept pickup tests below need the real start of
        this frame and nothing else. */
     const fromX = b.x, fromY = b.y;
-    /* And how many teleports it had made. A portal moves the ball
-       DISCONTINUOUSLY, so the "line it travelled this frame" is not a line at
-       all - see the swept pickup tests below. */
-    const telesIn = b.teleports;
 
     b.pending.length = 0;
     stepMatter(b);
@@ -446,47 +437,43 @@ export class MatterEngine implements PhysicsEngine {
       if (c.tag.kind === 'wall' || c.tag.kind === 'ramp') {
         b.segHits++;
         if (cfg.minBounce !== null) enforceMinBounce(b, c.nx, c.ny, cfg.minBounce);
-        b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind);
-        inX = b.vx; inY = b.vy;
-      } else if (c.tag.kind === 'boost') {
         /* ============================================================
-           A BOOST RAMP FIRING
+           A SPRUNG RAMP FIRING
 
-           Matter has already done the bounce - this is the same
-           body a ramp gets - so the HEADING is settled and is not
-           touched here. All that happens is the magnitude: what
-           left is multiplied, held to BOOST_RAMP_CAP, and the
-           ceiling the rest of the step obeys is raised to match.
+           Matter has already done the bounce - a sprung ramp is
+           the same body as any other, and the player drew it - so
+           the HEADING is settled and is not touched here. All
+           that happens is the magnitude: what left is multiplied,
+           held to SPRING_CAP, and the ceiling the rest of the
+           step obeys is raised to match.
 
-           Multiplying the OUTGOING vector rather than firing along
-           an authored angle is the whole difference between this
-           item and the pads: where the ball goes is a consequence
-           of how the player laid the bar, exactly as it is for a
-           ramp they drew. The bar adds speed, never a direction.
+           Multiplying the OUTGOING vector rather than firing
+           along an authored angle is the whole point of the item:
+           where the ball goes is a consequence of how the player
+           drew the ramp, and the spring only says how hard.
            ============================================================ */
-        b.segHits++;
-        if (cfg.minBounce !== null) enforceMinBounce(b, c.nx, c.ny, cfg.minBounce);
-        const k = c.tag.index;
-        if (b.boostRampCd[k] === 0) {
+        const sprung = c.tag.kind === 'ramp' && ramps[c.tag.index]?.spring;
+        if (sprung && b.springCd[c.tag.index] === 0) {
           /* The multiplier is applied to the speed the ball came IN with, not
              to what the bounce left behind. Those differ by the restitution,
-             and the promise the item makes - and the glossary prints - is "ten
-             times faster than it went in", so that is the number multiplied.
-             Taking the outgoing speed instead quietly made it nine. */
-          const sp = Math.min(Math.hypot(inX, inY) * BOOST_RAMP_GAIN,
-                              cfg.speedCap === null ? Infinity : BOOST_RAMP_CAP);
+             and the promise the item makes - and the glossary prints - is
+             "four times faster than it went in", so that is the number
+             multiplied. Taking the outgoing speed instead quietly made it
+             three and a half. */
+          const sp = Math.min(Math.hypot(inX, inY) * SPRING_GAIN,
+                              cfg.speedCap === null ? Infinity : SPRING_CAP);
           const m = b.speed;
           /* A contact that somehow left no velocity at all is fired straight
-             back out along the surface normal: a bar must never swallow a
+             back out along the surface normal: a spring must never swallow a
              ball, and there is no other direction available. */
           if (m > 1e-6) b.setVelocity(b.vx / m * sp, b.vy / m * sp);
           else b.setVelocity(c.nx * sp, c.ny * sp);
           b.turboCap = Math.max(b.turboCap, sp);
-          b.boostRampCd[k] = BOOST_RAMP_CD;
-          b.firedBoost[k] = true;
-          b.boosts++;
+          b.springCd[c.tag.index] = SPRING_CD;
+          b.firedSpring[c.tag.index] = true;
+          b.springs++;
         }
-        b.noteHit(b.x, b.y, c.nx, c.ny, 'boost');
+        b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind);
         inX = b.vx; inY = b.vy;
       } else if (c.tag.kind === 'obstacle' || c.tag.kind === 'breakable') {
         b.hits++;
@@ -499,33 +486,6 @@ export class MatterEngine implements PhysicsEngine {
           b.removeBreakable(c.tag.index);
         }
         inX = b.vx; inY = b.vy;
-      }
-    }
-
-    /* ---- portals, on arrival ---- */
-    if (b.portalHold) {
-      const h = lv.portals[b.portalHold.k][b.portalHold.side];
-      if (Math.hypot(b.x - h.x, b.y - h.y) > h.r) b.portalHold = null;
-    }
-    if (b.portalCd > 0) b.portalCd--;
-    if (!b.portalHold && b.portalCd === 0) {
-      for (let k = 0; k < lv.portals.length; k++) {
-        const p = lv.portals[k];
-        let exit = null, side: 'a' | 'b' = 'a';
-        if (Math.hypot(b.x - p.a.x, b.y - p.a.y) <= p.a.r) { exit = p.b; side = 'b'; }
-        else if (Math.hypot(b.x - p.b.x, b.y - p.b.y) <= p.b.r) { exit = p.a; side = 'a'; }
-        if (!exit) continue;
-        b.setPosition(exit.x, exit.y);
-        if (exit.facing !== undefined && exit.facing !== null) {
-          const sp = b.speed || (cfg.minBounce ?? 1);
-          const a = exit.facing * Math.PI / 180;
-          b.setVelocity(Math.cos(a) * sp, Math.sin(a) * sp);
-        }
-        b.portalCd = PORTAL_CD;
-        b.portalHold = { k, side };
-        b.teleports++;
-        b.noteHit(exit.x, exit.y, 0, -1, 'portal');
-        break;
       }
     }
 
@@ -564,13 +524,14 @@ export class MatterEngine implements PhysicsEngine {
                    this, and gating on it is what keeps every level proved
                    against the point tests still proved - a drop that never
                    touches a bar takes the identical branch it always did.
-         teleports a portal moves the ball across the board in no time at all.
-                   Sweeping that "path" collects every star on the line
-                   between the two ends, which is how three portal levels
-                   started paying out a star nobody had reached.
          distance  below the tunnelling limit a point test cannot miss
-                   anything anyway, so there is nothing to fix. */
-    const flew = b.turboCap > 0 && b.teleports === telesIn &&
+                   anything anyway, so there is nothing to fix.
+
+       There used to be a third: a PORTAL moved the ball discontinuously, and
+       sweeping that "path" collected every star on the line between the two
+       ends. Portals are gone, and with them the only way a frame's start and
+       end were ever anything but the two ends of a real line. */
+    const flew = b.turboCap > 0 &&
                  Math.hypot(b.x - fromX, b.y - fromY) > BOOST_CAP;
     const reached = (o: { x: number; y: number }, r: number) =>
       (flew ? segNear(fromX, fromY, b.x, b.y, o.x, o.y)
@@ -599,8 +560,8 @@ export class MatterEngine implements PhysicsEngine {
       }
     }
 
-    for (let k = 0; k < b.boostRampCd.length; k++)
-      if (b.boostRampCd[k] > 0) b.boostRampCd[k]--;
+    for (let k = 0; k < b.springCd.length; k++)
+      if (b.springCd[k] > 0) b.springCd[k]--;
 
     /* The kick outlives the step that applied it. Both clamps below would
        otherwise take it straight back: terminalVy alone drags a downward
@@ -617,7 +578,7 @@ export class MatterEngine implements PhysicsEngine {
        than a window that ends: a ceiling that dropped from 90 to 12.7 in one
        step reads as the ball hitting something invisible. */
     if (b.turboCap > 0) {
-      b.turboCap *= BOOST_DECAY;
+      b.turboCap *= SPRING_DECAY;
       if (b.turboCap <= (cfg.speedCap ?? 0)) b.turboCap = 0;
     }
     b.noteSpeed();
@@ -660,6 +621,10 @@ export class MatterEngine implements PhysicsEngine {
 /* ---------------- helpers ---------------- */
 
 function syncRamps(b: MatterBall, ramps: readonly Segment[]): void {
+  /* Sized here rather than at ball creation: the ramps are the PLAYER's and
+     arrive with the first step, not with the level. */
+  b.springCd = ramps.map(() => 0);
+  b.firedSpring = ramps.map(() => false);
   ramps.forEach((s, i) => {
     const body = segmentBody(s, RAMP_HT);
     b.tags.set(body.id, { kind: 'ramp', index: i });
@@ -676,9 +641,7 @@ function outwardNormal(b: MatterBall, tag: BodyTag, lv: Level,
     const o = tag.kind === 'obstacle' ? lv.obstacles[tag.index] : lv.breakables[tag.index];
     cx = o.x; cy = o.y;
   } else {
-    const s = tag.kind === 'wall' ? lv.walls[tag.index]
-            : tag.kind === 'boost' ? lv.boostRamps[tag.index]
-            : ramps[tag.index];
+    const s = tag.kind === 'wall' ? lv.walls[tag.index] : ramps[tag.index];
     if (!s) return { x: 0, y: -1 };
     const p = closestOnSeg(b.x, b.y, s.x1, s.y1, s.x2, s.y2);
     cx = p.x; cy = p.y;

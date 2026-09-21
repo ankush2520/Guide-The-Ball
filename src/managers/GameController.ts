@@ -13,7 +13,7 @@
    subscribes to a version counter and re-reads whatever it needs.
    ============================================================ */
 import type { FlightKind, GameBus, Phase } from '../core/events';
-import { LevelManager, DEL_R, HANDLE_R, AIM_R } from './LevelManager';
+import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
 import { RewardManager, prizeLabel } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
@@ -24,7 +24,7 @@ import { clamp } from '../physics/math';
 import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
-import type { BoostRampDef, Level, Segment, Vec } from '../levels/types';
+import type { Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
 const STEP_MS = STEP_MS_DEFAULT;
@@ -32,7 +32,7 @@ const FLASH_MS = 2600;
 
 const HIT_COLOR: Record<string, string> = {
   ramp: '#1680f0', wall: '#5b6188', obstacle: '#f0223f',
-  breakable: '#e0761c', booster: '#ff9d3d', portal: '#a54bd6',
+  breakable: '#e0761c', booster: '#ff9d3d',
   /* The boost ramp's own orange, so the sparks off a launch are the colour of
      the thing that threw the ball rather than of an ordinary bounce. */
   boost: '#ff7a18',
@@ -50,8 +50,6 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
     text: 'Wind: pushes the ball while it is inside.' },
   { key: 'slippery',  has: lv => lv.slippery.length > 0,
     text: 'Ice: bounces here keep nearly all their speed.' },
-  { key: 'portal',    has: lv => lv.portals.length > 0,
-    text: 'Portal: in one ring, out of the other.' },
   { key: 'breakable', has: lv => lv.breakables.length > 0,
     text: 'Breakable: bounces once, then shatters.' },
   { key: 'star',      has: lv => lv.stars.length > 0,
@@ -67,7 +65,7 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
    mechanic tip is taught ONCE, ever, because a mechanic is a rule
    to learn. A gift in the target is not a rule, it is a fact
    about the board in front of you - the same class of thing as
-   `needsBooster` - so it is said every time that board is
+   `needsSpring` - so it is said every time that board is
    entered, and only while the gift is still there to be had.
    ============================================================ */
 export const GIFT_TIP = 'There is a gift inside this target - land in it and it is yours.';
@@ -100,8 +98,8 @@ export type TutStep = 'intro' | 'draw' | 'drop' | 'retry';
 export interface WinCard {
   stars: number; note: string; bonus: number; coins: number;
   isLast: boolean; nextId: number | null;
-  /** Boosters this win actually spent. Zero on all but a handful of boards. */
-  boosters: number;
+  /** Springs this win actually spent. Zero on all but a handful of boards. */
+  springs: number;
 }
 
 export class GameController {
@@ -112,18 +110,13 @@ export class GameController {
   ball: BallState | null = null;
   capture: CaptureState | null = null;
   selected = -1;
-  /* The player's booster on this board, selected separately from the ramps.
-     Two fields rather than one tagged selection because they are two
-     different kinds of thing with two different sets of grips, and because
-     the ramp's selection is load-bearing everywhere - it is not worth
-     reshaping to make room for a second item. Only one is ever >= 0. */
-  selectedBooster = -1;
   /** Which boxes this controller has already reacted to, this drop. */
   private boxSeen: boolean[] = [];
-  /** Which of the player's own boosters this drop has actually fired through.
-      The same test the engine fires them on, run at the same step boundaries,
-      so the two can never disagree about whether one went off. */
-  private boosterFired: boolean[] = [];
+  /** Which of the player's RAMPS this drop has actually fired a spring on.
+      Read straight off the engine, which is the only thing that knows: a
+      spring fires on a real Matter contact, and a contact is not something
+      this side can re-derive from a position. */
+  private springFired: boolean[] = [];
   private tutIntroDone = false;
   private tutRetry = false;
   /** Set on the walkthrough's own drop, so a miss knows to coach a retry. */
@@ -143,8 +136,6 @@ export class GameController {
      go below MIN_RAMP throws it away.
      ============================================================ */
   draft: Segment | null = null;
-  /** A booster drag: its body, or the knob that aims it. */
-  boosterDrag: { mode: 'move' | 'aim'; ix: number; lx: number; ly: number } | null = null;
   /** Forces a seed, for tests and the solver. null means a fresh random one. */
   seedOverride: number | null = null;
 
@@ -199,7 +190,7 @@ export class GameController {
        number, so anything that moves a balance has to bump it, or the HUD
        and the shop go stale until something else happens to redraw them. */
     for (const e of ['balls:changed', 'coins:changed', 'ramps:changed',
-                     'boosters:changed', 'spin:granted'] as const)
+                     'springs:changed', 'spin:granted'] as const)
       bus.on(e, () => this.changed());
   }
 
@@ -276,84 +267,113 @@ export class GameController {
 
       RAMPS ARE NOT IN HERE, and that is the distinction the whole input model
       rests on: a ramp is drawn by hand, out of a per-level budget, and a
-      booster is an owned thing taken out of a bag. One is the player's
+      spring is an owned thing taken out of a bag. One is the player's
       expressive tool, the other is scarce. */
   itemCount(kind: ItemKind): { left: number; spare: number } {
     switch (kind) {
-      /* A booster has no level budget at all - every one of them is yours -
-         so `left` is simply what is in the bag, minus any already sitting on
-         this board waiting to find out whether they get spent. */
-      case 'booster':
-        return { left: Math.max(0, this.rewards.extraBoosters - this.levels.boostersReserved),
+      /* A spring has no level budget at all - every one of them is yours - so
+         `left` is simply what is in the bag, minus any already fitted to a
+         ramp on this board and waiting to find out whether they get spent. */
+      case 'spring':
+        return { left: Math.max(0, this.rewards.springs - this.levels.springsReserved),
                  spare: 0 };
     }
   }
 
-  /** Whether the bag may show this item at all. Boosters do not exist before
-      level 21 - see RewardManager.boostersUnlocked. */
+  /** Whether the bag may show this item at all. Springs do not exist before
+      level 21 - see RewardManager.springsUnlocked. */
   itemUnlocked(kind: ItemKind): boolean {
-    return kind === 'booster' ? this.rewards.boostersUnlocked : true;
+    return kind === 'spring' ? this.rewards.springsUnlocked : true;
   }
 
-  /** Take one item out of the inventory and put it on the board, selected,
-      so the very next drag moves it. Returns false when there is nothing to
-      give or the board is not in planning. */
+  /* ============================================================
+     ARMING A SPRING
+
+     The old item was PLACED: it came out of the bag as a bar of
+     its own, landed in the middle of the board and was then
+     dragged and turned into position. A spring has no position
+     of its own - it goes on a ramp the player drew - so taking
+     one out of the bag cannot put anything anywhere.
+
+     What it does instead is ARM: the next tap on a ramp fits it.
+     One tap, on the line they already drew, and the gesture is
+     over. Tapping anywhere else puts the spring back.
+     ============================================================ */
+  armedSpring = false;
+
+  /** Take one item out of the inventory. For the spring that means arming it
+      for the next tap on a ramp; nothing is charged and nothing moves yet.
+      False when there is nothing to give or the board is not in planning. */
   placeItem(kind: ItemKind): boolean {
     if (this.phase !== 'plan') return false;
     switch (kind) {
-      /* Nothing is charged here. Taking a booster out of the bag puts it on
-         the board and reserves it; the coins only leave when a drop that used
-         it wins - see commitBoosters(). */
-      case 'booster': {
-        if (!this.itemUnlocked('booster')) return false;
-        if (this.itemCount('booster').left <= 0) return false;
-        const ix = this.levels.placeBooster();
-        this.selectedBooster = ix;
+      case 'spring': {
+        if (!this.itemUnlocked('spring')) return false;
+        if (this.itemCount('spring').left <= 0) return false;
+        if (this.levels.rampsUsed === 0) {
+          this.showFlash('Draw a ramp first - a spring goes on one of yours.');
+          return false;
+        }
+        this.armedSpring = true;
         this.selected = -1;
         this.dragging = null;
-        this.boosterDrag = null;
-        this.bus.emit('item:placed', { kind, index: ix });
+        this.bus.emit('item:placed', { kind, index: -1 });
         this.notifyRampsChanged();
         return true;
       }
     }
   }
 
+  /** The armed spring meets a ramp. Returns true if it went on. */
+  fitSpring(rampIx: number): boolean {
+    if (!this.armedSpring) return false;
+    this.armedSpring = false;
+    if (!this.levels.springRamp(rampIx)) {
+      this.showFlash('That ramp already has a spring.');
+      this.notifyRampsChanged();
+      return false;
+    }
+    this.selected = rampIx;
+    this.showFlash('Spring fitted - that ramp now throws four times harder.');
+    this.notifyRampsChanged();
+    return true;
+  }
+
+  /** Put an armed spring back in the bag without fitting it. */
+  disarmSpring(): void {
+    if (!this.armedSpring) return;
+    this.armedSpring = false;
+    this.notifyRampsChanged();
+  }
+
   /* ============================================================
-     PAYING FOR A BOOSTER
+     PAYING FOR A SPRING
 
      Only from finish(), and finish() only runs on a win. That is
      most of the rule, and it is why this is not folded into
-     placeItem the way a spare ramp's spend is: a booster that
-     went down, missed, was nudged and dropped again has cost
-     nothing at all, however many attempts that took.
+     placeItem the way a spare ramp's spend is: a spring that was
+     fitted, missed, moved and dropped again has cost nothing at
+     all, however many attempts that took.
 
-     The rest of the rule is `boosterFired`: the drop has to have
-     actually gone THROUGH it. Winning with one parked in a
-     corner it never touched is not a booster that worked, and
-     charging for it would make "you only pay when it works" a
-     lie in the one case a player would notice.
+     The rest of the rule is `springFired`: the drop has to have
+     actually BOUNCED OFF it. Winning with one on a ramp in a
+     corner the ball never touched is not a spring that worked,
+     and charging for it would make "you only pay when it works"
+     a lie in the one case a player would notice.
 
      Idempotent through the paid flags, so a Replay of a board
-     already won cannot charge for the same booster twice.
+     already won cannot charge for the same spring twice.
      ============================================================ */
-  private commitBoosters(): number {
+  private commitSprings(): number {
     let paid = 0;
-    for (let i = 0; i < this.levels.boostersUsed; i++) {
-      if (!this.boosterFired[i] || this.levels.boosterPaid[i]) continue;
-      if (!this.rewards.spendExtraBooster()) break;   // bag emptied elsewhere
-      this.levels.boosterPaid[i] = true;
+    for (let i = 0; i < this.levels.rampsUsed; i++) {
+      const r = this.levels.rampAt(i);
+      if (!r?.spring || r.springPaid || !this.springFired[i]) continue;
+      if (!this.rewards.spendSpring()) break;         // bag emptied elsewhere
+      r.springPaid = true;
       paid++;
     }
     return paid;
-  }
-
-  /** Take the selected booster back off the board. Free, always - see above. */
-  removeBooster(ix: number): void {
-    this.levels.removeBooster(ix);
-    this.selectedBooster = -1;
-    this.boosterDrag = null;
-    this.notifyRampsChanged();
   }
 
   /** Matter builds a world per drop; let the engine tear it down. */
@@ -418,16 +438,10 @@ export class GameController {
   private reactToStep(b: BallState): void {
     const lv = this.levels.playLevel;
 
-    /* Which of the player's boost ramps have actually fired. Read straight off
-       the engine, which is the only thing that knows: a bar fires on a real
-       Matter contact, and a contact is not something this side can re-derive
-       from a position - the old disc's "is the ball inside it" test has no
-       equivalent for a 14-unit-thick bar a ball crosses in a single frame.
-       `boostOffset` skips any the LEVEL authored: only the player's are
-       charged for. */
-    const off = this.levels.boostOffset;
-    for (let k = 0; k < this.boosterFired.length; k++)
-      if (b.firedBoost[off + k]) this.boosterFired[k] = true;
+    /* Which sprung ramps have actually thrown the ball. Indexed by RAMP, and
+       read straight off the engine for the reason above. */
+    for (let k = 0; k < b.firedSpring.length; k++)
+      if (b.firedSpring[k]) this.springFired[k] = true;
 
     /* a box the ball opened this step. Before the hit reaction, so a box sat
        against a wall pops on the frame it is touched rather than the one
@@ -528,7 +542,7 @@ export class GameController {
     this.tutRetry = false;
 
     this.capture = null; this.dragging = null; this.selected = -1;
-    this.boosterDrag = null; this.selectedBooster = -1; this.draft = null;
+    this.armedSpring = false; this.draft = null;
     this.hideFlash();
     const seed = this.seedOverride !== null
       ? this.seedOverride : (Math.random() * 0x7fffffff) | 0;
@@ -538,8 +552,8 @@ export class GameController {
     /* A box already opened - this session or a previous visit - must not pop
        again, so the run starts with those already accounted for. */
     this.boxSeen = this.levels.sessionBoxes.slice();
-    // whether a booster fired is a fact about THIS drop, not the board
-    this.boosterFired = this.levels.placedBoosters.map(() => false);
+    // whether a spring fired is a fact about THIS drop, not the board
+    this.springFired = [];
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.acc = 0;
 
@@ -602,10 +616,10 @@ export class GameController {
   private finish(result: DropResult): void {
     this.lastResult = result;
     const lv = this.levels.level;
-    /* THE ONE PLACE A BOOSTER IS SPENT. Before the clear is recorded, so the
+    /* THE ONE PLACE A SPRING IS SPENT. Before the clear is recorded, so the
        win card and the bag are already telling the same story by the time
        either is looked at. */
-    const boostersUsed = this.commitBoosters();
+    const springsUsed = this.commitSprings();
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
     const { stars, bonus, coins, note, firstClear } = this.rewards.recordClear(
@@ -615,7 +629,7 @@ export class GameController {
     const card: WinCard = {
       stars, note, bonus, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
-      boosters: boostersUsed,
+      springs: springsUsed,
     };
     this.capture = null;
 
@@ -685,8 +699,8 @@ export class GameController {
     this.releaseBall();
     this.capture = null;
     this.selected = -1; this.dragging = null; this.lastResult = null;
-    this.selectedBooster = -1; this.boosterDrag = null; this.draft = null;
-    this.boxSeen = []; this.boosterFired = [];
+    this.armedSpring = false; this.draft = null;
+    this.boxSeen = []; this.springFired = [];
     this.winCard = null; this.pendingCard = null; this.gift = null;
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
@@ -705,9 +719,9 @@ export class GameController {
     /* Reaching Solmesa is what puts the first booster in the bag. Announced
        with a flash rather than a modal: it is a gift, not an interruption. */
     if (this.rewards.noteLevelReached(this.levels.level.id))
-      this.showFlash('Booster ramps unlocked - one is in your bag!');
+      this.showFlash('Springs unlocked - one is in your bag!');
     this.teachNewMechanics();
-    this.teachBoosterBoard();
+    this.teachSpringBoard();
     this.teachGiftBoard();
   }
 
@@ -806,15 +820,15 @@ export class GameController {
      something different when the bag is empty, because then the
      next move is the shop rather than the bag.
      ============================================================ */
-  private teachBoosterBoard(): void {
-    if (!this.levels.level.needsBooster) return;
-    this.showFlash(this.rewards.extraBoosters > 0
-      ? 'Ramps cannot reach this one - use a booster ramp.'
-      : 'Ramps cannot reach this one - the shop has booster ramps.');
+  private teachSpringBoard(): void {
+    if (!this.levels.level.needsSpring) return;
+    this.showFlash(this.rewards.springs > 0
+      ? 'A plain ramp cannot reach this one - put a spring on yours.'
+      : 'A plain ramp cannot reach this one - the shop has springs.');
   }
 
   /** Say so when the board's target holds a gift, every visit, until it has
-      been taken. Announced after the booster line, which is the one that
+      been taken. Announced after the spring line, which is the one that
       affects whether the board can be solved at all. */
   private teachGiftBoard(): void {
     if (!this.levels.level.targetGift) return;
@@ -842,10 +856,7 @@ export class GameController {
 
   notifyRampsChanged(): void { this.changed(); }
 
-  /** A drag on a placed booster just ended. Its own method rather than a
-      branch inside rampAdjusted(), which belongs to the walkthrough and must
-      not be taught anything by an item the walkthrough never mentions. */
-  boosterAdjusted(): void { this.changed(); }
+
 
   /* ---------------- what the renderer needs ---------------- */
 
@@ -886,14 +897,9 @@ export class GameController {
       captureMs: CAPTURE_MS,
       squash: this.squash,
       deleteButtonAt: (s: Segment) => this.levels.deleteButtonAt(s),
-      /* The player's boosters, and the grips for whichever one is selected.
-         Passed the same way the ramp's are, from the same manager, so the
-         thing drawn and the thing the finger hits cannot disagree. */
-      boosters: this.levels.placedBoosters,
-      selectedBooster: this.selectedBooster,
-      boosterHandleAt: (b: BoostRampDef) => this.levels.boosterHandleAt(b),
-      boosterDeleteAt: (b: BoostRampDef) => this.levels.boosterDeleteAt(b),
-      aimR: AIM_R,
+      /* Whether a spring is armed and waiting for a ramp to land on, so the
+         board can say so while it is. */
+      armedSpring: this.armedSpring,
       /* read from the same constants the hit-test uses: these were once
          literals, and the × was resized for the finger while still being
          painted at its old size */
@@ -907,7 +913,7 @@ export class GameController {
       to drop after that. Null when the caption slot should stay empty. */
   get cue(): string | null {
     // the walkthrough's bubble does this job while it is up
-    if (this.phase !== 'plan' || this.selected >= 0 || this.selectedBooster >= 0
+    if (this.phase !== 'plan' || this.selected >= 0 || this.armedSpring
         || this.tutorialStep()) return null;
     return this.canDraw
       ? 'Drag to draw a ramp, or tap to drop the ball'
@@ -922,8 +928,7 @@ export class GameController {
     if (step === 'drop') return 'Tap anywhere to drop the ball.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
-    if (this.selectedBooster >= 0)
-      return 'Drag the booster ramp to move it, the knob to turn it, × to take it back.';
+    if (this.armedSpring) return 'Tap one of your ramps to fit the spring.';
     if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
     if (this.levels.rampsLeft <= 0 && this.rewards.extraRamps <= 0)
       return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';

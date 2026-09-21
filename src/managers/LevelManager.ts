@@ -11,15 +11,13 @@
    without any of them knowing about each other.
    ============================================================ */
 import type { GameBus } from '../core/events';
-import type { BoostRampDef, Level, Segment, Vec } from '../levels/types';
+import type { Level, Segment, Vec } from '../levels/types';
 import { LEVELS, countryOf, cityOf } from '../levels';
 import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
-import { MIN_RAMP, MAX_RAMP, RAMP_HT, BOOST_HT, BOOST_LEN, BOARD, PLAY }
-  from '../physics/constants';
-import { BOOSTER_ANGLE } from '../items/items';
+import { MIN_RAMP, MAX_RAMP, RAMP_HT, PLAY } from '../physics/constants';
 
 /** How close a finger has to be to grab a ramp or one of its controls.
     Board coordinates throughout, so a grab radius means the same thing
@@ -47,43 +45,9 @@ export const DEL_OFF  = 50;
 export const DEL_R    = 30;
 export const DEL_GRAB = 36;
 
-/* The booster ramp's aim knob sits this far beyond one END of the bar, on the
-   bar's own axis. Far enough out that the finger holding it is not covering
-   the bar whose angle it is setting - which is the whole reason it is a knob
-   on a stalk and not a drag anywhere on the body. */
-export const AIM_OFF  = 26;
-export const AIM_R    = 11;
-export const AIM_GRAB = 24;
-
-/* How close a finger has to come to a boost ramp to grab it. Much wider than
-   its 14-unit thickness, and wider than the ramp's PICK_PAD: a bar the player
-   OWNS and can only have one or two of must never be fiddly to pick up, where
-   a ramp they can redraw in one drag can afford to be exact. */
-export const BOOST_GRAB = 22;
-
 export class LevelManager {
   private index = 0;
   private ramps: Segment[] = [];
-  /* The player's own boost ramps. Kept apart from the level's own the same way
-     ramps are kept apart from walls: identical physics, different owner.
-
-     SEGMENTS, exactly like the ramps above - the item is a bar now, and its
-     position and its angle are its two ends. Nothing derived is stored: where
-     the knob goes, where the × goes and what the physics collides with are all
-     computed from these four numbers, so they cannot drift apart. */
-  private boosters: BoostRampDef[] = [];
-  /** Which of those have been PAID for out of the bag, by index. A booster is
-      only charged for by a win that actually went through it (see
-      GameController), so a placed one is on loan until then - and per-index
-      rather than a count because a board can carry one that fired beside one
-      that did not. */
-  boosterPaid: boolean[] = [];
-  /* The level with the player's boosters merged in, rebuilt only when one is
-     added or removed. Moving or aiming one mutates the def IN PLACE, and this
-     array holds the same objects by reference, so a drag needs no rebuild -
-     the same contract the entities have with the level (see Entity). */
-  private composed: Level | null = null;
-
   /** Breakables survive re-drops inside ONE level entry and reset when the
       level is entered again. That keeps the point of the mechanic - learn the
       board, then solve it - which per-drop resetting would destroy. */
@@ -108,29 +72,28 @@ export class LevelManager {
   /** What the player sees this level called - see cityOf(). */
   get cityName(): string { return cityOf(this.level); }
   get entities(): readonly Entity[] { return this.cachedEntities; }
-  /* WHAT THE BALL PLAYS AGAINST, which is not always what was authored: a
-     booster the player put down is part of the board for this drop. Every
-     caller in the drop path uses this; the renderer and the level picker use
-     `level`, because what a board IS does not change when you furnish it. */
-  get playLevel(): Level { return this.composed ?? this.level; }
+  /* WHAT THE BALL PLAYS AGAINST. The same board that was authored: the
+     player's own contributions - the ramps, and the springs on them - reach
+     the engine as ramps, never as level furniture. */
+  get playLevel(): Level { return this.level; }
   get count(): number { return LEVELS.length; }
   get isLast(): boolean { return this.index >= LEVELS.length - 1; }
 
-  /** The player's boost ramps, as the physics wants them: plain segments. */
-  get placedBoosters(): readonly BoostRampDef[] { return this.boosters; }
-  /** Where the player's bars START in the composed level's list, so a fired
-      bar can be matched back to the one in the bag. Zero on every shipped
-      level: none of them author a boost ramp of their own. */
-  get boostOffset(): number { return this.level.boostRamps.length; }
-  get boostersUsed(): number { return this.boosters.length; }
-  /** Placed but not yet paid for - held out of the bag while they sit on the
+  /* ---------------- the player's springs ----------------
+
+     A spring is not a thing on the board, it is a PROPERTY OF A RAMP, so
+     there is no list of them: the ramps are the list, and these read it. */
+
+  /** Ramps currently carrying a spring. */
+  get springsUsed(): number { return this.ramps.filter(r => r.spring).length; }
+  /** Fitted but not yet paid for - held out of the bag while they sit on the
       board, so the count in the inventory is what is still available. */
-  get boostersReserved(): number {
-    return this.boosters.reduce((n, _b, i) => n + (this.boosterPaid[i] ? 0 : 1), 0);
+  get springsReserved(): number {
+    return this.ramps.filter(r => r.spring && !r.springPaid).length;
   }
-  /** How many of this board's boosters have actually been charged for. */
-  get boostersPaid(): number {
-    return this.boosterPaid.reduce((n, p) => n + (p ? 1 : 0), 0);
+  /** How many of this board's springs have actually been charged for. */
+  get springsPaid(): number {
+    return this.ramps.filter(r => r.spring && r.springPaid).length;
   }
 
   /** The player's ramps, as the physics wants them: plain segments. */
@@ -146,6 +109,9 @@ export class LevelManager {
   extraBudget = 0;
 
   get rampsUsed(): number { return this.ramps.length; }
+  /** The ramps themselves, read-only - what the engine plays against and what
+      the renderer draws, springs and all. */
+  get rampList(): readonly Segment[] { return this.ramps; }
   /** The level's own budget. What the stars are measured against. */
   get levelBudget(): number { return this.level.maxBlocks; }
   /** The budget actually in force, spares included. */
@@ -165,22 +131,18 @@ export class LevelManager {
 
   private rebuild(): void {
     this.ramps = [];
-    this.boosters = [];
-    this.boosterPaid = [];
-    this.composed = null;
     this.extraBudget = 0;
     this.sessionBroken = falses(this.level.breakables.length);
     this.sessionBoxes = falses(this.level.boxes.length);
     this.rebuildEntities();
   }
 
-  /* The entity list is the level's own furniture plus whatever the player has
-     put down. Rebuilt when that CHANGES, never per frame. */
+  /* The level's own furniture, and only that: the player's ramps are drawn
+     from the ramp list and a spring is a property of one of them, so neither
+     is ever an entity. Rebuilt when the level CHANGES, never per frame. */
   private rebuildEntities(): void {
-    const out = EntityFactory.createFromLevel(this.level);
-    for (let i = 0; i < this.boosters.length; i++)
-      out.push(EntityFactory.createBoostRamp(this.boosters[i], i));
-    this.cachedEntities = out.sort((a, b) => a.layer - b.layer);
+    this.cachedEntities = EntityFactory.createFromLevel(this.level)
+      .sort((a, b) => a.layer - b.layer);
   }
 
   /** Show this level's boxes as already opened. Called by the controller on
@@ -190,98 +152,44 @@ export class LevelManager {
     if (claimed) this.sessionBoxes = this.level.boxes.map(() => true);
   }
 
-  /* ---------------- the player's boost ramps ---------------- */
+  /* ---------------- the player's springs ----------------
 
-  /** Put one on the board and return its index. It lands in the middle, lying
-      flat - UNAIMED on purpose, so the first thing the player does with it is
-      the thing that makes it theirs. */
-  placeBooster(): number {
-    const cx = (BOARD.x0 + BOARD.x1) / 2;
-    const ys = [400, 300, 500, 220, 580];
-    const free = (y: number) =>
-      this.boosters.every(b => Math.hypot(midX(b) - cx, midY(b) - y) > BOOST_LEN * 0.8);
-    const y = ys.find(free) ?? ys[this.boosters.length % ys.length];
-    this.boosters.push(barAt(cx, y, BOOSTER_ANGLE));
-    this.boosterPaid.push(false);
-    this.composeLevel();
-    this.rebuildEntities();
-    return this.boosters.length - 1;
+     THE ITEM GOES ON A RAMP THE PLAYER DREW. There is no placing, no moving
+     and no aiming here, because all three already happened when they drew the
+     line: fitting a spring is one tap on one ramp, and everything that made
+     the old bar an object of its own - a spawn position, a default angle, a
+     grab radius, an aim knob, a delete button, a merged copy of the level -
+     is gone with it.
+
+     Which ramp a spring is on is stored ON THE RAMP (see Segment), so moving,
+     reshaping or deleting that ramp carries the spring with it and no index
+     can drift. */
+
+  /** Fit a spring to ramp `i`. False if there is no such ramp or it already
+      has one - the caller reads that as "nothing was spent". */
+  springRamp(i: number): boolean {
+    const s = this.ramps[i];
+    if (!s || s.spring) return false;
+    s.spring = true;
+    s.springPaid = false;
+    return true;
   }
 
-  boosterAt(i: number): BoostRampDef | undefined { return this.boosters[i]; }
-
-  removeBooster(i: number): void {
-    if (i < 0 || i >= this.boosters.length) return;
-    /* The paid flag goes with it. A paid-for booster is not refunded by
-       picking it back up - the win it bought already happened - which is why
-       the two arrays are spliced together and never re-indexed apart. */
-    this.boosters.splice(i, 1);
-    this.boosterPaid.splice(i, 1);
-    this.composeLevel();
-    this.rebuildEntities();
+  /** Take one back off. Returns true if the removed spring was still ON LOAN,
+      which is the caller's cue to put it back in the bag; a paid-for one is
+      not refunded, exactly as the bar it replaces was not. */
+  unspringRamp(i: number): boolean {
+    const s = this.ramps[i];
+    if (!s || !s.spring) return false;
+    const owed = !s.springPaid;
+    s.spring = false;
+    s.springPaid = false;
+    return owed;
   }
 
-  /** The nearest placed boost ramp to a tap, or -1. Distance to the BAR, the
-      same test a ramp gets, just with a wider pad - see BOOST_GRAB. */
-  pickBooster(x: number, y: number): number {
-    let pick = -1, bestD = Infinity;
-    for (let i = 0; i < this.boosters.length; i++) {
-      const d = distToSeg(x, y, this.boosters[i]);
-      if (d <= BOOST_HT + BOOST_GRAB && d < bestD) { bestD = d; pick = i; }
-    }
-    return pick;
-  }
+  /** Whether ramp `i` is sprung - what the renderer and the tray ask. */
+  isSprung(i: number): boolean { return !!this.ramps[i]?.spring; }
 
-  /** Slide one, clamped so the whole bar stays on the board. The same
-      translation a ramp gets, and for the same reason: a bar half off the
-      edge is geometry the player cannot see the end of. */
-  moveBoosterBy(i: number, dx: number, dy: number): void {
-    const b = this.boosters[i];
-    if (!b) return;
-    const loX = Math.min(b.x1, b.x2), hiX = Math.max(b.x1, b.x2);
-    const loY = Math.min(b.y1, b.y2), hiY = Math.max(b.y1, b.y2);
-    dx = clamp(dx, PLAY.x0 - loX, PLAY.x1 - hiX);
-    dy = clamp(dy, PLAY.y0 - loY, PLAY.y1 - hiY);
-    b.x1 += dx; b.x2 += dx; b.y1 += dy; b.y2 += dy;
-  }
-
-  /** Turn one to lie along `p`, pivoting about its own middle - so aiming
-      never moves it, exactly as it never did when this item was a disc. The
-      bar is then pulled back onto the board if the turn hung an end off it:
-      a rotation that cannot be completed must not be silently half-applied. */
-  aimBoosterTo(i: number, p: Vec): void {
-    const b = this.boosters[i];
-    if (!b) return;
-    const cx = midX(b), cy = midY(b);
-    const dx = p.x - cx, dy = p.y - cy;
-    if (Math.hypot(dx, dy) < 6) return;            // no direction in a pivot
-    const turned = barAt(cx, cy, Math.atan2(dy, dx) * 180 / Math.PI);
-    b.x1 = turned.x1; b.y1 = turned.y1; b.x2 = turned.x2; b.y2 = turned.y2;
-    this.moveBoosterBy(i, 0, 0);
-  }
-
-  /** Where the aim knob sits: off the bar's leading end, on its own axis. */
-  boosterHandleAt(b: BoostRampDef): Vec {
-    const a = angleOf(b);
-    return { x: midX(b) + Math.cos(a) * (BOOST_LEN / 2 + AIM_OFF),
-             y: midY(b) + Math.sin(a) * (BOOST_LEN / 2 + AIM_OFF) };
-  }
-
-  /** Where its × sits. The RAMP's rule, unchanged: off the middle along the
-      normal, flipped to whichever side keeps it on the board. Two bars of the
-      same shape get the same button in the same place, which is the whole
-      reason this item is no longer measured like a disc. */
-  boosterDeleteAt(b: BoostRampDef): Vec {
-    return this.deleteButtonAt(b);
-  }
-
-  /* One object, rebuilt only when the LIST changes. Null when the player has
-     placed nothing, so an untouched board hands the physics the level itself
-     and not a copy of it. */
-  private composeLevel(): void {
-    this.composed = this.boosters.length === 0 ? null
-      : { ...this.level, boostRamps: [...this.level.boostRamps, ...this.boosters] };
-  }
 
   /* ---------------- ramp editing ---------------- */
 
@@ -367,7 +275,6 @@ export class LevelManager {
      and angle survive: the player's work is moved, not discarded. */
   reclampRamps(): void {
     for (let i = 0; i < this.ramps.length; i++) this.moveRampBy(i, 0, 0);
-    for (let i = 0; i < this.boosters.length; i++) this.moveBoosterBy(i, 0, 0);
   }
 
   /** Where the × sits: off the ramp's midpoint, along its normal, flipped to
@@ -400,13 +307,4 @@ export class LevelManager {
    are read back out of them rather than kept alongside - two copies of the
    same fact are two facts that can disagree, and the physics only ever reads
    the ends. */
-const midX = (b: Segment): number => (b.x1 + b.x2) / 2;
-const midY = (b: Segment): number => (b.y1 + b.y2) / 2;
-const angleOf = (b: Segment): number => Math.atan2(b.y2 - b.y1, b.x2 - b.x1);
 
-/** A bar of the item's one fixed length, centred on (cx, cy) at `deg`. */
-function barAt(cx: number, cy: number, deg: number): Segment {
-  const a = deg * Math.PI / 180;
-  const hx = Math.cos(a) * BOOST_LEN / 2, hy = Math.sin(a) * BOOST_LEN / 2;
-  return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy };
-}

@@ -1021,7 +1021,7 @@ const flashEl = () => page.evaluate(() => {
 // find the first level carrying each mechanic and check it teaches itself
 const firstWith = await page.evaluate(() => {
   const g = window.__gtb, out = {};
-  ['boosters','wind','slippery','portals','breakables','stars'].forEach(k => {
+  ['boosters','wind','slippery','breakables','stars'].forEach(k => {
     for (let i = 0; i < g.LEVELS.length; i++)
       if (g.LEVELS[i][k].length){ out[k] = i; break; }
   });
@@ -1075,9 +1075,9 @@ const panelInfo = await page.evaluate(() => {
 });
 console.log(`  sections: ${panelInfo.headings.join(' / ')}`);
 console.log(`  entries: ${panelInfo.lines.map(l => l.name + (l.here ? '*' : '')).join(', ')}`);
-check(panelInfo.lines.length >= 11, 'it documents every thing that can be on a board',
+check(panelInfo.lines.length >= 10, 'it documents every thing that can be on a board',
   `${panelInfo.lines.length} entries`);
-for (const w of ['Target','Obstacle','Breakable block','Booster pad','Portal','Wind','Ice',
+for (const w of ['Target','Obstacle','Breakable block','Booster pad','Wind','Ice',
                  'Gold star','Your ramp','Wall','Ball'])
   if (!panelInfo.lines.some(l => l.name === w)) bad(`info panel is missing "${w}"`);
 /* Flagged against something this board really has. It used to be the booster
@@ -1089,7 +1089,7 @@ check(panelInfo.lines.some(l => l.name === 'Mystery box' && l.here),
 check(!panelInfo.lines.some(l => l.name === 'Booster pad' && l.here),
   'while the booster PAD is listed but never marked - no level ships one',
   'documented, never on a board');
-check(panelInfo.lines.some(l => l.name === 'Portal' && !l.here),
+check(panelInfo.lines.some(l => l.name === 'Wind' && !l.here),
   'without flagging what is not');
 check(['THE BASICS','ON THE BOARD','BALLS','LEVEL RATING'].every(h =>
   panelInfo.headings.some(x => x.toUpperCase() === h)),
@@ -1108,7 +1108,7 @@ check(await page.locator('#infopanel').isHidden(), 'Close closes it');
    await rather than clicked through synchronously the way the imperative
    build allowed. */
 const WANT = [['obstacles','Obstacle'], ['breakables','Breakable block'],
-              ['boosters','Booster pad'], ['portals','Portal'],
+              ['boosters','Booster pad'],
               ['wind','Wind'],          ['slippery','Ice'], ['stars','Gold star']];
 const levelCount = await page.evaluate(() => window.__gtb.LEVELS.length);
 const agree = [];
@@ -1124,7 +1124,7 @@ for (let i = 0; i < levelCount; i++){
   const lv = await page.evaluate(ix => {
     const l = window.__gtb.LEVELS[ix];
     return { id: l.id, obstacles: l.obstacles.length, breakables: l.breakables.length,
-             boosters: l.boosters.length, portals: l.portals.length, wind: l.wind.length,
+             boosters: l.boosters.length, wind: l.wind.length,
              slippery: l.slippery.length, stars: l.stars.length, walls: l.walls.length };
   }, i);
   for (const [key, name] of WANT)
@@ -2568,7 +2568,7 @@ check((await page.evaluate(() => window.__gtb.balls())) === beforeJoint - 1,
   `${beforeJoint} -> ${await page.evaluate(() => window.__gtb.balls())}`);
 
 /* ---------------------------------------------------------------- */
-section('14c. Booster ramps: the item you bring, and only pay for when it works');
+section('14c. Springs: the item you bring, and only pay for when it works');
 
 await page.evaluate(() => { window.__gtb.clearProgress(); window.__gtb.skipTutorial(); });
 await topUp();
@@ -2576,12 +2576,12 @@ await page.evaluate(() => window.__gtb.setWallet(999, 0, 0));
 
 /* --- before level 21 the item does not exist anywhere --- */
 await page.evaluate(() => window.__gtb.setLevel(0));
-let bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(!bi.unlocked && bi.owned === 0, 'a new player owns no boosters and has none unlocked',
-  JSON.stringify({ unlocked: bi.unlocked, owned: bi.owned }));
+let si = await page.evaluate(() => window.__gtb.springInfo());
+check(!si.unlocked && si.owned === 0, 'a new player owns no springs and has none unlocked',
+  JSON.stringify({ unlocked: si.unlocked, owned: si.owned }));
 await page.click('#btn-inventory');
 await page.waitForSelector('#inventorypanel');
-check(await page.locator('#btn-item-booster').count() === 0,
+check(await page.locator('#btn-item-spring').count() === 0,
   'the bag does not offer one before level 21');
 check(await page.locator('#inv-empty').count() === 1,
   'and with nothing else owned yet the tray says so rather than looking broken',
@@ -2590,215 +2590,248 @@ await page.click('#btn-inv-close');
 await openSettings();
 await page.click('#btn-shop');
 await page.waitForSelector('#shoppanel');
-check(await page.locator('#shop-boosters-head').count() === 0 &&
-      await page.locator('#shop-boosters-locked').count() === 1,
+check(await page.locator('#shop-springs-head').count() === 0 &&
+      await page.locator('#shop-springs-locked').count() === 1,
   'and the shop does not sell them either - it says when they open',
-  (await page.locator('#shop-boosters-locked').textContent()).trim());
-check(await page.evaluate(() => window.__gtb.buyBoosters(1)) === false,
+  (await page.locator('#shop-springs-locked').textContent()).trim());
+check(await page.evaluate(() => window.__gtb.buySprings(1)) === false,
   'the wallet refuses the purchase too - a hidden section is not the rule');
 await page.click('#btn-shop-close');
 await closeSettings();
 
-/* --- reaching level 21 hands over exactly one, exactly once --- */
-const UNLOCK = await page.evaluate(() => window.__gtb.BOOSTER.unlockLevel);
+/* --- reaching level 21 unlocks them and hands over one free --- */
+const UNLOCK = await page.evaluate(() => window.__gtb.SPRING.unlockLevel);
 await page.evaluate(u => window.__gtb.setLevel(u - 1), UNLOCK);
-bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(bi.unlocked && bi.owned === 1 && bi.gifted,
-  `reaching level ${UNLOCK} unlocks boosters and gives one free`, JSON.stringify(bi.owned));
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(si.unlocked && si.owned === 1 && si.gifted,
+  `reaching level ${UNLOCK} unlocks springs and gives one free`, JSON.stringify(si.owned));
 const flashOnUnlock = await page.evaluate(() => window.__gtb.state().flash);
-check(/booster/i.test(flashOnUnlock), 'and says so on the board', flashOnUnlock);
-/* Leaving and coming back must not hand over a second one - the whole point
-   of the persisted flag. */
-await page.evaluate(u => { window.__gtb.setLevel(0); window.__gtb.setLevel(u - 1); }, UNLOCK);
-await page.evaluate(u => { window.__gtb.setLevel(u + 3); window.__gtb.setLevel(u - 1); }, UNLOCK);
-check((await page.evaluate(() => window.__gtb.boosterInfo())).owned === 1,
-  'and every later visit hands over nothing - the gift fires once, ever',
-  `still ${(await page.evaluate(() => window.__gtb.boosterInfo())).owned}`);
-await page.reload();
-await page.waitForFunction(() => !!window.__gtb);
-await topUp();
-check((await page.evaluate(() => window.__gtb.boosterInfo())).owned === 1,
-  'and it survives a reload, like the coins and the ramps', 'persisted');
+check(/spring/i.test(flashOnUnlock), 'and says so on the board', flashOnUnlock);
+await page.evaluate(() => window.__gtb.setLevel(0));
+await page.evaluate(u => window.__gtb.setLevel(u - 1), UNLOCK);
+check((await page.evaluate(() => window.__gtb.springInfo())).owned === 1,
+  'and the free one is handed over ONCE, however often that board is entered',
+  `still ${(await page.evaluate(() => window.__gtb.springInfo())).owned}`);
 
-/* --- the shop sells them once they exist --- */
+/* --- the shop sells them once they are unlocked --- */
 await openSettings();
 await page.click('#btn-shop');
 await page.waitForSelector('#shoppanel');
-check(await page.locator('#shop-boosters-head').count() === 1,
-  'the shop grows a Boosters section the moment they are unlocked');
-const bundles = await page.evaluate(() => window.__gtb.BOOSTER.bundles);
-const rows = await page.locator('.buyrow button[id^="btn-buy-boosters-"]').count();
-check(rows === bundles.length, 'with one row per bundle, same as balls and ramps',
-  `${rows} rows`);
-const priceShown = await page.evaluate(() =>
-  [...document.querySelectorAll('[id^="btn-buy-boosters-"] .price')].map(e => +e.textContent.replace(/\D/g, '')));
-check(JSON.stringify(priceShown) === JSON.stringify(bundles.map(b => b.coins)),
-  'and every price is the one the wallet will actually charge',
-  `${priceShown.join('/')} vs ${bundles.map(b => b.coins).join('/')}`);
-await page.evaluate(() => window.__gtb.setWallet(5, 0, 1));
-check(await page.locator('#btn-buy-boosters-1').isDisabled(),
-  'a bundle you cannot afford is disabled rather than failing when pressed');
-await page.evaluate(() => window.__gtb.setWallet(999, 0, 1));
-const coinsBefore = await page.evaluate(() => window.__gtb.coins());
-await page.click('#btn-buy-boosters-1');
-const afterBuy = await page.evaluate(() => ({ coins: window.__gtb.coins(),
-                                              owned: window.__gtb.boosterInfo().owned }));
-check(afterBuy.owned === 2 && afterBuy.coins === coinsBefore - bundles[0].coins,
-  'buying one takes the coins and hands over the goods in one step',
-  `${coinsBefore} -> ${afterBuy.coins} coins, ${afterBuy.owned} boosters`);
+check(await page.locator('#shop-springs-head').count() === 1,
+  'the shop grows a Springs section the moment they are unlocked');
+const bundles = await page.evaluate(() => window.__gtb.SPRING.bundles);
+const rows = await page.locator('.buyrow button[id^="btn-buy-springs-"]').count();
+check(rows === bundles.length, 'with a row for every bundle the ledger defines',
+  `${rows} rows, ${bundles.length} bundles`);
+const prices = await page.evaluate(() =>
+  [...document.querySelectorAll('[id^="btn-buy-springs-"] .price')].map(e => +e.textContent.replace(/\D/g, '')));
+check(prices.every((c, k) => k === 0 || c > prices[k - 1]),
+  'priced so a bigger bundle costs more in total', prices.join(' < '));
+check(prices.every((c, k) => c / bundles[k].n <= prices[0] / bundles[0].n),
+  'and less per spring', bundles.map((b, k) => (prices[k] / b.n).toFixed(1)).join(' >= '));
+await page.evaluate(() => window.__gtb.setWallet(0, 0, 1));
+check(await page.locator('#btn-buy-springs-1').isDisabled(),
+  'a bundle you cannot afford is disabled rather than hidden');
+const coinsBefore = 999;
+await page.evaluate(c => window.__gtb.setWallet(c, 0, 1), coinsBefore);
+await page.click('#btn-buy-springs-1');
+const afterBuy = await page.evaluate(() => ({ coins: window.__gtb.wallet().coins,
+                                              owned: window.__gtb.springInfo().owned }));
+check(afterBuy.owned === 2 && afterBuy.coins < coinsBefore,
+  'and buying one takes the coins and puts it in the bag',
+  `${coinsBefore} -> ${afterBuy.coins} coins, ${afterBuy.owned} springs`);
 await page.click('#btn-shop-close');
 await closeSettings();
 
-/* --- placing one: reserved, not spent --- */
+/* ============================================================
+   FITTING ONE: ARMED, THEN A TAP ON A RAMP
+
+   The whole gesture, and the thing that makes this item
+   different from the bar it replaced: it has no position of its
+   own, so taking it out of the bag places NOTHING. It arms, and
+   the next tap on one of the player's own ramps is where it
+   goes.
+   ============================================================ */
 await page.evaluate(() => { window.__gtb.setLevel(0); window.__gtb.setWallet(999, 0, 2); });
+await page.evaluate(() => window.__gtb.setRamps([]));
 await page.click('#btn-inventory');
 await page.waitForSelector('#inventorypanel');
-check(await page.locator('#btn-item-booster').count() === 1,
-  'the bag offers the booster once it is unlocked');
-await page.click('#btn-item-booster');
-await page.waitForSelector('#inventorypanel', { state: 'detached' });
-bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(bi.placed === 1 && bi.selected === 0,
-  'tapping it puts one on the board, selected, ready to be dragged',
-  JSON.stringify({ placed: bi.placed, selected: bi.selected }));
-check(bi.owned === 2 && bi.free === 1 && bi.paid === 0,
-  'and nothing has been charged: it is RESERVED out of the bag, not spent',
-  `owned ${bi.owned}, free to place ${bi.free}, paid ${bi.paid}`);
-const bshape = bi.onBoard[0];
-const BOOST = await page.evaluate(() => window.__gtb.BOOSTER);
-const barLen = Math.hypot(bshape.x2 - bshape.x1, bshape.y2 - bshape.y1);
-check(Math.abs(barLen - BOOST.len) < 0.01,
-  'every placed booster ramp is a BAR of the one fixed length - what you choose ' +
-  'is where it goes and which way it lies',
-  `${barLen.toFixed(1)} units long, the item is ${BOOST.len}`);
-check(Math.abs(bshape.y1 - bshape.y2) < 0.01,
-  'and it arrives lying flat, unaimed, so turning it is the first thing you do',
-  `(${bshape.x1.toFixed(0)},${bshape.y1.toFixed(0)})-(${bshape.x2.toFixed(0)},${bshape.y2.toFixed(0)})`);
+check(await page.locator('#btn-item-spring').count() === 1,
+  'the bag offers the spring once it is unlocked');
+await page.click('#btn-item-spring');
+await page.waitForTimeout(150);
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(!si.armed && si.fitted === 0,
+  'with NO ramp drawn yet it refuses to arm - there is nothing to fit it to',
+  `armed ${si.armed}`);
+check(/ramp first/i.test(await page.evaluate(() => window.__gtb.state().flash)),
+  'and says why', await page.evaluate(() => window.__gtb.state().flash));
+await page.evaluate(() => { const p = document.getElementById('btn-inv-close'); if (p) p.click(); });
+await page.waitForTimeout(120);
 
-/* dragged and turned by the same two-gesture grammar the ramp uses. A bar has
-   no centre field of its own, so where it IS and which way it LIES are read
-   back out of its two ends - the same numbers the physics collides with. */
-const barMid = b => ({ x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 });
-const barDeg = b => Math.atan2(b.y2 - b.y1, b.x2 - b.x1) * 180 / Math.PI;
-await page.evaluate(() => window.__gtb.moveBoosterTo(0, 200, 430));
-await page.evaluate(() => window.__gtb.aimBooster(0, 260, 490));
-let onBoard = (await page.evaluate(() => window.__gtb.boosterInfo())).onBoard[0];
-check(Math.abs(barMid(onBoard).x - 200) < 1 && Math.abs(barMid(onBoard).y - 430) < 1,
-  'dragging moves it, and turning it pivots about its own middle rather than moving it',
-  `(${barMid(onBoard).x.toFixed(0)},${barMid(onBoard).y.toFixed(0)})`);
-check(Math.abs(barDeg(onBoard) - 45) < 1,
-  'and the knob sets the angle the bar lies at',
-  `${barDeg(onBoard).toFixed(0)}°`);
-/* the same gestures on the real canvas, not just through the hook */
-const bbox = await page.locator('#board').boundingBox();
-await mouseDrag(bbox, { x: 200, y: 430 }, { x: 250, y: 470 });
-onBoard = (await page.evaluate(() => window.__gtb.boosterInfo())).onBoard[0];
-check(Math.abs(barMid(onBoard).x - 250) < 14 && Math.abs(barMid(onBoard).y - 470) < 14,
-  'and a real drag on the board moves it too',
-  `(${barMid(onBoard).x.toFixed(0)},${barMid(onBoard).y.toFixed(0)})`);
+await page.evaluate(() => window.__gtb.drawRamp(140, 320, 260, 360));
+await page.evaluate(() => window.__gtb.takeSpring());
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(si.armed && si.fitted === 0,
+  'with a ramp on the board, taking one out of the bag ARMS it and places nothing',
+  `armed ${si.armed}, fitted ${si.fitted}`);
+check(si.owned === 2 && si.free === 2 && si.paid === 0,
+  'and nothing is charged or even reserved yet - it is not on anything',
+  `owned ${si.owned}, free ${si.free}`);
+
+/* a tap on empty board puts it back rather than fitting it somewhere useless */
+const sbox = await page.locator('#board').boundingBox();
+await mouseTap(sbox, { x: 60, y: 120 });
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(!si.armed && si.fitted === 0,
+  'a tap on empty board puts an armed spring back in the bag rather than fitting it',
+  `armed ${si.armed}, fitted ${si.fitted}`);
+
+/* and a tap ON the ramp fits it - through the real canvas, not the hook */
+await page.evaluate(() => window.__gtb.takeSpring());
+await mouseTap(sbox, { x: 200, y: 340 });
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(si.fitted === 1 && si.onRamps[0] === 0 && !si.armed,
+  'and a tap on one of your own ramps fits it to that ramp',
+  `on ramp(s) ${JSON.stringify(si.onRamps)}`);
+check(si.owned === 2 && si.free === 1 && si.paid === 0,
+  'still nothing charged: it is RESERVED out of the bag, not spent',
+  `owned ${si.owned}, free to fit ${si.free}, paid ${si.paid}`);
+
+/* the spring travels WITH the ramp - it is a property of it, not a position */
+const movedWith = await page.evaluate(() => {
+  const g = window.__gtb;
+  g.moveRamp(0, 40, 30);
+  return { onRamps: g.springInfo().onRamps, ramp: g.state().ramps[0] };
+});
+check(movedWith.onRamps.length === 1 && movedWith.onRamps[0] === 0,
+  'moving that ramp carries the spring with it - it is a property of the ramp',
+  `ramp now at (${movedWith.ramp.x1.toFixed(0)},${movedWith.ramp.y1.toFixed(0)})`);
+
+/* one per ramp */
+await page.evaluate(() => window.__gtb.takeSpring());
+const twice = await page.evaluate(() => window.__gtb.fitSpring(0));
+check(twice === false && (await page.evaluate(() => window.__gtb.springInfo())).fitted === 1,
+  'a ramp takes one spring and no more', `fitted ${(await page.evaluate(() => window.__gtb.springInfo())).fitted}`);
 
 /* --- a miss costs nothing --- */
-await page.evaluate(() => window.__gtb.setRamps([]));
-await page.evaluate(() => window.__gtb.moveBoosterTo(0, 60, 700));
-await page.evaluate(() => window.__gtb.aimBooster(0, 160, 700));
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.setRamps([{ x1: 40, y1: 700, x2: 150, y2: 700 }]);   // nowhere near the fall
+  g.takeSpring(); g.fitSpring(0);
+});
 await dropBall();
 await page.waitForFunction(() => window.__gtb.state().phase === 'plan', null, { timeout: 25000 });
-bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(bi.owned === 2 && bi.paid === 0 && bi.placed === 1,
-  'a drop that MISSES with a booster on the board costs nothing and leaves it there',
-  `owned ${bi.owned}, placed ${bi.placed}`);
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(si.owned === 2 && si.paid === 0 && si.fitted === 1,
+  'a drop that MISSES the sprung ramp costs nothing and leaves the spring on it',
+  `owned ${si.owned}, fitted ${si.fitted}`);
 
-/* --- a win the booster had nothing to do with charges nothing --- */
+/* --- a win the spring had nothing to do with charges nothing --- */
 const winCfg = await page.evaluate(() => {
   const g = window.__gtb, R = Math.PI / 180;
   const ramp = (cx, cy, d, l = 120) => { const a = d * R, hx = Math.cos(a) * l / 2, hy = Math.sin(a) * l / 2;
     return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy }; };
   const lv = g.LEVELS[0], sx = lv.spawn.x;
-  // the bar parked in a corner the ball never visits
-  g.moveBoosterTo(0, 430, 120);
-  g.aimBooster(0, 470, 160);
   for (let ry = lv.spawn.y + 80; ry <= 660; ry += 15)
     for (let th = 25; th <= 155; th += 1.5) {
       const cfg = [ramp(sx, ry, th)];
-      if (g.simulate(cfg, 1, 0).result === 'win') { g.setRamps(cfg); g.setSeed(1); return true; }
+      if (g.simulate(cfg, 1, 0).result === 'win') {
+        /* the winning ramp, plus a SECOND one in a corner the ball never
+           visits - and the spring goes on that one */
+        g.setRamps([cfg[0], { x1: 400, y1: 130, x2: 460, y2: 150 }]);
+        g.takeSpring(); g.fitSpring(1);
+        g.setSeed(1);
+        return true;
+      }
     }
   return false;
 });
 check(winCfg, 'level 1 is winnable with one ramp (test setup)');
 await dropBall();
 await page.waitForFunction(() => window.__gtb.state().phase === 'over', null, { timeout: 25000 });
-bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(bi.owned === 2 && bi.paid === 0,
-  'winning with a booster the ball never touched charges nothing - you pay for one that WORKED',
-  `owned ${bi.owned}, paid ${bi.paid}`);
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(si.owned === 2 && si.paid === 0,
+  'winning with a spring the ball never bounced off charges nothing - you pay for one that WORKED',
+  `owned ${si.owned}, paid ${si.paid}`);
 await page.evaluate(() => { window.__gtb.reset(); window.__gtb.setLevel(0); });
 
-/* --- a win the booster DID fire on spends exactly one --- */
+/* --- a win the spring DID fire on spends exactly one --- */
 await page.evaluate(() => window.__gtb.setWallet(999, 0, 2));
-const boostWin = await page.evaluate(() => {
+const springWin = await page.evaluate(() => {
   const g = window.__gtb, R = Math.PI / 180;
-  const lv = g.LEVELS[0], sx = lv.spawn.x, t = lv.target;
-  /* Straight across the fall line, so the ball cannot miss it, and swept for an
-     angle that mirrors it into the target with no ramp at all. `bar()` builds
-     the item the bag hands out, so what is proved here is the real thing. */
-  for (let by = 220; by <= 520; by += 20)
-    for (let ang = -80; ang <= 80; ang += 2) {
-      const j = g.scratch({ ...lv, boostRamps: [g.bar(sx, by, ang)] }, 5);
-      if (g.simulate([], 1, j).result === 'win') return { by, ang, t: t.r };
+  const lv = g.LEVELS[0], sx = lv.spawn.x;
+  const ramp = (cx, cy, d, l = 120) => { const a = d * R, hx = Math.cos(a) * l / 2, hy = Math.sin(a) * l / 2;
+    return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy }; };
+  /* A SPRUNG ramp under the fall line that wins. Swept the same way the plain
+     one above was, with the flag on - so what is proved here is the real item
+     doing real work on the real board. */
+  for (let ry = lv.spawn.y + 80; ry <= 620; ry += 10)
+    for (let th = 20; th <= 160; th += 2) {
+      const cfg = [{ ...ramp(sx, ry, th), spring: true }];
+      if (g.simulate(cfg, 1, 0).result !== 'win') continue;
+      const r = g.simulate(cfg, 1, 0);
+      if (!r.springs) continue;            // it has to have actually fired
+      return { ry, th };
     }
   return null;
 });
-check(!!boostWin, 'a booster placement that wins level 1 on its own (test setup)',
-  JSON.stringify(boostWin));
+check(!!springWin, 'a sprung ramp that wins level 1 and really fires (test setup)',
+  JSON.stringify(springWin));
 await page.evaluate(w => {
   const g = window.__gtb, R = Math.PI / 180;
-  g.placeBooster();
-  g.moveBoosterTo(0, g.LEVELS[0].spawn.x, w.by);
-  g.aimBooster(0, g.LEVELS[0].spawn.x + Math.cos(w.ang * R) * 120,
-                  w.by + Math.sin(w.ang * R) * 120);
-  g.setRamps([]); g.setSeed(1);
-}, boostWin);
-const ownedBefore = (await page.evaluate(() => window.__gtb.boosterInfo())).owned;
+  const lv = g.LEVELS[0], sx = lv.spawn.x;
+  const a = w.th * R, hx = Math.cos(a) * 60, hy = Math.sin(a) * 60;
+  g.setRamps([{ x1: sx - hx, y1: w.ry - hy, x2: sx + hx, y2: w.ry + hy }]);
+  g.takeSpring(); g.fitSpring(0);
+  g.setSeed(1);
+}, springWin);
+const ownedBefore = (await page.evaluate(() => window.__gtb.springInfo())).owned;
 await dropBall();
 await page.waitForFunction(() => window.__gtb.state().phase === 'over', null, { timeout: 25000 });
-bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(bi.owned === ownedBefore - 1 && bi.paid === 1,
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(si.owned === ownedBefore - 1 && si.paid === 1,
   'and the drop that FIRES one and wins is what takes it out of the bag',
-  `owned ${ownedBefore} -> ${bi.owned}, paid ${bi.paid}`);
+  `owned ${ownedBefore} -> ${si.owned}, paid ${si.paid}`);
 /* Replaying a board already won must not charge for it twice. */
 await page.evaluate(() => window.__gtb.drop());
 await page.waitForFunction(() => window.__gtb.state().phase !== 'drop', null, { timeout: 25000 });
-check((await page.evaluate(() => window.__gtb.boosterInfo())).owned === bi.owned,
+check((await page.evaluate(() => window.__gtb.springInfo())).owned === si.owned,
   'and replaying that same board never charges for it a second time',
-  `still ${(await page.evaluate(() => window.__gtb.boosterInfo())).owned}`);
+  `still ${(await page.evaluate(() => window.__gtb.springInfo())).owned}`);
 await page.evaluate(() => window.__gtb.reset());
 await page.evaluate(() => window.__gtb.setLevel(0));
-check((await page.evaluate(() => window.__gtb.boosterInfo())).placed === 0,
-  'leaving the level takes any placed booster back off the board');
+check((await page.evaluate(() => window.__gtb.springInfo())).fitted === 0,
+  'leaving the level takes any fitted spring off with the ramps');
 
-/* --- taking one back off the board is free --- */
-await page.evaluate(() => window.__gtb.placeBooster());
-await page.evaluate(() => window.__gtb.removeBooster(0));
-bi = await page.evaluate(() => window.__gtb.boosterInfo());
-check(bi.placed === 0 && bi.owned === 1 && bi.free === 1,
-  'picking one back up returns it to the bag - it was never spent',
-  `owned ${bi.owned}, free ${bi.free}`);
+/* --- taking one back off is free --- */
+await page.evaluate(() => {
+  const g = window.__gtb;
+  g.setWallet(999, 0, 1);
+  g.drawRamp(140, 320, 260, 360);
+  g.takeSpring(); g.fitSpring(0);
+});
+const refunded = await page.evaluate(() => window.__gtb.unfitSpring(0));
+si = await page.evaluate(() => window.__gtb.springInfo());
+check(refunded === true && si.fitted === 0 && si.owned === 1 && si.free === 1,
+  'taking one back off returns it to the bag - it was never spent',
+  `owned ${si.owned}, free ${si.free}`);
 
 /* --- the capstone board says what it needs --- */
 const needIx = await page.evaluate(() =>
-  window.__gtb.LEVELS.findIndex(l => l.needsBooster));
-check(needIx >= 0, 'the game ships a board that ramps alone cannot solve',
+  window.__gtb.LEVELS.findIndex(l => l.needsSpring));
+check(needIx >= 0, 'the game ships a board that a plain ramp cannot solve',
   `level ${await page.evaluate(i => window.__gtb.LEVELS[i].id, needIx)}`);
 await page.evaluate(() => window.__gtb.setWallet(999, 0, 0));
 await page.evaluate(i => window.__gtb.setLevel(i), needIx);
 let needFlash = await page.evaluate(() => window.__gtb.state().flash);
-check(/booster/i.test(needFlash) && /shop/i.test(needFlash),
+check(/spring/i.test(needFlash) && /shop/i.test(needFlash),
   'and with an empty bag it says so, and where to get one', needFlash);
 await page.evaluate(() => window.__gtb.setWallet(999, 0, 1));
 await page.evaluate(() => window.__gtb.setLevel(0));
 await page.evaluate(i => window.__gtb.setLevel(i), needIx);
 needFlash = await page.evaluate(() => window.__gtb.state().flash);
-check(/booster/i.test(needFlash) && !/shop/i.test(needFlash),
+check(/spring/i.test(needFlash) && !/shop/i.test(needFlash),
   'and with one in the bag it stops sending you shopping', needFlash);
 
 /* ---------------------------------------------------------------- */
@@ -2812,14 +2845,14 @@ await page.evaluate(() => window.__gtb.setLevel(2));          // level 3
 let boxState = await page.evaluate(() => window.__gtb.boxInfo());
 check(boxState.onBoard.length === 1, 'level 3 carries a mystery box', JSON.stringify(boxState.onBoard));
 check(!boxState.claimedHere && boxState.open.every(o => !o), 'and it starts unopened');
-check(boxState.table.every(p => p.kind !== 'boosters'),
-  'its prize table cannot roll a booster - the item does not exist this early',
+check(boxState.table.every(p => p.kind !== 'springs'),
+  'its prize table cannot roll a spring - the item does not exist this early',
   boxState.table.map(p => `${p.kind}:${p.w}`).join(' '));
 const lateTable = await page.evaluate(() => {
   window.__gtb.setWallet(999, 0, 1);            // pretend the player owns one
   return window.__gtb.boxInfo();
 });
-check(lateTable.table.every(p => p.kind !== 'boosters'),
+check(lateTable.table.every(p => p.kind !== 'springs'),
   'and owning one elsewhere does not change what THIS level may roll');
 
 /* the weights are a table, not a coin flip */
@@ -2828,7 +2861,7 @@ check(weights.reduce((a, p) => a + p.w, 0) === 100,
   'the box prize weights total 100, so each one reads as its own percentage',
   weights.map(p => `${p.kind} ${p.n} @${p.w}%`).join(', '));
 const common = weights.find(p => p.kind === 'coins').w;
-const rare = Math.min(...weights.filter(p => p.kind === 'boosters' || p.kind === 'spin').map(p => p.w));
+const rare = Math.min(...weights.filter(p => p.kind === 'springs' || p.kind === 'spin').map(p => p.w));
 check(rare < common, 'and the rare prizes really are rarer than the common ones',
   `rarest ${rare}% vs coins ${common}%`);
 const rolls = await page.evaluate(() => {
@@ -2839,8 +2872,8 @@ const rolls = await page.evaluate(() => {
   }
   return out;
 });
-check(!rolls.boosters && rolls.coins > rolls.spin,
-  'a thousand rolls on level 3 never produce a booster, and coins lead',
+check(!rolls.springs && rolls.coins > rolls.spin,
+  'a thousand rolls on level 3 never produce a spring, and coins lead',
   JSON.stringify(rolls));
 
 /* --- collecting one --- */
@@ -2863,7 +2896,7 @@ const boxCfg = await page.evaluate(() => {
 check(boxCfg, 'a ramp layout that routes the ball through the box (test setup)');
 const boxBefore = await page.evaluate(() => ({
   coins: window.__gtb.coins(), balls: window.__gtb.balls(),
-  ramps: window.__gtb.spareRamps(), boosters: window.__gtb.boosterInfo().owned,
+  ramps: window.__gtb.spareRamps(), springs: window.__gtb.springInfo().owned,
   bonus: window.__gtb.bonusSpins(),
 }));
 await dropBall();
@@ -2876,7 +2909,7 @@ check(marks > 0, 'and the reward flies out of the chest toward what now holds it
 await page.waitForFunction(() => window.__gtb.state().phase !== 'drop', null, { timeout: 25000 });
 const boxAfter = await page.evaluate(() => ({
   coins: window.__gtb.coins(), balls: window.__gtb.balls(),
-  ramps: window.__gtb.spareRamps(), boosters: window.__gtb.boosterInfo().owned,
+  ramps: window.__gtb.spareRamps(), springs: window.__gtb.springInfo().owned,
   bonus: window.__gtb.bonusSpins(),
 }));
 /* The ball itself costs one, and a win pays coins, so the comparison is
@@ -2997,7 +3030,7 @@ check(gWin, `level ${gifted[0].id} is winnable with one ramp (test setup)`);
 const gBefore = await page.evaluate(() => ({ coins: window.__gtb.coins(),
                                             balls: window.__gtb.balls(),
                                             ramps: window.__gtb.spareRamps(),
-                                            boosters: window.__gtb.boosterInfo().owned,
+                                            springs: window.__gtb.springInfo().owned,
                                             bonus: window.__gtb.bonusSpins() }));
 await dropBall();
 await page.waitForSelector('#giftpanel', { timeout: 25000 });
@@ -3010,9 +3043,9 @@ check(!gi.cardOpen && !gi.winCard,
 check(gi.prizeText.includes('?'),
   'the prize is hidden while the box is still being unwrapped', gi.prizeText);
 const stillOwed = await page.evaluate(() => ({ ramps: window.__gtb.spareRamps(),
-                                               boosters: window.__gtb.boosterInfo().owned,
+                                               springs: window.__gtb.springInfo().owned,
                                                bonus: window.__gtb.bonusSpins() }));
-check(stillOwed.ramps === gBefore.ramps && stillOwed.boosters === gBefore.boosters &&
+check(stillOwed.ramps === gBefore.ramps && stillOwed.springs === gBefore.springs &&
       stillOwed.bonus === gBefore.bonus,
   'and nothing has been credited yet - the reveal comes first, the ledger after',
   JSON.stringify(stillOwed));
@@ -3033,14 +3066,14 @@ check(gi.cardOpen && !gi.showing && !!gi.winCard,
 const gAfter = await page.evaluate(() => ({ coins: window.__gtb.coins(),
                                            balls: window.__gtb.balls(),
                                            ramps: window.__gtb.spareRamps(),
-                                           boosters: window.__gtb.boosterInfo().owned,
+                                           springs: window.__gtb.springInfo().owned,
                                            bonus: window.__gtb.bonusSpins() }));
 /* WHICH prize came up is a roll, so the check is that the RIGHT counter moved
    by the right amount - whichever one the panel named. Coins are exempt from
    an exact figure because clearing the level pays coins as well. */
 const paid = { coins: gAfter.coins - gBefore.coins, balls: gAfter.balls - gBefore.balls,
                ramps: gAfter.ramps - gBefore.ramps,
-               boosters: gAfter.boosters - gBefore.boosters,
+               springs: gAfter.springs - gBefore.springs,
                spin: gAfter.bonus - gBefore.bonus };
 const creditedRight =
   gShown.kind === 'coins' ? paid.coins >= gShown.n
@@ -3050,7 +3083,7 @@ check(creditedRight, `and the ${gShown.kind} really arrive in the counter that h
   JSON.stringify({ prize: gShown, moved: paid }));
 
 const gLevelId = await page.evaluate(i => window.__gtb.LEVELS[i].id, GIX);
-check(['coins', 'balls', 'ramps', 'boosters', 'spin'].includes(gShown.kind),
+check(['coins', 'balls', 'ramps', 'springs', 'spin'].includes(gShown.kind),
   'the gift pays out of the same pool a chest does', `${gShown.kind} on level ${gLevelId}`);
 
 /* once per level, for good - the chest's own rule */

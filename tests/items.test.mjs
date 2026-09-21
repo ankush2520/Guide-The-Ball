@@ -1,26 +1,26 @@
 /* ============================================================
    THE TWO THINGS THE PLAYER BRINGS - the solver gate.
 
-   Boosters and mystery boxes are the only content in the game
+   Springs and mystery boxes are the only content in the game
    that is not authored into a level, so each one makes a claim
    the level data cannot check for itself. This proves both, in
    the real simulator, headlessly.
 
-   1. A LEVEL FLAGGED `needsBooster` MUST BE BOTH:
+   1. A LEVEL FLAGGED `needsSpring` MUST BE BOTH:
         - unsolvable with ramps alone, and
-        - solvable with one BOOSTER RAMP out of the bag.
+        - solvable with one SPRING out of the bag.
 
-      The second half is the one that moved when the item did:
-      the bag now holds a bar that bounces like a ramp and
-      multiplies the exit speed, so what is placed below is that
-      bar - and the claim being proved is sharper than it was.
-      An ordinary ramp cannot solve this board and a bar in the
-      same place can, which means the SPEED is what the board
-      needs, not the extra surface.
+      The second half is the one that moved when the item did.
+      The bag holds a spring now, and a spring goes ON A RAMP THE
+      PLAYER DREW - so the two halves below sweep THE SAME RAMPS
+      and differ only by the flag. That makes this a controlled
+      comparison rather than two searches: identical geometry,
+      one winning and one not, so the only thing that can account
+      for the difference is the SPEED.
       Either half failing is a shipped defect, in opposite
       directions: a board that turns out to be rampable makes the
       item pointless, and one that is unsolvable even WITH the
-      booster is simply broken.
+      spring is simply broken.
 
       What "unsolvable" is allowed to mean here is stated
       exactly, because it is a negative: no win was found by an
@@ -58,16 +58,16 @@ page.on('pageerror', e => bad('page error', e.message));
 await attachHarness(page);
 
 const n = await page.evaluate(() => window.__gtb.LEVELS.length);
-console.log(`\nBOOSTERS AND MYSTERY BOXES — ${n} levels\n`);
+console.log(`\nSPRINGS AND MYSTERY BOXES — ${n} levels\n`);
 
 /* ---------------------------------------------------------------- */
-console.log('1. Boards that require a booster');
+console.log('1. Boards that require a spring');
 
 const needs = await page.evaluate(() =>
-  window.__gtb.LEVELS.map((l, i) => ({ i, id: l.id, need: !!l.needsBooster }))
+  window.__gtb.LEVELS.map((l, i) => ({ i, id: l.id, need: !!l.needsSpring }))
     .filter(l => l.need));
 
-chk(needs.length > 0, 'at least one board in the game requires a booster',
+chk(needs.length > 0, 'at least one board in the game requires a spring',
     needs.map(l => `level ${l.id}`).join(', ') || 'none');
 
 for (const lvl of needs) {
@@ -108,31 +108,29 @@ for (const lvl of needs) {
       if (simulate(cfg, 1, li).result === 'win') multi = cfg;
     }
 
-    /* ---- half two: ONE BOOSTER RAMP OUT OF THE BAG DOES WIN ----
-       Exactly the item the player owns - a bar of the shipped length, built by
-       the game's own helper rather than by a shape copied in here - placed and
-       turned by the same freedoms the board gives them. */
-    const B = (x, y, angle) => g.bar(x, y, angle);
+    /* ---- half two: ONE SPRING OUT OF THE BAG DOES WIN ----
+       The SAME ramps as half one, and the only difference is the flag: a
+       sprung ramp is a ramp the player drew with the item fitted to it, which
+       is exactly what `spring: true` is in the engine. That makes the two
+       halves a controlled comparison rather than two different searches - the
+       geometry is identical either way, so the only thing that can account
+       for one winning and the other not is the SPEED. */
+    const sprung = (cx, cy, deg) => ({ ...ramp(cx, cy, deg), spring: true });
     let solved = null, spots = 0;
     /* Stopped at ten solving spots rather than swept exhaustively. The claim
-       being proved is "a booster solves this, and finding the spot is not a
+       being proved is "a spring solves this, and finding the spot is not a
        pixel hunt" - ten is already that, and the exhaustive version of this
        loop is minutes of simulator time for a number nobody reads. */
-    for (let bx = 70; bx <= 430 && spots < 10; bx += 30)
-      for (let by = 150; by <= 630 && spots < 10; by += 30) {
+    for (let rx = 70; rx <= 430 && spots < 10; rx += 30)
+      for (let ry = 150; ry <= 630 && spots < 10; ry += 30) {
         let spotSolves = false;
-        for (let ang = -170; ang < 180 && !spotSolves; ang += 10) {
-          const j = g.scratch({ ...lv, boostRamps: [B(bx, by, ang)] }, 0);
-          for (let ry = 130; ry <= 620 && !spotSolves; ry += 60)
-            for (let th = 20; th <= 160; th += 12) {
-              const cfg = [ramp(lv.spawn.x, ry, th)];
-              if (simulate(cfg, 1, j).result !== 'win') continue;
-              // and it must win on every obstacle seed, like any other solution
-              if (!seeds.every(s => simulate(cfg, s, j).result === 'win')) continue;
-              spotSolves = true;
-              if (!solved) solved = { bx, by, ang, ry, th };
-              break;
-            }
+        for (let th = 0; th < 180 && !spotSolves; th += 10) {
+          const cfg = [sprung(rx, ry, th)];
+          if (simulate(cfg, 1, li).result !== 'win') continue;
+          // and it must win on every obstacle seed, like any other solution
+          if (!seeds.every(s => simulate(cfg, s, li).result === 'win')) continue;
+          spotSolves = true;
+          if (!solved) solved = { rx, ry, th };
         }
         if (spotSolves) spots++;
       }
@@ -152,12 +150,12 @@ for (const lvl of needs) {
       r.oneRamp ? `but one does: ${JSON.stringify(r.oneRamp)}` : 'swept the whole board at 1.5°');
   chk(!r.multi, `level ${r.id}: nor do 60,000 random two- and three-ramp layouts`,
       r.multi ? 'but one does' : 'none of them win');
-  chk(!!r.solved, `level ${r.id}: one booster ramp from the bag DOES solve it`,
-      r.solved ? `e.g. a bar at (${r.solved.bx},${r.solved.by}) lying at ${r.solved.ang}°, ` +
-                 `ramp y=${r.solved.ry} th=${r.solved.th}° - wins on all 7 seeds`
-               : 'no booster ramp placement wins');
+  chk(!!r.solved, `level ${r.id}: one SPRING on a ramp DOES solve it`,
+      r.solved ? `e.g. a ramp at (${r.solved.rx},${r.solved.ry}) at ${r.solved.th}° with a ` +
+                 'spring on it - wins on all 7 seeds, where the same ramp without one does not'
+               : 'no sprung ramp wins');
   chk(r.spots >= 5, `level ${r.id}: and it is not a pixel hunt`,
-      `${r.spots}+ bar positions solve it`);
+      `${r.spots}+ ramp positions solve it once sprung`);
   chk(r.atDropHeight && r.across > 250,
       `level ${r.id}: and the reason is VISIBLE - the target is at the ball's own ` +
       'drop height, right across the board',
@@ -217,7 +215,6 @@ const boxes = await page.evaluate((N) => {
       if (bx.x - BOX_R < 0 || bx.x + BOX_R > CONSTS.W ||
           bx.y - BOX_R < 0 || bx.y + BOX_R > CONSTS.H) offBoard++;
       const solids = [...lv.obstacles, ...lv.fires, ...lv.breakables, ...lv.boosters,
-                      ...lv.portals.flatMap(p => [p.a, p.b]),
                       { ...lv.target, r: lv.target.r + 20 }];
       for (const o of solids)
         if (Math.hypot(o.x - bx.x, o.y - bx.y) < o.r + BOX_R) {

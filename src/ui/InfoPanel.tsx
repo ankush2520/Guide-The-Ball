@@ -3,13 +3,13 @@
 import { useGame, useGameVersion } from '../core/GameContext';
 import { GLOSSARY } from './glossary';
 import { STARTING_BALLS, CLEAR_BONUS, AD_REWARD, STARTING_COINS,
-         BALL_PRICE, RAMP_PRICE, BOOSTER_PRICE, BOOSTER_UNLOCK_LEVEL,
+         BALL_PRICE, RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
          COIN_CLEAR } from '../managers/RewardManager';
 
 export function InfoPanel({ onClose }: { onClose: () => void }) {
   const { levels } = useGame();
   useGameVersion();
-  /* The PLAY level, so a booster the player has just placed is marked as
+  /* The PLAY level, so anything the player has just put down is marked as
      being on this board - which it is. */
   const lv = levels.playLevel;
 
@@ -76,26 +76,28 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              budget &mdash; that is always measured against the ramps the level
              itself gave you, so a spare can buy you a solution but never a star.</p>
 
-          <h4>Booster ramps</h4>
-          <p>From level <b>{BOOSTER_UNLOCK_LEVEL}</b> you can carry your own
-             <b> booster ramps</b>, and the first one is free. Open the bag, tap
-             it, then drag it where you want it and drag the knob to turn it.</p>
-          <p>It is an <b>orange bar</b>, and it bounces the ball exactly like a
-             ramp you drew &mdash; the angle you lay it at is the angle the ball
-             mirrors off. What it adds is <b>speed</b>: the ball comes off it
-             about <b>three and a half times faster</b> than it went in, which no ordinary
-             ramp can do, since every normal bounce loses a little. That is the
-             one thing it is for, and it is why a few boards late in the game
-             cannot be solved without one.</p>
-          <p>A booster ramp is only taken out of your bag if the ball actually
-             <b> hits</b> it and that drop <b>wins</b>. Place it, miss, move it,
-             drop again as often as you like &mdash; it costs nothing until it
-             works. More are <b>{BOOSTER_PRICE}</b> coins each in the shop.</p>
+          <h4>Springs</h4>
+          <p>From level <b>{SPRING_UNLOCK_LEVEL}</b> you can carry your own
+             <b> springs</b>, and the first one is free. A spring does not go on
+             the board &mdash; it goes on a <b>ramp you drew</b>. Draw the ramp
+             first, then open the bag, tap the spring, and tap that ramp.</p>
+          <p>It is a <b>brass coil</b>, and the ramp still bounces the ball
+             exactly the way it always did &mdash; the angle you drew it at is
+             the angle the ball mirrors off. What the spring adds is
+             <b>speed</b>: the ball comes off that ramp <b>four times faster</b>
+             than it went in, which no ordinary ramp can do, since every normal
+             bounce loses a little. That is the one thing it is for, and it is
+             why a few boards late in the game cannot be solved without one.</p>
+          <p>A spring is only taken out of your bag if the ball actually
+             <b> bounces off</b> it and that drop <b>wins</b>. Fit it, miss,
+             move the ramp, drop again as often as you like &mdash; it costs
+             nothing until it works. More are <b>{SPRING_PRICE}</b> coins each
+             in the shop.</p>
 
           <h4>Mystery boxes</h4>
           <p>Some boards carry a <b>chest</b>. Hit it with the ball on the way
              past and it pays out something random: coins, balls, a spare ramp,
-             occasionally a booster or a free spin of the wheel. It never
+             occasionally a spring or a free spin of the wheel. It never
              changes where the ball goes, so it is always worth routing through
              if you can.</p>
           <p>Each chest can be opened <b>once</b>, and it stays opened &mdash;

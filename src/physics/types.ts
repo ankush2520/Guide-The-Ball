@@ -9,7 +9,7 @@ export type DropResult = 'win' | 'out' | 'timeout' | 'burned';
 
 /** What the ball last touched. Drives the juice, never the physics. */
 export type HitKind = 'ramp' | 'wall' | 'obstacle' | 'breakable' | 'booster'
-                    | 'boost' | 'portal' | 'fire';
+                    | 'boost' | 'fire';
 
 /** Last contact, mutated in place so the solver never allocates. */
 export interface Hit {
@@ -29,7 +29,9 @@ export interface SimulationResult {
   steps: number; hits: number; segHits: number;
   spdMin: number; spdMax: number; vyMax: number; restMin: number;
   secs: number;
-  stars: number; boosts: number; teleports: number;
+  stars: number; boosts: number;
+  /** Times a sprung ramp launched the ball. */
+  springs: number;
   /** Mystery boxes touched. Reported, never REQUIRED: the sweep proves a
       level winnable without ever reading this. */
   boxes: number;

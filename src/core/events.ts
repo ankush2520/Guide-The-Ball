@@ -44,7 +44,6 @@ export interface GameEvents extends Record<string, unknown> {
      reward - so anything that wants to watch what a gift paid can. */
   'gift:opened':     { kind: FlightKind; n: number };
   'breakable:broke': { index: number };
-  'portal:used':     { index: number };
   'booster:used':    { index: number };
 
   /* ---- economy ---- */
@@ -52,7 +51,7 @@ export interface GameEvents extends Record<string, unknown> {
   'balls:empty':     Record<string, never>;
   'coins:changed':   { coins: number; delta: number; reason: CoinChangeReason };
   'ramps:changed':   { ramps: number; delta: number; reason: RampChangeReason };
-  'boosters:changed':{ boosters: number; delta: number; reason: RampChangeReason };
+  'springs:changed':{ springs: number; delta: number; reason: RampChangeReason };
   /* A spin owed outside the daily cadence. The wheel's own cooldown is
      untouched by it - see RewardManager.grantBonusSpin(). */
   'spin:granted':    { bonus: number };
@@ -72,7 +71,7 @@ export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box'
 
 /** What the player can OWN, and therefore what a payout can land in. The
     wheel pays the first three; a mystery box can also pay a booster. */
-export type PrizeKind = 'coins' | 'balls' | 'ramps' | 'boosters';
+export type PrizeKind = 'coins' | 'balls' | 'ramps' | 'springs';
 
 /** What can FLY to somewhere on the HUD. A bonus spin is not a currency and
     has no counter of its own - it lands on the gear, which is where the

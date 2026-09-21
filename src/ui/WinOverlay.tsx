@@ -75,12 +75,12 @@ export function WinOverlay() {
               <i className="pip" /><b>+{card.bonus}</b>
             </span>
           )}
-          {/* The one thing on this card that went the other way. A booster is
+          {/* The one thing on this card that went the other way. A spring is
               charged for by the win, so the win is where it has to be shown -
               a bag that is quietly one lighter afterwards reads as a bug. */}
-          {card.boosters > 0 && (
-            <span className="reward spent" id="ov-boosters" title="Booster ramps used">
-              <i className="boostmark" /><b>&minus;{card.boosters}</b>
+          {card.springs > 0 && (
+            <span className="reward spent" id="ov-springs" title="Springs used">
+              <i className="springmark" /><b>&minus;{card.springs}</b>
             </span>
           )}
         </div>

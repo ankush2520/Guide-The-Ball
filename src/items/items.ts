@@ -17,7 +17,7 @@
    else changes.
    ============================================================ */
 
-export type ItemKind = 'booster';
+export type ItemKind = 'spring';
 
 export interface ItemDef {
   kind: ItemKind;
@@ -27,11 +27,10 @@ export interface ItemDef {
 }
 
 export const ITEMS: readonly ItemDef[] = [
-  { kind: 'booster', name: 'Booster ramp',
-    blurb: 'A ramp that FIRES you. Bounces the ball like any ramp, then throws ' +
-           'it out about three and a half times faster. Drag it to move, drag ' +
-           'the knob to turn it. ' +
-           'Only spent if the ball hits it and you win.' },
+  { kind: 'spring', name: 'Spring',
+    blurb: 'Fits onto a ramp YOU drew and makes it throw four times harder. ' +
+           'Tap Use, then tap the ramp you want it on. ' +
+           'Only spent if the ball bounces off it and you win.' },
 ];
 
 /** The length the SOLVER draws with. A player's ramp is whatever length they
@@ -42,33 +41,29 @@ export const ITEMS: readonly ItemDef[] = [
 export const RAMP_LEN = 120;
 
 /* ============================================================
-   THE PLAYER'S BOOSTER - A RAMP THAT FIRES
+   THE PLAYER'S SPRING - A RAMP THAT THROWS
 
-   It used to be a disc with an arrow: you chose a spot and a
-   heading, and the ball left along that heading at a fixed
-   speed. It is a BAR now - the ramp's own silhouette, the ramp's
-   own physics - and what it adds is speed rather than a heading:
-   the ball mirrors off it exactly as it would off a ramp you
-   drew, and leaves several times faster (see BOOST_RAMP_GAIN).
+   It used to be a BAR: a second piece of board that came out of
+   the bag with its own fixed length, and what the player chose
+   was where to put it and which way to lay it.
 
-   Why the change is worth it: a heading is something a ramp
-   already gives you, so the disc was a second way to do the
-   thing the expressive tool does. Speed is something no ramp can
-   give you at all - every bounce in the game is lossy - which
-   makes this a piece that answers a question ramps cannot.
+   The spring is not a piece of board at all. It goes ON A RAMP
+   THE PLAYER ALREADY DREW, and multiplies what that ramp throws
+   (see SPRING_GAIN). Everything the bar made the player decide a
+   second time - a position, a length, an angle - was already
+   decided when they drew the line; the spring adds the one thing
+   a ramp cannot give, which is SPEED, and adds nothing else.
 
-   One length and one thickness, exactly like the ramp's one
-   solver length. What the player chooses is where it goes and
-   which way it lies, and that is the whole item.
+   Why that is the better item: every bounce in this game is
+   lossy, so no amount of drawing can give the ball back speed it
+   has lost. The spring answers a question ramps cannot - and by
+   riding on the player's own line rather than bringing its own,
+   it never competes with the expressive tool the way a second
+   bar did.
 
    Its numbers live in physics/constants.ts with the mechanic
-   they belong to - BOOST_LEN, BOOST_HT, BOOST_RAMP_GAIN - and are
-   re-exported here so the bag, the shop and the tray have one
-   place to read the item from.
+   they belong to - SPRING_GAIN, SPRING_CAP - and are re-exported
+   here so the bag, the shop and the tray have one place to read
+   the item from.
    ============================================================ */
-export { BOOST_LEN, BOOST_HT, BOOST_RAMP_GAIN } from '../physics/constants';
-
-/** Which way it lies when it first lands: flat across the board. Deliberately
-    the one angle that cannot be a plan - a level horizon nobody would aim
-    for - so the first thing the player does with it is turn it. */
-export const BOOSTER_ANGLE = 0;
+export { SPRING_GAIN } from '../physics/constants';

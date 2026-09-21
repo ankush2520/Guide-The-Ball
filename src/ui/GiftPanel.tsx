@@ -40,7 +40,7 @@ const REVEAL_AT = SHAKE_MS + OPEN_MS;
    the HUD's own, so a coin in here is the coin in the counter it flies to. */
 const MARK: Record<string, string> = {
   coins: 'flycoin', balls: 'flyball', ramps: 'flyramp',
-  boosters: 'flyboost', spin: 'flyspin',
+  springs: 'flyspring', spin: 'flyspin',
 };
 
 export function GiftPanel() {

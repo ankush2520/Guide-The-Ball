@@ -4,7 +4,7 @@ import { targetAt } from '../levels/target';
 import { INK, TARGET } from '../render/palette';
 import { TIE, WRAP } from './MysteryBox';
 
-/* A bullseye portal. Concentric rings, a pulsing core and a few drifting
+/* A bullseye well. Concentric rings, a pulsing core and a few drifting
    motes, so it reads as "land here" and stays alive even before the ball is
    dropped.
 

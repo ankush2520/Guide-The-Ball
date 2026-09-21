@@ -13,7 +13,7 @@
    balls: it is a COUNT, and the bar already had two.
 
    The BAG is the inventory tray: everything the player owns and
-   can place, which today means boosters. It is deliberately not
+   can place, which today means springs. It is deliberately not
    the shop - buying is behind the gear, and the tray links
    across to it.
 
