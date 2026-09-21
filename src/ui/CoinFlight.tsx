@@ -45,6 +45,7 @@ import { flushCoins, holdCoins, landedCoin, launchedCoins } from './coinsInFligh
 import { Sound } from '../audio/Sound';
 import type { FlightKind } from '../core/events';
 import { BOARD, H } from '../physics/constants';
+import { viewX, viewY } from '../render/view';
 import type { WinCard } from '../managers/GameController';
 
 const COINS = 3;
@@ -190,8 +191,10 @@ export function CoinFlight() {
     if (!board) return;
     const r = board.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    flyReward(kind, { x: r.left + ((x - BOARD.x0) / BOARD.w) * r.width,
-                      y: r.top + (y / H) * r.height });
+    // painted position, not authored position - see render/view.ts
+    const vx = viewX(x), vy = viewY(y);
+    flyReward(kind, { x: r.left + ((vx - BOARD.x0) / BOARD.w) * r.width,
+                      y: r.top + (vy / H) * r.height });
   }), [bus]);
 
   return <div className="coinfly" ref={host} aria-hidden="true" />;

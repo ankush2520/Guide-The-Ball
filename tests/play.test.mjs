@@ -76,7 +76,14 @@ const C = await page.evaluate(() => window.__gtb.CONSTS);
 
 /* board-space -> screen-space drag helpers */
 const box0 = await page.locator('#board').boundingBox();
-const P = (b, p) => ({ x: b.x + p.x * b.width / C.W, y: b.y + p.y * b.height / C.H });
+/* Design coords are painted about the board's centre at CONSTS.VIEW_SCALE
+   (src/render/view.ts), so a point has to go through that scale before it is
+   a place on screen - otherwise every drag below lands on a different part of
+   the level than it names. At VIEW_SCALE 1 this is the old mapping exactly. */
+const V = C.VIEW_SCALE ?? 1;
+const view = p => ({ x: C.W / 2 + (p.x - C.W / 2) * V, y: C.H / 2 + (p.y - C.H / 2) * V });
+const P = (b, p0) => { const p = view(p0);
+  return { x: b.x + p.x * b.width / C.W, y: b.y + p.y * b.height / C.H }; };
 async function mouseDrag(b, from, to){
   const a = P(b, from), z = P(b, to);
   await page.mouse.move(a.x, a.y); await page.mouse.down();
@@ -1335,7 +1342,9 @@ const cueBox = await page.locator('#drop-cue').boundingBox();
 const stageBox = await page.locator('.stage').boundingBox();
 const cue = await page.evaluate(() => {
   const g = window.__gtb, cv = document.querySelector('canvas#board').getBoundingClientRect();
-  const low = Math.max(...g.LEVELS.map(l => l.target.y + l.target.r * 0.5));
+  const v = g.CONSTS.VIEW_SCALE ?? 1;         // painted, not authored
+  const low = g.CONSTS.H / 2 +
+    (Math.max(...g.LEVELS.map(l => l.target.y + l.target.r * 0.5)) - g.CONSTS.H / 2) * v;
   const cs = getComputedStyle(document.getElementById('drop-cue'));
   return { targetBottom: cv.top + low * cv.height / g.CONSTS.H,
            bg: cs.backgroundColor, border: cs.borderTopStyle, opacity: +cs.opacity };
@@ -1405,7 +1414,12 @@ const delPaint = await page.evaluate((C) => {
   let bx=mx-dy/m*C.DEL_OFF, by=my+dx/m*C.DEL_OFF;
   if (bx<bd.x0+C.DEL_R||bx>bd.x1-C.DEL_R||by<C.DEL_R||by>C.H-C.DEL_R){ bx=mx+dy/m*C.DEL_OFF; by=my-dx/m*C.DEL_OFF; }
   bx=Math.min(Math.max(bx,bd.x0+C.DEL_R),bd.x1-C.DEL_R); by=Math.min(Math.max(by,C.DEL_R),C.H-C.DEL_R);
-  const px = p => cv.getContext('2d').getImageData(Math.round((p[0]-bd.x0)*k), Math.round(p[1]*k), 1, 1).data;
+  /* the probe is in DESIGN coords and the pixel is where that lands once the
+     scene's view scale has been applied - see src/render/view.ts */
+  const v = C.VIEW_SCALE ?? 1, bcx = (bd.x0+bd.x1)/2, bcy = C.H/2;
+  const vx = x => bcx + (x-bcx)*v, vy = y => bcy + (y-bcy)*v;
+  const px = p => cv.getContext('2d').getImageData(
+    Math.round((vx(p[0])-bd.x0)*k), Math.round(vy(p[1])*k), 1, 1).data;
   const probe = [[bx - C.DEL_R*0.75, by], [bx + C.DEL_R*0.75, by]].map(px);
   return probe.map(d => [d[0], d[1], d[2]]);
 }, C);
@@ -1571,7 +1585,9 @@ const midLocked = await page.evaluate(() => {
   const before = JSON.stringify(r);
   const c = document.getElementById('board'), bb = c.getBoundingClientRect();
   const sx = bb.width/g.CONSTS.W, sy = bb.height/g.CONSTS.H;
-  const mx = (r.x1+r.x2)/2, my = (r.y1+r.y2)/2;
+  const v = g.CONSTS.VIEW_SCALE ?? 1;          // see P() at the top of the file
+  const vw = (c0, n) => c0 + (n - c0) * v;
+  const mx = vw(g.CONSTS.W/2, (r.x1+r.x2)/2), my = vw(g.CONSTS.H/2, (r.y1+r.y2)/2);
   const ev = (t,x,y) => c.dispatchEvent(new PointerEvent(t,{bubbles:true,pointerId:3,
     clientX:bb.left+x*sx, clientY:bb.top+y*sy}));
   ev('pointerdown',mx,my); ev('pointermove',mx+60,my+60); ev('pointerup',mx+60,my+60);

@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import type { TutStep } from '../managers/GameController';
 import { BOARD, H } from '../physics/constants';
+import { viewX, viewY } from '../render/view';
 
 type Side = 'above' | 'below' | 'none';
 interface Spot { x: number; y: number; side: Side }
@@ -53,7 +54,10 @@ export function Coach({ hidden }: { hidden: boolean }) {
 
     const fromBoard = (x: number, y: number) => {
       const r = canvas.getBoundingClientRect();
-      return { x: r.left + (x - BOARD.x0) * r.width / BOARD.w, y: r.top + y * r.height / H };
+      /* through the view scale first: the bubble points at where the target
+         is PAINTED, not at where the level authored it */
+      const vx = viewX(x), vy = viewY(y);
+      return { x: r.left + (vx - BOARD.x0) * r.width / BOARD.w, y: r.top + vy * r.height / H };
     };
     /* where this step points, in viewport px */
     const spot = (): Spot | null => {

@@ -23,6 +23,7 @@ import { BALL, INK, OBSTACLE, isLightSky } from './palette';
 import { Trail } from './Trail';
 import { ParticleSystem } from './Particles';
 import { drawSeg } from './primitives';
+import { VIEW_SCALE } from './view';
 import type { Phase } from '../core/events';
 import type { Country, Segment } from '../levels/types';
 
@@ -128,6 +129,29 @@ export class Renderer {
   /** Force a backdrop repaint - call when the country changes. */
   invalidateBackdrop(): void { this.builtFor = null; }
 
+  /* ============================================================
+     THE TWO LAYERS
+
+     The SKY layer is the board itself - the backdrop, the clouds
+     or the stars - and it is painted across the whole surface at
+     the transform resize() set, so it reaches the real edges
+     whatever the view scale is.
+
+     The SCENE layer is everything the level is made of, and it
+     is painted through this transform instead: the same design
+     coordinates, scaled about the board's centre by VIEW_SCALE.
+     At 1 it is arithmetically the transform resize() already
+     set, so the board that shipped is the VIEW_SCALE = 1 case of
+     this one rather than a separate path.
+     ============================================================ */
+  private setSceneTransform(): void {
+    const s = this.scale, z = VIEW_SCALE;
+    const cx = (BOARD.x0 + BOARD.x1) / 2, cy = H / 2;
+    // x_px = s*(pad + cx + (x - cx)*z), and the same in y without the pad
+    this.ctx.setTransform(s * z, 0, 0, s * z,
+                          s * (BOARD.pad + cx * (1 - z)), s * cy * (1 - z));
+  }
+
   render(s: RenderState): void {
     const ctx = this.ctx;
     this.resize(s.country);
@@ -137,6 +161,12 @@ export class Renderer {
        drifting stars on the countries that are still night */
     if (isLightSky(s.country.sky[1])) drawClouds(ctx, s.clock);
     else drawStarfield(ctx, s.clock);
+
+    /* everything from here down is the SCENE, and it is drawn at the view
+       scale. save/restore is what puts the sky transform back for the next
+       frame's backdrop. */
+    ctx.save();
+    this.setSceneTransform();
 
     const g = { ctx, clock: s.clock, broken: s.broken, got: s.got,
                 gotBox: s.gotBox, giftTaken: s.giftTaken,
@@ -182,6 +212,7 @@ export class Renderer {
     this.particles.draw(ctx);
 
     this.drawBall(s);
+    ctx.restore();
   }
 
   /* ============================================================

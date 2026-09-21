@@ -43,7 +43,12 @@ chk(painted > 0, 'the board is rendering', `${painted} sampled non-black pixels`
 
 /* Add a ramp with the big +, then drop the ball. */
 const box = await page.locator('canvas#board').boundingBox();
-const at = (bx, by) => ({ x: box.x + (bx / 480) * box.width, y: box.y + (by / 800) * box.height });
+/* design coords -> screen, through the scene's view scale (src/render/view.ts) */
+const V = await page.evaluate(() => window.__gtb.CONSTS.VIEW_SCALE ?? 1);
+const at = (bx, by) => ({
+  x: box.x + ((240 + (bx - 240) * V) / 480) * box.width,
+  y: box.y + ((400 + (by - 400) * V) / 800) * box.height,
+});
 const rampsBefore = Number(await page.textContent('#ramps-left'));
 /* Drawn, not spawned: one drag across empty board is the whole gesture. */
 await page.evaluate(() => window.__gtb.drawRamp(120, 320, 240, 370));

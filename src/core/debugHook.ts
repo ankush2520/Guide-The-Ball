@@ -18,6 +18,7 @@ import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physic
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
 import { CAPTURE_MS } from '../render/constants';
+import { VIEW_SCALE } from '../render/view';
 import { DEL_OFF, DEL_R, DEL_GRAB } from '../managers/LevelManager';
 import * as PAL from '../render/palette';
 import type { GameServices } from './GameContext';
@@ -67,6 +68,11 @@ const physics = {
        and a test that re-derives these from memory silently stops tapping the
        button the moment either one is retuned. */
     DEL_OFF, DEL_R, DEL_GRAB,
+    /* How much smaller than the board the SCENE is painted (render/view.ts).
+       Published because the suite drives the game by clicking design
+       coordinates, and a mapping that ignored this would silently start
+       tapping somewhere else on the level. */
+    VIEW_SCALE,
   },
   /* The canvas palette, so the suite can hold the toon reskin to its own
      contrast rules rather than to a comment. */

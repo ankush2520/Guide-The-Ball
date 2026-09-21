@@ -34,6 +34,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { H, RAMP_HT, BOARD } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
+import { unviewX, unviewY } from '../render/view';
 import { DEL_GRAB, PICK_PAD, AIM_GRAB } from '../managers/LevelManager';
 
 /* `children` is painted ON the board (the status caption). Nothing sits
@@ -159,12 +160,21 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
 
   /* The canvas spans the BOARD, which on a tablet reaches past the design box
      on both sides, so a pointer at the very left edge is x0 (negative) rather
-     than 0. Everything downstream stays in design coordinates. */
+     than 0. Everything downstream stays in design coordinates.
+
+     Two steps, because the scene is painted smaller than the board it sits in
+     (see render/view.ts): the rect gives VIEW coordinates - where the finger
+     landed on the surface - and unview backs out the scale to say which part
+     of the LEVEL that was. A tap out in the sky margin lands past the design
+     box and is clamped to its edge, exactly as one past a tablet's margin
+     always has been. */
   const toBoard = (e: React.PointerEvent) => {
     const r = canvas.getBoundingClientRect();
+    const vx = BOARD.x0 + (e.clientX - r.left) * (BOARD.w / r.width);
+    const vy = (e.clientY - r.top) * (H / r.height);
     return {
-      x: clamp(BOARD.x0 + (e.clientX - r.left) * (BOARD.w / r.width), BOARD.x0, BOARD.x1),
-      y: clamp((e.clientY - r.top) * (H / r.height), 0, H),
+      x: clamp(unviewX(vx), BOARD.x0, BOARD.x1),
+      y: clamp(unviewY(vy), 0, H),
     };
   };
 
