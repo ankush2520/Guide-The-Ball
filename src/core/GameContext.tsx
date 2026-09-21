@@ -24,7 +24,8 @@ import { GameController } from '../managers/GameController';
 import { Renderer } from '../render/Renderer';
 import { LEVELS } from '../levels';
 import { createEngine } from '../physics/engines';
-import { setBoardPad, PAD_TABLET } from '../physics/constants';
+import { setBoardPad, setPlayScale, PAD_TABLET } from '../physics/constants';
+import { VIEW_SCALE } from '../render/view';
 import { installGameHook } from './debugHook';
 
 /* ============================================================
@@ -61,6 +62,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     /* Before ANY of it: the renderer sizes its surface from the board and the
        managers clamp ramps to it, so the profile has to be settled first. */
     setBoardPad(padFor(typeof matchMedia === 'function' && matchMedia(TABLET).matches));
+    /* And the play area, which is the board grown to cover everything the
+       scene's view scale leaves visible around it - so the sky the player can
+       see is board they can draw on, rather than a margin their ramp gets
+       clamped out of. The harness never calls this and keeps its 1. */
+    setPlayScale(VIEW_SCALE);
 
     const bus = createGameBus();
     const levels = new LevelManager(bus);

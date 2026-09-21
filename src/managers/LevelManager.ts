@@ -17,7 +17,7 @@ import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
 import { clamp, falses, distToSeg } from '../physics/math';
-import { MIN_RAMP, MAX_RAMP, RAMP_HT, BOOST_HT, BOOST_LEN, H, BOARD }
+import { MIN_RAMP, MAX_RAMP, RAMP_HT, BOOST_HT, BOOST_LEN, BOARD, PLAY }
   from '../physics/constants';
 import { BOOSTER_ANGLE } from '../items/items';
 
@@ -240,8 +240,8 @@ export class LevelManager {
     if (!b) return;
     const loX = Math.min(b.x1, b.x2), hiX = Math.max(b.x1, b.x2);
     const loY = Math.min(b.y1, b.y2), hiY = Math.max(b.y1, b.y2);
-    dx = clamp(dx, BOARD.x0 - loX, BOARD.x1 - hiX);
-    dy = clamp(dy, -loY, H - hiY);
+    dx = clamp(dx, PLAY.x0 - loX, PLAY.x1 - hiX);
+    dy = clamp(dy, PLAY.y0 - loY, PLAY.y1 - hiY);
     b.x1 += dx; b.x2 += dx; b.y1 += dy; b.y2 += dy;
   }
 
@@ -346,7 +346,7 @@ export class LevelManager {
       const a = len > 1e-6 ? Math.atan2(dy, dx) : -Math.PI / 2;
       q = { x: ax + Math.cos(a) * MIN_RAMP, y: ay + Math.sin(a) * MIN_RAMP };
     }
-    q = { x: clamp(q.x, BOARD.x0, BOARD.x1), y: clamp(q.y, 0, H) };
+    q = { x: clamp(q.x, PLAY.x0, PLAY.x1), y: clamp(q.y, PLAY.y0, PLAY.y1) };
     if (which === 1) { s.x1 = q.x; s.y1 = q.y; } else { s.x2 = q.x; s.y2 = q.y; }
   }
 
@@ -356,8 +356,8 @@ export class LevelManager {
     if (!s) return;
     const loX = Math.min(s.x1, s.x2), hiX = Math.max(s.x1, s.x2);
     const loY = Math.min(s.y1, s.y2), hiY = Math.max(s.y1, s.y2);
-    dx = clamp(dx, BOARD.x0 - loX, BOARD.x1 - hiX);
-    dy = clamp(dy, -loY, H - hiY);
+    dx = clamp(dx, PLAY.x0 - loX, PLAY.x1 - hiX);
+    dy = clamp(dy, PLAY.y0 - loY, PLAY.y1 - hiY);
     s.x1 += dx; s.x2 += dx; s.y1 += dy; s.y2 += dy;
   }
 
@@ -378,12 +378,12 @@ export class LevelManager {
     const m = Math.hypot(dx, dy) || 1;
     const nx = -dy / m, ny = dx / m;
     let bx = mx + nx * DEL_OFF, by = my + ny * DEL_OFF;
-    if (bx < BOARD.x0 + DEL_R || bx > BOARD.x1 - DEL_R ||
-        by < DEL_R || by > H - DEL_R) {
+    if (bx < PLAY.x0 + DEL_R || bx > PLAY.x1 - DEL_R ||
+        by < PLAY.y0 + DEL_R || by > PLAY.y1 - DEL_R) {
       bx = mx - nx * DEL_OFF; by = my - ny * DEL_OFF;
     }
-    return { x: clamp(bx, BOARD.x0 + DEL_R, BOARD.x1 - DEL_R),
-             y: clamp(by, DEL_R, H - DEL_R) };
+    return { x: clamp(bx, PLAY.x0 + DEL_R, PLAY.x1 - DEL_R),
+             y: clamp(by, PLAY.y0 + DEL_R, PLAY.y1 - DEL_R) };
   }
 
   /* Short ramps cannot afford a full-size grab circle at each end or the two

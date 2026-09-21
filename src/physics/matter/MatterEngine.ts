@@ -43,8 +43,7 @@ import {
   MAX_STEPS, REST_STEPS, REST_PX,
   BOOST_HT, BOOST_RAMP_GAIN, BOOST_RAMP_CAP, BOOST_DECAY, BOOST_RAMP_CD,
   BOOST_SUB_PX, BOOST_SUBSTEPS_MAX,
-  OB_JITTER, OB_MAX_DEV, H, BOARD,
-} from '../constants';
+  OB_JITTER, OB_MAX_DEV, PLAY } from '../constants';
 
 const DELTA = 1000 / 60;
 
@@ -249,12 +248,17 @@ export class MatterBall implements BallState {
     if (this.vy > this.vyMax) this.vyMax = this.vy;
   }
 
-  /* The only place the board's WIDTH reaches the simulation. There are no
+  /* The only place the board's SIZE reaches the simulation. There are no
      side walls, so this is what makes leaving sideways a loss - and what
-     makes a wider board a more forgiving one rather than a different game. */
+     makes a bigger board a more forgiving one rather than a different game.
+
+     The PLAY area, not the board's own rect: the ball is lost at the edge of
+     what the player can SEE, rather than at an inner line nothing marks. The
+     two are the same rect until the app scales the scene down, and they are
+     always the same in the harness - so every proof still stands. */
   isOutOfBounds(): boolean {
-    return this.x < BOARD.x0 - BALL_R || this.x > BOARD.x1 + BALL_R ||
-           this.y < -BALL_R || this.y > H + BALL_R;
+    return this.x < PLAY.x0 - BALL_R || this.x > PLAY.x1 + BALL_R ||
+           this.y < PLAY.y0 - BALL_R || this.y > PLAY.y1 + BALL_R;
   }
 
   tickStallWatch(): void {

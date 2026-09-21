@@ -55,6 +55,49 @@ export const BOARD = {
     BOARD live, so this is the only thing a profile change has to set. */
 export function setBoardPad(pad: number): void { BOARD.pad = Math.max(0, pad); }
 
+/* ============================================================
+   THE PLAY AREA
+
+   The part of the board a ball may occupy and a player may draw
+   in. It is the BOARD's own rect whenever the scene is painted
+   at full size, and that is what the headless harness runs and
+   what every level was proved against - `scale` starts at 1 and
+   only the app moves it.
+
+   It exists because the scene can be painted SMALLER than the
+   surface it is on (see render/view.ts). The board's rect then
+   covers only the middle of what the player can see, and the
+   ring of sky around it was dead: a ramp could not be drawn out
+   there, and a ball that reached it was already lost at a line
+   nothing on screen marked. The play area is that whole visible
+   rect - the board's, grown about its own centre by exactly the
+   amount the scene was shrunk - so what looks like board IS
+   board.
+
+   Growing it cannot unmake a solved level, by the same argument
+   the BOARD note above makes for the margins: there is nothing
+   out there to hit, leaving is still a loss, and a shot that won
+   inside the design box wins untouched. It is strictly more
+   room and a later loss, never a different game.
+   ============================================================ */
+export const PLAY = {
+  /** What fraction of the play area the board's own rect covers. 1 is the
+      two being the same rect. */
+  scale: 1,
+  get cx(): number { return (BOARD.x0 + BOARD.x1) / 2; },
+  get x0(): number { return this.cx + (BOARD.x0 - this.cx) / this.scale; },
+  get x1(): number { return this.cx + (BOARD.x1 - this.cx) / this.scale; },
+  get y0(): number { return H / 2 - (H / 2) / this.scale; },
+  get y1(): number { return H / 2 + (H / 2) / this.scale; },
+};
+
+/** Set from the app's view scale at boot, beside setBoardPad. Out-of-range
+    values are ignored rather than trusted: a zero here would be an infinite
+    board, and the harness must keep the 1 it never sets. */
+export function setPlayScale(scale: number): void {
+  if (scale > 0.2 && scale <= 1) PLAY.scale = scale;
+}
+
 // Downward terminal velocity. 9 px/step = 540 px/s, which is what the board
 // was tuned around back when the ball travelled at one fixed speed.
 export const TERMINAL_VY = 9;

@@ -1243,6 +1243,39 @@ check((await page.evaluate(() => window.__gtb.draft())) === null,
 check((await S()).ramps.length === 1, 'having become a real ramp');
 
 /* ============================================================
+   EVERY EDGE OF THE BOARD IS DRAWABLE
+
+   The scene is painted smaller than the surface it sits on, so
+   the design box covers only the middle of the canvas. If the
+   play area were still the design box, the ring of sky around
+   it would be dead: both ends of a drag out there clamp to the
+   same edge, the segment collapses under MIN_RAMP, and the
+   gesture silently does nothing - which is exactly how it was
+   reported ("cannot draw a ramp on the edges and sides").
+
+   So these drag along the outermost pixels of the CANVAS, not
+   of the design box, and each one has to leave a real ramp.
+   ============================================================ */
+for (const [name, from, to] of [
+  ['the far left edge',   [0.012, 0.30], [0.012, 0.52]],
+  ['the far right edge',  [0.988, 0.30], [0.988, 0.52]],
+  ['the top edge',        [0.30, 0.012], [0.62, 0.012]],
+  ['the bottom edge',     [0.30, 0.988], [0.62, 0.988]],
+  ['the bottom corner',   [0.03, 0.95],  [0.22, 0.99]],
+]) {
+  await page.evaluate(() => { window.__gtb.setRamps([]); window.__gtb.reset(); });
+  const a = { x: box.x + box.width * from[0], y: box.y + box.height * from[1] };
+  const z = { x: box.x + box.width * to[0],   y: box.y + box.height * to[1] };
+  await page.mouse.move(a.x, a.y); await page.mouse.down();
+  await page.mouse.move((a.x + z.x) / 2, (a.y + z.y) / 2, { steps: 5 });
+  await page.mouse.move(z.x, z.y, { steps: 5 }); await page.mouse.up();
+  const r = (await S()).ramps[0] ?? null;
+  check(!!r && lenOf(r) >= C.MIN_RAMP, `a ramp can be drawn along ${name}`,
+    r ? `${lenOf(r).toFixed(0)} units at (${r.x1.toFixed(0)},${r.y1.toFixed(0)})` : 'nothing was drawn');
+}
+await page.evaluate(() => { window.__gtb.setRamps([]); window.__gtb.reset(); });
+
+/* ============================================================
    THE PAGE HOLDS STILL UNDER A DRAG - AND ONLY THEN
 
    A non-passive touchmove listener on the document stops the

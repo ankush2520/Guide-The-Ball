@@ -32,7 +32,7 @@
    ============================================================ */
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
-import { H, RAMP_HT, BOARD } from '../physics/constants';
+import { H, RAMP_HT, BOARD, PLAY } from '../physics/constants';
 import { clamp, distToSeg } from '../physics/math';
 import { unviewX, unviewY } from '../render/view';
 import { DEL_GRAB, PICK_PAD, AIM_GRAB } from '../managers/LevelManager';
@@ -210,8 +210,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     const vx = BOARD.x0 + (e.clientX - r.left) * (BOARD.w / r.width);
     const vy = (e.clientY - r.top) * (H / r.height);
     return {
-      x: clamp(unviewX(vx), BOARD.x0, BOARD.x1),
-      y: clamp(unviewY(vy), 0, H),
+      x: clamp(unviewX(vx), PLAY.x0, PLAY.x1),
+      y: clamp(unviewY(vy), PLAY.y0, PLAY.y1),
     };
   };
 
