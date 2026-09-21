@@ -219,13 +219,20 @@ export class GameController {
     return true;
   }
 
-  /** The far end follows the finger, held to MAX_RAMP from where it started. */
+  /** The far end follows the finger, held to MAX_RAMP from where it started.
+
+      NO changed() HERE. A finger moving across a 120Hz screen fires this a
+      hundred times a second, and changed() re-renders every React component
+      subscribed to the version counter - the HUD, the controls, the coach -
+      for a line that only the CANVAS draws. The renderer reads this.draft out
+      of renderState() on its own frame, so the ramp already follows the
+      finger at exactly the rate the board is painted at; the re-renders were
+      pure overhead, and they were what made a slow drag feel sticky. */
   updateDraft(p: Vec): void {
     const d = this.draft;
     if (!d) return;
     const q = this.levels.truncate({ x: d.x1, y: d.y1 }, p);
     d.x2 = q.x; d.y2 = q.y;
-    this.changed();
   }
 
   /** Let go. A draft shorter than MIN_RAMP is thrown away - that is a tap, or

@@ -1242,6 +1242,37 @@ check((await page.evaluate(() => window.__gtb.draft())) === null,
   'and the draft is gone once it is let go');
 check((await S()).ramps.length === 1, 'having become a real ramp');
 
+/* ============================================================
+   THE PAGE HOLDS STILL UNDER A DRAG - AND ONLY THEN
+
+   A non-passive touchmove listener on the document stops the
+   browser from moving the page on the compositor: it has to
+   wait for our JavaScript on every touch before it can respond.
+   Left on permanently that is input latency paid by every
+   gesture in the game, so the guard is armed on pointerdown and
+   dropped on the way back up. Both halves matter, so both are
+   checked: a drag cannot be scrolled out from under, and an
+   idle board is not holding the browser up.
+   ============================================================ */
+const touchBlocked = () => page.evaluate(() => {
+  const e = new TouchEvent('touchmove', { bubbles: true, cancelable: true });
+  document.dispatchEvent(e);
+  return e.defaultPrevented;
+});
+await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });
+check((await touchBlocked()) === false,
+  'an idle board leaves touch alone, so the browser never waits on us to scroll');
+const a1 = P(box, { x: 140, y: 320 });
+await page.mouse.move(a1.x, a1.y);
+await page.mouse.down();
+await page.mouse.move(a1.x + 40, a1.y + 30, { steps: 4 });
+check((await touchBlocked()) === true,
+  'but the page cannot slide out from under a ramp being drawn');
+await page.mouse.up();
+check((await touchBlocked()) === false,
+  'and the guard is gone again the moment the finger lifts');
+await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); });
+
 /* ---- the budget, and the spares behind it ---- */
 await page.evaluate(() => { window.__gtb.setLevel(3); window.__gtb.reset(); window.__gtb.setWallet(100, 0); });
 await mouseDrag(box, { x: 90, y: 300 }, { x: 210, y: 340 });
@@ -3419,8 +3450,66 @@ const retried = await aPage.evaluate(() => {
 check(retried.handler, 'later gestures still route to the unlock path');
 check(/onstatechange/.test(src),
   'and the context watches for its own state changing, which is how an iOS interruption is noticed');
-check(/audioSession/.test(src),
-  "the iOS 'playback' audio session is requested, so the ring/silent switch does not mute the game");
+/* ============================================================
+   SHARING THE PHONE'S AUDIO
+
+   The game must not stop what the player already had playing.
+   Asking iOS for the "playback" session, or leaving a context
+   running while muted, both take the output exclusively - and
+   both showed up as the same bug: open the game, and the video
+   or the music in the other tab stops.
+   ============================================================ */
+const sessionType = /audioSession\.type\s*=\s*['"](\w+)['"]/.exec(src)?.[1] ?? 'none';
+check(sessionType === 'ambient',
+  "the 'ambient' audio session is requested, so we mix with other apps instead of stopping them",
+  `session type: ${sessionType}`);
+
+/* muted from Settings: nothing is built at all, so nothing can take the
+   output - the case actually reported, where the sound was off and the
+   game still stopped a video playing in another tab */
+const mutedCtx = await browser.newContext({ viewport:{ width:430, height:1000 }, hasTouch:true });
+await mutedCtx.addInitScript(() => {
+  window.__built = 0;
+  const Real = window.AudioContext || window.webkitAudioContext;
+  const Wrapped = function(){ window.__built++; return new Real(); };
+  window.AudioContext = Wrapped; window.webkitAudioContext = Wrapped;
+  try { localStorage.setItem('gtb.muted.v1', '1'); } catch { /* blocked */ }
+  window.__gtbNoAutoSpin = true;
+});
+const mPage = await mutedCtx.newPage();
+await mPage.goto(GAME);
+await mPage.waitForFunction(() => !!window.__gtb);
+await mPage.evaluate(() => window.__gtb.setBalls(99));
+await mPage.locator('#board').click();
+await mPage.waitForTimeout(400);
+check(await mPage.evaluate(() => window.__built) === 0,
+  'a MUTED game never builds an audio context, so it never takes the audio from another app',
+  `${await mPage.evaluate(() => window.__built)} built`);
+
+/* and unmuting, which is a tap on a real button, still brings the sound up */
+await mPage.click('#btn-settings');
+await mPage.click('#btn-sound');
+await mPage.waitForTimeout(300);
+check(await mPage.evaluate(() => window.__built) === 1,
+  'and turning the sound back on builds it there and then', 'built on the unmute tap');
+await mutedCtx.close();
+
+/* muting again hands the output straight back: suspended, not just quiet */
+const offState = await aPage.evaluate(async () => {
+  document.getElementById('btn-settings')?.click();
+  await new Promise(r => setTimeout(r, 150));
+  document.getElementById('btn-sound')?.click();
+  await new Promise(r => setTimeout(r, 400));
+  return window.__audio.ctx.state;
+});
+check(offState === 'suspended',
+  'muting SUSPENDS the context rather than turning it down, which releases the audio focus',
+  `state ${offState}`);
+await aPage.evaluate(async () => {
+  document.getElementById('btn-sound')?.click();        // back on for the mix checks below
+  await new Promise(r => setTimeout(r, 300));
+  document.getElementById('btn-settings-close')?.click();
+});
 
 /* Mix headroom - nothing should be able to clip the master bus.
 

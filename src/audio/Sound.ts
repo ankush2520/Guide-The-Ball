@@ -59,11 +59,26 @@ class SoundEngine {
     const AC = window.AudioContext ||
                (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return false;
-    /* iOS defaults a page to the "ambient" session, which the ring/silent
-       switch mutes outright - a game wants the playback session instead. */
+    /* ============================================================
+       WE SHARE THE PHONE'S AUDIO. WE DO NOT TAKE IT.
+
+       This asked for the "playback" session, so that the ring/
+       silent switch could not mute the game. What playback also
+       means is EXCLUSIVE: iOS stops whatever else is playing the
+       moment the context starts, so opening the game killed the
+       music or the video the player already had on - and on
+       Android the same is true of the audio focus a running
+       context takes.
+
+       A bouncing-ball game is not what anyone stops their music
+       for. "ambient" mixes with other apps instead: their audio
+       keeps playing, ours plays over it, and the cost is that
+       the silent switch mutes us - which is the correct way
+       round for a game whose sound is decoration.
+       ============================================================ */
     try {
       const nav = navigator as Navigator & { audioSession?: { type: string } };
-      if (nav.audioSession) nav.audioSession.type = 'playback';
+      if (nav.audioSession) nav.audioSession.type = 'ambient';
     } catch { /* not supported */ }
     try { this.ctx = new AC(); } catch { return false; }
 
@@ -193,24 +208,52 @@ class SoundEngine {
   }
 
   /** Called from the first real gesture, and from every one after that until
-      the context is actually running (iOS can refuse the first). */
-  unlock = (): void => { if (this.ensure()) this.resumeCtx(); };
+      the context is actually running (iOS can refuse the first).
+
+      A MUTED GAME BUILDS NOTHING. The context used to be constructed on the
+      first tap whether or not the player had turned the sound off, and a
+      live context holds the audio focus even at zero gain - so muting in
+      Settings still stopped whatever else the phone was playing. Nothing to
+      hear means nothing to hold. */
+  unlock = (): void => {
+    if (this.isMuted) return;
+    if (this.ensure()) this.resumeCtx();
+  };
 
   /** For everything that is NOT a gesture - coming back from the background, a
       bfcache restore, a sound effect finding the context asleep. It nudges a
       context that already exists and never builds one. */
-  nudge = (): void => { if (this.ctx) this.resumeCtx(); };
+  nudge = (): void => { if (this.ctx && !this.isMuted) this.resumeCtx(); };
 
   /** Backgrounding: drop the scheduler so we do not wake up owing the audio
-      clock a burst of notes that all fire at once. */
-  pause = (): void => this.stopMusic();
+      clock a burst of notes that all fire at once - and SUSPEND, so a game
+      sitting in another tab is not still holding the phone's audio while the
+      player watches something else. nudge() on the way back resumes it. */
+  pause = (): void => {
+    this.stopMusic();
+    try { this.ctx?.suspend(); } catch { /* ignore */ }
+  };
 
+  /* Mute SUSPENDS the context, it does not just turn it down. A suspended
+     context gives the audio focus back, so muting the game really does hand
+     the phone's sound to whatever else wants it; a context left running at
+     zero gain is inaudible to the player and still owns the output. The gain
+     ramp stays so that unmuting fades in rather than snapping. */
   toggle(): boolean {
     this.isMuted = !this.isMuted;
     try { localStorage.setItem(MUTE_KEY, this.isMuted ? '1' : '0'); } catch { /* blocked */ }
-    if (!this.isMuted) this.unlock();
     if (this.ctx && this.master)
       this.master.gain.setTargetAtTime(this.isMuted ? 0 : 1, this.ctx.currentTime, 0.02);
+    if (this.isMuted) {
+      this.stopMusic();
+      /* after the ramp, so the last note is faded out rather than cut */
+      try { setTimeout(() => { if (this.isMuted) this.ctx?.suspend(); }, 120); }
+      catch { /* ignore */ }
+    } else {
+      /* toggle() is only ever reached from a tap on the mute row, so this is
+         inside a gesture and may construct the context if it is the first */
+      this.unlock();
+    }
     return this.isMuted;
   }
 

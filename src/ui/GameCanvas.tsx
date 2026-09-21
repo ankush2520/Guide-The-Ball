@@ -52,6 +52,12 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   /* Whether the ramp drag in progress has actually moved anything. A tap on a
      ramp starts a drag too, and only a real move counts as adjusting it. */
   const dragMoved = useRef(false);
+  /* The canvas's rect, measured once per gesture. Reading it inside every
+     pointermove forces a synchronous layout, and a drag fires a move per
+     frame - with the ripple writing style into the same frame, that is the
+     classic read/write thrash. The board cannot move under a finger: fit()
+     clears this whenever the layout it was measured against changes. */
+  const rect = useRef<DOMRect | null>(null);
 
   /* Beyond this, in board units, a press has become a slide and will not
      drop. The board is 480 wide against ~265-370 CSS px, so 14 units is
@@ -124,6 +130,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
           slot.parentElement?.style.setProperty('--board-h', `${Math.round(w / ratio) + 2}px`);
         }
       }
+      rect.current = null;              // whatever we measured is now stale
       controller.notifyRampsChanged();
     };
     fit();
@@ -138,22 +145,52 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     };
   }, [controller]);
 
-  /* iOS owns the swipe-from-edge back gesture and touch-action cannot refuse
-     it - only a cancelled touchstart can. And while a ramp is being dragged
-     the page must not be able to slide out from under it. */
-  useEffect(() => {
-    const stop = (e: Event) => e.preventDefault();
-    const onTouchMove = (e: TouchEvent) => {
+  /* ============================================================
+     KEEPING THE PAGE STILL UNDER A DRAG
+
+     iOS owns the swipe-from-edge back gesture and touch-action
+     cannot refuse it - only a cancelled touchstart can. And
+     while a ramp is being dragged the page must not be able to
+     slide out from under it.
+
+     The touchmove guard is ARMED PER GESTURE rather than left on
+     the document for the life of the page. A non-passive
+     touchmove listener on the document tells the browser that
+     any touch, anywhere, might be cancelled, so it can no longer
+     move the page on the compositor and has to wait for our
+     JavaScript before it responds to the finger - on every
+     touch, including the ones we never had any intention of
+     blocking. That is paid as input latency, which is exactly
+     the kind of small, constant lag that is hard to point at.
+
+     Armed on pointerdown, dropped on the way back up, so the
+     cost is only ever carried by a gesture that is actually on
+     the board and can actually be cancelled.
+     ============================================================ */
+  const touchGuard = useRef<((e: TouchEvent) => void) | null>(null);
+  const armTouchGuard = () => {
+    if (touchGuard.current) return;
+    const h = (e: TouchEvent) => {
       if (controller.dragging || controller.boosterDrag || controller.draft)
         e.preventDefault();
     };
+    touchGuard.current = h;
+    document.addEventListener('touchmove', h, { passive: false });
+  };
+  const dropTouchGuard = () => {
+    if (!touchGuard.current) return;
+    document.removeEventListener('touchmove', touchGuard.current);
+    touchGuard.current = null;
+  };
+
+  useEffect(() => {
+    const stop = (e: Event) => e.preventDefault();
     canvas.addEventListener('touchstart', stop, { passive: false });
-    document.addEventListener('touchmove', onTouchMove, { passive: false });
     const gestures = ['gesturestart', 'gesturechange', 'gestureend'];
     gestures.forEach(n => document.addEventListener(n, stop, { passive: false }));
     return () => {
       canvas.removeEventListener('touchstart', stop);
-      document.removeEventListener('touchmove', onTouchMove);
+      dropTouchGuard();
       gestures.forEach(n => document.removeEventListener(n, stop));
     };
   }, [canvas, controller]);
@@ -169,7 +206,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
      box and is clamped to its edge, exactly as one past a tablet's margin
      always has been. */
   const toBoard = (e: React.PointerEvent) => {
-    const r = canvas.getBoundingClientRect();
+    const r = rect.current ?? (rect.current = canvas.getBoundingClientRect());
     const vx = BOARD.x0 + (e.clientX - r.left) * (BOARD.w / r.width);
     const vy = (e.clientY - r.top) * (H / r.height);
     return {
@@ -180,6 +217,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (controller.phase !== 'plan') return;
+    rect.current = null;                // a fresh measure for this gesture
+    armTouchGuard();
     const p = toBoard(e);
     tap.current = null;
     dragMoved.current = false;
@@ -303,6 +342,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   };
 
   const endGesture = () => {
+    dropTouchGuard();
     const t = tap.current;
     tap.current = null;
     if (controller.boosterDrag) {
@@ -339,6 +379,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
          onPointerMove={onPointerMove}
          onPointerUp={e => { endGesture(); e.preventDefault(); }}
          onPointerCancel={() => {
+           dropTouchGuard();
            tap.current?.ripple?.remove(); tap.current = null;
            controller.dragging = null;
            controller.boosterDrag = null;

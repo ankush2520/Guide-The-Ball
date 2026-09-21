@@ -107,7 +107,13 @@ export class Renderer {
   resize(country: Country): void {
     const bw = BOARD.w;
     const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, MAX_SCALE));
-    const cssW = this.canvas.getBoundingClientRect().width || bw;
+    /* offsetWidth, not getBoundingClientRect(). This runs on EVERY frame, and
+       a rect read is a forced synchronous layout: with a finger on the board
+       the same frame is already writing style (the ripple) and reading the
+       canvas rect from the pointer handler, so each one flushed layout again.
+       offsetWidth is the same number to the pixel here - the canvas has no
+       transform - and it is the cheaper read. */
+    const cssW = this.canvas.offsetWidth || bw;
     const px = Math.round(Math.min(Math.max(cssW * dpr, cssW), bw * MAX_SCALE));
     if (px !== this.canvas.width || BOARD.pad !== this.builtPad) {
       this.canvas.width = px;
