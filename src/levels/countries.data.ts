@@ -1,8 +1,9 @@
 /* ============================================================
    COUNTRIES
 
-   Fourteen countries spanning levels 1-150. Each owns a run of
+   Thirteen countries spanning levels 1-150. Each owns a run of
    levels ("cities"), one mechanic, and one backdrop palette.
+   Verdholm and Emberkeep hold twenty cities each; the rest ten.
 
    The names are invented, inspired by real regions rather than
    naming any actual place.
@@ -20,7 +21,7 @@
    grid, used at low alpha. `accent` recolours the UI chrome.
 
    Every country is now a day sky. Verdholm was the prototype;
-   the other thirteen follow it, each keeping its old hue as a
+   the other twelve follow it, each keeping its old hue as a
    pastel. Every stop is pale enough that the wall grey and the
    target's dark green still clear 3:1 on it (the test suite
    checks every day sky), which is why none of them go deeper.
@@ -36,7 +37,7 @@ import type { Country } from './types';
    came apart the moment the third country shipped was number six.
 
    So the list below is ordered by from/to - the order the game is actually
-   played in - and the ids run out of sequence down it. The four built
+   played in - and the ids run out of sequence down it. The three built
    countries hold 1-50; the ten still to be authored queue up behind them in
    plan order, and each drops into the next free block as it lands. */
 export const COUNTRIES: Country[] = [
@@ -49,14 +50,27 @@ export const COUNTRIES: Country[] = [
   { id: 1, name: 'Verdholm', from: 1,   to: 20,  mechanic: 'ramps only - the fundamentals',
     sky: ['#d3edff', '#e4f3ff', '#f2ecff'], wash: '90,130,210', accent: '#ffb400' },
 
-  /* Apricot into cream - a warm morning. The booster's teal chevron is still
-     the one cool thing on the board. */
-  { id: 2, name: 'Solmesa', from: 21,  to: 30,  mechanic: 'the spring you bring',
-    sky: ['#ffe5d6', '#ffeedd', '#fff5e6'], wash: '230,130,80', accent: '#ff8a3d' },
+  /* ============================================================
+     EMBERKEEP - twenty cities, levels 21-40
 
-  /* Rose-coral heat haze. Breakables are orange and fire is orange-red, so the
-     sky stays pink rather than orange to keep both distinguishable. */
-  { id: 6, name: 'Emberkeep', from: 31,  to: 40,  mechanic: 'breakable blocks + fire',
+     The second TWENTY-level world, and the first country after
+     Verdholm to be one. It absorbed Solmesa's ten: the spring
+     still unlocks at 21 exactly as it did, but the ten boards
+     that used to teach it are now the easy half of a fire world,
+     and the board that cannot be solved without a spring is the
+     closer at 40 rather than a spike at 30.
+
+     Rose-coral heat haze. Breakables are orange and fire is
+     orange-red, so the sky stays PINK rather than orange to keep
+     both readable against it - and pink is the one warm sky that
+     does not compete with the flame's own near-white tip.
+
+     The entity palette is untouched, as it is in every country:
+     red still hurts, green is still the target, blue is still
+     yours. Fire is inside the red family and is told apart by
+     SHAPE and MOTION, never by hue alone - see FireObstacle.
+     ============================================================ */
+  { id: 6, name: 'Emberkeep', from: 21,  to: 40,  mechanic: 'fire - the hazard that ends the run',
     sky: ['#ffe4de', '#ffe9e2', '#fff3ea'], wash: '230,100,70', accent: '#ff5a2e' },
 
   /* Crisp white-blue-grey, and the cleanest board in the game by design: a

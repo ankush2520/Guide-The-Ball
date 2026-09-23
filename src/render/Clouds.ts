@@ -42,21 +42,25 @@ const TWINKLES: Twinkle[] = (() => {
   return out;
 })();
 
+/* One lobe, added to the path already open. moveTo first: starting ON the
+   circle is what stops a sliver joining it to the previous lobe. */
+function lobe(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  ctx.moveTo(cx + r, cy);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+}
+
 /* A cloud is four overlapping circles on a flat base, filled as ONE path so
    the overlaps do not double up the alpha. */
 function puff(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
   const w = 34 * s;
-  const lobes: [number, number, number][] = [
-    [x - w * 0.55, y + 4 * s, 11 * s],
-    [x - w * 0.15, y - 5 * s, 16 * s],
-    [x + w * 0.30, y - 2 * s, 13 * s],
-    [x + w * 0.70, y + 5 * s, 10 * s],
-  ];
   ctx.beginPath();
-  for (const [cx, cy, r] of lobes) {
-    ctx.moveTo(cx + r, cy);             // start ON the circle, so no sliver joins it
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  }
+  /* The four lobes, written out rather than looped over a literal: this runs
+     six times a frame forever, and the array of tuples it used to build was
+     garbage created for no other reason than to be iterated once. */
+  lobe(ctx, x - w * 0.55, y + 4 * s, 11 * s);
+  lobe(ctx, x - w * 0.15, y - 5 * s, 16 * s);
+  lobe(ctx, x + w * 0.30, y - 2 * s, 13 * s);
+  lobe(ctx, x + w * 0.70, y + 5 * s, 10 * s);
   ctx.rect(x - w * 0.55, y + 4 * s, w * 1.25, 11 * s);
   ctx.fill('nonzero');
 }

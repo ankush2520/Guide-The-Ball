@@ -54,9 +54,11 @@ export interface RenderState {
       a patrolling target and nothing else. */
   simT: number;
   ball: { x: number; y: number; px: number; py: number } | null;
-  broken: boolean[];
-  got: boolean[];
-  gotBox: boolean[];
+  /* read-only: the renderer never writes game state, and these are reused
+     buffers on the controller - see its render-state scratch. */
+  broken: readonly boolean[];
+  got: readonly boolean[];
+  gotBox: readonly boolean[];
   /** Whether this level's target gift has already been taken - see the note
       on the wrapped target in Target.draw(). */
   giftTaken: boolean;
@@ -81,6 +83,25 @@ export class Renderer {
   /** The board width the current surface was sized for - a profile change
       has to rebuild even when the pixel width happens to land the same. */
   private builtPad = -1;
+
+  /* ============================================================
+     THE BALL'S TWO GRADIENTS
+
+     Both are a pure function of the ball's RADIUS, and the radius
+     is BALL_R on every frame except the half-second of a capture.
+     They used to be rebuilt twice a frame for a value that had
+     not changed. Cached on the radius they were built for, and
+     rebuilt only when that actually moves.
+
+     A CanvasGradient is resolved in user space AT PAINT TIME, so
+     one built about the origin follows whatever translate the
+     ball is drawn under - which is what lets a single object
+     serve every position the ball ever takes.
+     ============================================================ */
+  private bloomGrad: CanvasGradient | null = null;
+  private bloomRad = -1;
+  private coreGrad: CanvasGradient | null = null;
+  private coreRad = -1;
 
   readonly trail = new Trail();
   readonly particles = new ParticleSystem(STEP_MS_DEFAULT);
@@ -272,11 +293,13 @@ export class Renderer {
     ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
     ctx.setLineDash([]);
 
-    const ends: [number, number][] = [[seg.x1, seg.y1], [seg.x2, seg.y2]];
-    for (const [ex, ey] of ends) {
+    // a grip on each end - the two are written out, so no array is built
+    // per frame just to be walked once
+    ctx.fillStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (let i = 0; i < 2; i++) {
+      const ex = i ? seg.x2 : seg.x1, ey = i ? seg.y2 : seg.y1;
       ctx.beginPath(); ctx.arc(ex, ey, s.handleR, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffd23f'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.fill(); ctx.stroke();
     }
 
     this.drawDeleteButton(s.deleteButtonAt(seg), s.delR);
@@ -360,6 +383,28 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** The warm halo, built about the origin. */
+  private bloomFor(rad: number): CanvasGradient {
+    if (this.bloomGrad && this.bloomRad === rad) return this.bloomGrad;
+    const g = this.ctx.createRadialGradient(0, 0, rad * 0.8, 0, 0, rad * 2.2);
+    g.addColorStop(0, 'rgba(255,180,0,.30)');
+    g.addColorStop(1, 'rgba(255,180,0,0)');
+    this.bloomGrad = g; this.bloomRad = rad;
+    return g;
+  }
+
+  /** White at the highlight falling off to gold - already origin-relative. */
+  private coreFor(rad: number): CanvasGradient {
+    if (this.coreGrad && this.coreRad === rad) return this.coreGrad;
+    const g = this.ctx.createRadialGradient(-rad * 0.30, -rad * 0.34, rad * 0.05,
+                                            0, 0, rad);
+    g.addColorStop(0,    BALL.hi);
+    g.addColorStop(0.45, BALL.mid);
+    g.addColorStop(1,    BALL.edge);
+    this.coreGrad = g; this.coreRad = rad;
+    return g;
+  }
+
   /* ball - drawn between the last two physics states, so motion stays smooth
      on high-refresh displays where rAF outruns the fixed 60Hz simulation. */
   private drawBall(s: RenderState): void {
@@ -393,17 +438,16 @@ export class Renderer {
 
     ctx.save();
     ctx.globalAlpha = alpha;
+    /* Translated FIRST, so both gradients can be cached about the origin and
+       still land on the ball - see the note on them above. */
+    ctx.translate(bx, by);
 
     /* A soft warm glow, much smaller than the old amber bloom: on a light
        board a wide halo just muddies the sky. The ink outline is what finds
        the ball now. */
-    const bloom = ctx.createRadialGradient(bx, by, rad * 0.8, bx, by, rad * 2.2);
-    bloom.addColorStop(0, 'rgba(255,180,0,.30)');
-    bloom.addColorStop(1, 'rgba(255,180,0,0)');
-    ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(bx, by, rad * 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = this.bloomFor(rad);
+    ctx.beginPath(); ctx.arc(0, 0, rad * 2.2, 0, Math.PI * 2); ctx.fill();
 
-    ctx.translate(bx, by);
     const q = s.squash.amt;
     if (Math.abs(q) > 0.002) {
       /* flatten along the surface it hit, bulge across it; outBack drives q
@@ -415,11 +459,7 @@ export class Renderer {
        a white ball, and it still is - the gold lives in the falloff. The
        outline is drawn INSIDE the squash transform, so it deforms with the
        ball on impact rather than staying a rigid circle around it. */
-    const core = ctx.createRadialGradient(-rad * 0.30, -rad * 0.34, rad * 0.05, 0, 0, rad);
-    core.addColorStop(0,   BALL.hi);
-    core.addColorStop(0.45, BALL.mid);
-    core.addColorStop(1,   BALL.edge);
-    ctx.fillStyle = core;
+    ctx.fillStyle = this.coreFor(rad);
     ctx.beginPath(); ctx.arc(0, 0, rad, 0, Math.PI * 2); ctx.fill();
     ctx.lineWidth = Math.max(1, rad * 0.26);
     ctx.strokeStyle = INK; ctx.stroke();

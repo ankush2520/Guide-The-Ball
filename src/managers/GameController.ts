@@ -177,6 +177,23 @@ export class GameController {
   version = 0;
   private listeners = new Set<() => void>();
 
+  /* ============================================================
+     THE RENDER STATE'S SCRATCH
+
+     renderState() is built ONCE PER FRAME and read synchronously
+     by the renderer, which keeps nothing: so the parts of it that
+     used to be freshly allocated every frame - the gotBox array,
+     the tutorial wrapper, the deleteButtonAt closure - are reused
+     buffers instead. Same values, no per-frame garbage.
+
+     Anything that wants to KEEP one of these past the frame has
+     to copy it, which is what debugHook already does.
+     ============================================================ */
+  private readonly gotBoxScratch: boolean[] = [];
+  private readonly tutorialScratch: { step: TutStep | null } = { step: null };
+  private static readonly NO_GOT: readonly boolean[] = [];
+  private readonly deleteButtonAt = (s: Segment) => this.levels.deleteButtonAt(s);
+
   constructor(
     readonly bus: GameBus,
     readonly levels: LevelManager,
@@ -716,7 +733,7 @@ export class GameController {
        and the board's appearance, so joining them is this method's job - the
        same cross-manager seam as every other spend here. */
     this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
-    /* Reaching Solmesa is what puts the first booster in the bag. Announced
+    /* Reaching level 21 is what puts the first spring in the bag. Announced
        with a flash rather than a modal: it is a gift, not an interruption. */
     if (this.rewards.noteLevelReached(this.levels.level.id))
       this.showFlash('Springs unlocked - one is in your bag!');
@@ -882,12 +899,8 @@ export class GameController {
       simT: this.ball ? this.ball.steps + this.acc / STEP_MS : 0,
       ball: this.ball,
       broken: this.ball ? this.ball.broken : this.levels.sessionBroken,
-      got: this.ball ? this.ball.got : [],
-      /* OR-ed rather than taken from the ball: a box claimed on an earlier
-         visit is open before this drop starts, and the live run only ever
-         adds to that. */
-      gotBox: this.levels.sessionBoxes.map(
-        (g, i) => g || !!(this.ball && this.ball.gotBox[i])),
+      got: this.ball ? this.ball.got : GameController.NO_GOT,
+      gotBox: this.fillGotBox(),
       /* Asked of the LEDGER, not of the board: whether a wrapped target has
          already paid out is a fact about the save, and the one mid-win case -
          the gift is on screen being opened - still counts as taken, because
@@ -896,7 +909,7 @@ export class GameController {
       capture: this.capture,
       captureMs: CAPTURE_MS,
       squash: this.squash,
-      deleteButtonAt: (s: Segment) => this.levels.deleteButtonAt(s),
+      deleteButtonAt: this.deleteButtonAt,
       /* Whether a spring is armed and waiting for a ramp to land on, so the
          board can say so while it is. */
       armedSpring: this.armedSpring,
@@ -905,8 +918,26 @@ export class GameController {
          painted at its old size */
       handleR: HANDLE_R,
       delR: DEL_R,
-      tutorial: { step: this.tutorialStep() },
+      tutorial: this.fillTutorial(),
     };
+  }
+
+  /* OR-ed rather than taken from the ball: a box claimed on an earlier visit
+     is open before this drop starts, and the live run only ever adds to that.
+     Written into the scratch buffer, which is resized only when the board's
+     box count actually changes. */
+  private fillGotBox(): readonly boolean[] {
+    const session = this.levels.sessionBoxes, out = this.gotBoxScratch;
+    out.length = session.length;
+    const live = this.ball;
+    for (let i = 0; i < session.length; i++)
+      out[i] = session[i] || !!(live && live.gotBox[i]);
+    return out;
+  }
+
+  private fillTutorial(): { step: TutStep | null } {
+    this.tutorialScratch.step = this.tutorialStep();
+    return this.tutorialScratch;
   }
 
   /** The caption on the board: how to get a ramp on the first visit, how

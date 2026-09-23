@@ -24,11 +24,12 @@ export interface DrawContext {
       board looks identical at the same clock on any device. */
   clock: number;
   /** Which breakables have been destroyed, and which stars taken. Live run
-      state, read by the entities that have two appearances. */
-  broken: boolean[];
-  got: boolean[];
+      state, read by the entities that have two appearances.
+      An entity READS these and never writes them. */
+  broken: readonly boolean[];
+  got: readonly boolean[];
   /** Which mystery boxes have been opened THIS DROP. */
-  gotBox: boolean[];
+  gotBox: readonly boolean[];
   /** Whether this level's TARGET GIFT has already been taken - on a previous
       visit or a moment ago. A wrapped target that has been opened goes back to
       being an ordinary one, the same way a taken chest goes to an outline:

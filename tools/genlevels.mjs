@@ -35,7 +35,7 @@ const rint = (r, lo, hi) => Math.round(rng(r, lo, hi));
 
 /* ---------------------------------------------------------------- */
 /* Country specs. `make` builds a candidate; `gate` is what it must clear.
-   Keyed by country id - country 2 is Solmesa, levels 21-30. */
+   Keyed by country id - country 6 is Emberkeep, levels 21-40. */
 /* ---------------------------------------------------------------- */
 
 /** Distance from a point to every existing circle, for overlap rejection. */
@@ -44,148 +44,173 @@ function clear(pt, rad, list, pad = 12){
 }
 
 const SPECS = {
-  2: {
-    name: 'Solmesa',
-    /* ============================================================
-       THE COUNTRY WHERE YOU LEARN THE SPRING YOU BROUGHT
-
-       Solmesa used to author a BOOSTER PAD on every board - a
-       circular one, fired on entry along a fixed heading - and
-       the gate proved the pad was unavoidable and load-bearing.
-       There are no pads in the game any more (see the note in
-       src/levels/levels.data.ts), so there is nothing here to
-       author and `requireBoost` has gone with them.
-
-       What the country teaches instead is the item: level 21 is
-       where the player's own SPRING unlocks and the free one
-       lands in the bag, and level 30 - hand-tuned, preserved by
-       `needsSpring`, never regenerated - is the board that cannot
-       be solved without it. So these boards stay what they always
-       were, uncluttered and tightening across the ten, and they
-       are the place a player first has a spring to try on a ramp
-       of their own.
-       ============================================================ */
-    /* The gate tightens across the world, so 21 is a lesson and 30 is a test.
-       maxTol is the ceiling on the winning angle window: without it the
-       generator happily produced a level 27 at +/-57 degrees, which is more
-       forgiving than level 1 and would have flattened the whole curve. */
-    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.2, maxBlind: 0.06,
-                  maxObHits: 1.2 }),
-    make(r, i, n, taken){
-      const last = i === n - 1;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 70, 150) : rint(r, 330, 410), y: 40 };
-      /* Far corner from the spawn, and LOW - a long horizontal carry, which
-         is the shape these boards always had and the shape a spring is worth
-         bringing to.
-         No two levels in a world may share a target spot - ten boards that
-         all end in the same corner read as one board played ten times.
-         Placement retries here rather than failing the candidate, so a
-         crowded world spends its solver budget on physics and not on dice. */
-      let target = null;
-      for (let a = 0; a < 80 && !target; a++){
-        const tx = leftSpawn ? rint(r, 330, 424) : rint(r, 56, 150);
-        const ty = rint(r, 585, 730);
-        if (Math.abs(tx - spawn.x) < 215) continue;
-        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 40) };
-      }
-      if (!target) return null;
-      const obstacles = [];
-      const want = last ? 3 : (i < 3 ? 1 : 2);
-      let guard = 0;
-      while (obstacles.length < want && guard++ < 200){
-        const o = { x: rint(r, 60, 420), y: rint(r, 250, 600), r: rint(r, 28, 36) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 220) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
-        obstacles.push(o);
-      }
-      return {
-        name: pick(r, last ? ['Ridgeline'] : BOOST_NAMES),
-        // two ramps throughout, which is what makes the long carry a puzzle
-        maxBlocks: 2,
-        targetType: last ? 'POCKET' : (i >= 6 ? 'SIDE_WALL' : 'OPEN'),
-        wallSide: leftSpawn ? 'right' : 'left',
-        spawn, obstacles, target
-      };
-    }
-  },
-
   6: {
     name: 'Emberkeep',
-    /* Emberkeep layers FIRE onto the breakable blocks it already had, and the
-       two are deliberately opposites in the same country: a breakable is a
-       hazard you are allowed to spend a drop on, a fire is one you are not.
-       Learning which is which IS the country, so every board carries both. */
-    /* Bands stay wide compared to Solmesa. The difficulty here is a routing
-       decision, not a precision one - asking for both at once produces boards
-       that fail for the wrong reason and teach nothing. */
-    gate: i => ({ minTol: 3, maxTol: 26 - i * 1.1, maxBlind: 0.05,
-                  requireFire: true, maxObHits: 1.4 }),
+    /* ============================================================
+       EMBERKEEP - TWENTY cities, and the pacing pattern in full
+
+       The country absorbed Solmesa, so it runs 21-40 and carries
+       the whole difficulty arc of a world rather than half of
+       one. Fire is the density-driver: a breakable is a hazard
+       you are ALLOWED to spend a drop on, a fire is one you are
+       not, and learning which is which is the country.
+
+       THE ARC, in three phases, keyed off t = i/(n-1) so the
+       same shape works at any world length:
+
+         t < 0.35   (21-27)  one fire, in the fall line. Nothing
+                             else to read. This is the "reset to
+                             easy" a new world opens on.
+         t < 0.70   (28-34)  a second fire appears, breakables
+                             thicken, the first plain obstacles
+                             arrive, and the first walls with
+                             them - the same place Verdholm put
+                             its own (level 11).
+         t >= 0.70  (35-40)  the closing stretch. Two or three
+                             fires, a packed middle, walled
+                             targets. Meaningfully harder than
+                             the middle phase, not a shade of it.
+
+       THE FIELD SITS BETWEEN SPAWN AND TARGET, and the target
+       stays LOW and across the board. That is the one arrangement
+       that actually forces a full-board route in a game where the
+       ball falls: a target near the top is reached before the
+       ball ever descends to the field, which leaves the field
+       decorative - measured, not assumed, and the reason this
+       template does not chase a high target. The one board that
+       does put the target up at spawn height is level 40, and it
+       is hand-written (needsSpring) precisely because that shape
+       is unsolvable by ramps and is what the spring is for.
+       ============================================================ */
+    /* Bands stay wide compared to a precision country: the difficulty here is
+       a routing decision, not a precision one. The ceiling tightens smoothly
+       across the whole world rather than across ten, so 21 is a lesson and
+       39 is a test. */
+    gate: (i, n) => {
+      const t = n > 1 ? i / (n - 1) : 0;
+      return { minTol: 3,
+               /* Down to a band barely wider than the floor by the close, so
+                  a board that one ramp CAN solve has to be an exact one. */
+               maxTol: 26 - 21 * t, maxBlind: 0.05,
+               /* the same curve for two-ramp boards: plenty of routes early,
+                  few by the close. Without this the back half is ungraded. */
+               maxSols2: Math.round(28 - 25 * t),
+               /* the closing stretch: two ramps minimum, by construction */
+               requireTwoRamp: t >= 0.70,
+               requireFire: true, maxObHits: 1.4 };
+    },
     make(r, i, n, taken){
+      const t = n > 1 ? i / (n - 1) : 0;
       const last = i === n - 1;
+      const mid  = t >= 0.35 && t < 0.70;
+      const late = t >= 0.70;
       const leftSpawn = i % 2 === 0;
       const spawn = { x: leftSpawn ? rint(r, 80, 170) : rint(r, 310, 400), y: 40 };
+
       /* THE FIRE SITS IN THE FALL LINE. That is the whole board: do nothing
          and you burn, so the first ramp is not an optimisation, it is the
          only way the drop survives. Placed high enough that the player has
          room to turn the ball before reaching it. */
       const fires = [{ x: clampX(spawn.x + rint(r, -10, 10), 40),
                        y: rint(r, 215, 300), r: rint(r, 24, 30) }];
-      if (last) {
-        // the closing board gets a second one, guarding the far approach
-        const f2 = { x: clampX(spawn.x + (leftSpawn ? 190 : -190), 60),
-                     y: rint(r, 380, 460), r: rint(r, 22, 27) };
+      /* A SECOND FIRE from the middle phase on, guarding the far approach -
+         the turn that saved the drop must not also be the whole solution. */
+      if (mid || late) {
+        const f2 = { x: clampX(spawn.x + (leftSpawn ? rint(r, 150, 230) : -rint(r, 150, 230)), 60),
+                     y: rint(r, 370, 470), r: rint(r, 22, 28) };
         if (clear(f2, f2.r, fires, 30)) fires.push(f2);
       }
-      /* Target across and low, so the route has to travel rather than just
-         sidestep the flame and drop. */
-      /* A WIDE band, and many attempts. Emberkeep is the third country to be
-         written into a board 480 wide, so most of the low corners are already
-         somebody else's target - a narrow window here does not produce a
-         harder level, it produces a generator that runs out of dice. */
+      /* ...and a third only in the closing stretch, low and on the far side,
+         so the last approach has to be threaded rather than fallen into. */
+      if (late) {
+        const f3 = { x: clampX(spawn.x + (leftSpawn ? rint(r, 250, 330) : -rint(r, 250, 330)), 60),
+                     y: rint(r, 480, 560), r: rint(r, 20, 26) };
+        if (clear(f3, f3.r, fires, 28)) fires.push(f3);
+      }
+
+      /* Target across and LOW, so the route has to travel rather than just
+         sidestep the flame and drop. A wide band and many attempts: most of
+         the low corners already belong to some other country's target, and a
+         narrow window here does not make a harder level, it makes a
+         generator that runs out of dice. */
       let target = null;
-      for (let a = 0; a < 220 && !target; a++){
+      for (let a = 0; a < 260 && !target; a++){
         const tx = leftSpawn ? rint(r, 270, 424) : rint(r, 56, 210);
         const ty = rint(r, 545, 745);
         if (Math.abs(tx - spawn.x) < 150) continue;
-        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
+        if (taken.some(q => Math.hypot(q.x - tx, q.y - ty) < 44)) continue;
         if (!clear({ x: tx, y: ty }, 40, fires, 26)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
+        target = { x: tx, y: ty, r: late ? rint(r, 26, 32) : rint(r, 30, 38) };
       }
       if (!target) return null;
+
       /* Breakables sit between the fire and the target: something the route
          is allowed to go THROUGH, next to something it is not. */
       const breakables = [];
-      const wantB = last ? 3 : (i < 3 ? 1 : 2);
+      const wantB = late ? rint(r, 2, 3) : mid ? 2 : (t < 0.18 ? 1 : 2);
       let guard = 0;
-      while (breakables.length < wantB && guard++ < 200){
+      while (breakables.length < wantB && guard++ < 220){
         const o = { x: rint(r, 70, 410), y: rint(r, 330, 600), r: rint(r, 26, 34) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
         if (!clear(o, o.r, fires, 26)) continue;
         if (!clear(o, o.r, breakables, 16)) continue;
         breakables.push(o);
       }
+
+      /* PLAIN OBSTACLES are the density-driver on top of the fire, and they
+         arrive at the same point in the arc Verdholm's did. */
       const obstacles = [];
-      if (i >= 4){
-        let g2 = 0;
-        while (obstacles.length < 1 && g2++ < 120){
-          const o = { x: rint(r, 70, 410), y: rint(r, 340, 580), r: rint(r, 26, 32) };
-          if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-          if (!clear(o, o.r, fires, 24) || !clear(o, o.r, breakables, 18)) continue;
-          obstacles.push(o);
-        }
+      const wantO = late ? 2 : mid ? 1 : 0;
+      let g2 = 0;
+      while (obstacles.length < wantO && g2++ < 200){
+        const o = { x: rint(r, 70, 410), y: rint(r, 340, 580), r: rint(r, 26, 32) };
+        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
+        if (!clear(o, o.r, fires, 24) || !clear(o, o.r, breakables, 18)) continue;
+        /* ...and against EACH OTHER, which nothing checked. Two obstacles
+           were free to land on the same spot - level 35 shipped a pair
+           seven pixels apart - so a board asking for two got one fat blob
+           and measured as the softest board in its own closing stretch. */
+        if (!clear(o, o.r, obstacles, 16)) continue;
+        obstacles.push(o);
       }
-      return {
-        name: pick(r, last ? ['Crucible'] : FIRE_NAMES),
-        maxBlocks: 2,
-        // OPEN throughout bar the closer: the fire is the obstruction this
-        // country is about, and walls would add a second unrelated one
-        targetType: last ? 'SIDE_WALL' : 'OPEN',
+
+      /* WALLS enter in the back half, exactly as Verdholm's do, and the
+         closing stretch mixes them. OPEN early: the fire is the obstruction
+         this country is about, and a wall too soon adds a second unrelated
+         one before the first has been learned. */
+      /* NOT ALL WALLS MAKE A BOARD HARDER, which is the thing that caught
+         this world out. A SIDE_WALL is a BACKSTOP: it catches a ball that
+         came in long and feeds it back toward the target, so a stretch built
+         out of them measured EASIER for a careless two-ramp layout than the
+         middle of the world it was supposed to close. A NARROW_GAP is the
+         opposite - it has to be threaded - and ENCLOSED and POCKET sit
+         between. So the closing phase is weighted toward the ones that ask
+         something, and the backstop is left to the middle where a little
+         help is the point. */
+      let targetType = 'OPEN';
+      /* ENCLOSED is off the closing pool for the same reason SIDE_WALL is:
+         measured against random two-ramp play it came out the most forgiving
+         wall of the four - it rings the target, so a ball that arrives near
+         it gets kept rather than turned away. NARROW_GAP has to be threaded
+         and POCKET has to be entered from one side; those two are what the
+         end of a world is built from. */
+      if (late)      targetType = pick(r, ['NARROW_GAP', 'NARROW_GAP', 'POCKET']);
+      else if (mid)  targetType = pick(r, ['OPEN', 'OPEN', 'SIDE_WALL', 'POCKET']);
+
+      const lv = {
+        /* Indexed, not rolled: a twenty-city world rolling a nine-name pool
+           produced "Hot Gate" three times. The pool is longer than any world
+           is, so i is already a unique pick. */
+        name: FIRE_NAMES[i % FIRE_NAMES.length],
+        maxBlocks: late ? 3 : 2,
+        targetType,
         wallSide: leftSpawn ? 'right' : 'left',
         spawn, obstacles, breakables, fires, target
       };
+      /* Tight by the close - Verdholm's hardest gap is 38, and this world
+         has no business being gentler than the one before it. */
+      if (targetType === 'NARROW_GAP') lv.gapW = late ? rint(r, 38, 46) : rint(r, 44, 54);
+      return lv;
     }
   },
 
@@ -640,7 +665,10 @@ const ZENITH_NAMES = ['Apex','Culmination','The Last Mile','Starfall','Terminus'
 const BOOST_NAMES = ['Kickoff','Slingshot','Updraft','Ricochet','Launch Pad',
                      'The Sling','Green Light','Overshoot','Bank Shot'];
 const FIRE_NAMES = ['Firebreak','Cinder Run','The Forge','Ashfall','Emberline',
-                    'Hot Gate','Flashpoint','Smoulder','Kiln'];
+                    'Hot Gate','Flashpoint','Smoulder','Kiln','Backdraft',
+                    'Slow Burn','The Flue','Scorchline','Tinderbox','Bellows',
+                    'Char','Updraft','The Gauntlet','Blast Furnace','Pyre',
+                    'Wickline','Coalface','Firewall','Searing'];
 const MOVE_NAMES = ['Metronome','Pendulum','Crosswalk','The Shuttle','Tempo',
                     'Sidestep','Drift','Interception','Windowpane'];
 function clampX(v, m){ return Math.max(m, Math.min(W - m, v)); }
@@ -672,8 +700,8 @@ const FROM = COUNTRY.from, TO = COUNTRY.to;
 
 /** The acceptance sweep. Runs entirely inside the page against the real
     simulator, so it can never disagree with the shipped physics. */
-async function verify(lv, i){
-  const gate = typeof spec.gate === 'function' ? spec.gate(i) : spec.gate;
+async function verify(lv, i, n){
+  const gate = typeof spec.gate === 'function' ? spec.gate(i, n) : spec.gate;
   return page.evaluate(([lv, gate]) => {
     const g = window.__gtb, { simulate, CONSTS } = g;
     const ix = g.scratch(lv, 0);
@@ -786,6 +814,24 @@ async function verify(lv, i){
     const why = [];
     if (tol1 && tol1 < gate.minTol) why.push(`band ${tol1.toFixed(1)} < ${gate.minTol}`);
     if (tol1 && tol1 > gate.maxTol) why.push(`too easy, band ${tol1.toFixed(1)} > ${gate.maxTol.toFixed(1)}`);
+    /* THE TWO-RAMP HOLE. `tol1` is 0 on a board no single ramp solves, and
+       both checks above are guarded on it being non-zero - so a level that
+       needed two ramps used to pass with NO difficulty ceiling at all. That
+       is how a closing stretch ended up measurably easier than the middle of
+       its own world: the hardest boards were the only ones nothing graded.
+       `sols2` counts the constructed two-ramp routes that win (capped at 40),
+       so it is the same "how many ways through are there" question that
+       maxTol asks of a one-ramp board. */
+    if (!tol1 && gate.maxSols2 && sols2 > gate.maxSols2)
+      why.push(`too easy for 2 ramps, ${sols2} routes > ${gate.maxSols2}`);
+    /* THE CLOSING STRETCH IS HARDER IN KIND, NOT IN DEGREE. Tightening the
+       one-ramp band only ever makes a board a finer version of the same
+       task, and measured against random two-ramp play the back half kept
+       coming out no harder than the middle of its own world. This asks for
+       something a player can feel instead: by the end of a world, ONE ramp
+       must not be enough - the board has to be built, not aimed. */
+    if (gate.requireTwoRamp && tol1)
+      why.push(`a single ramp solves it (band ${tol1.toFixed(1)})`);
     if (blind > gate.maxBlind) why.push(`trivial ${(blind*100).toFixed(0)}%`);
     if (seedWin < 1) why.push(`seed-flaky ${(seedWin*100).toFixed(0)}%`);
     if (obHits > gate.maxObHits) why.push(`lottery ${obHits.toFixed(1)} obstacle hits`);
@@ -886,7 +932,7 @@ let totalTries = 0;
    place that says which boards are hand-written. */
 const DATA_SRC = fs.readFileSync(path.join(root, 'src/levels/levels.data.ts'), 'utf8');
 const PRESERVED = new Set(
-  (DATA_SRC.match(/\{ id:(\d+),[^}]*needsSpring\s*:\s*true/g) || [])
+  (DATA_SRC.match(/\{ id:(\d+),(?:(?!\{ id:)[\s\S])*?needsSpring\s*:\s*true/g) || [])
     .map(m => +m.match(/id:(\d+)/)[1]));
 
 /* WHICH TARGETS ARE WRAPPED, read out of the data file the same way.
@@ -896,11 +942,25 @@ const PRESERVED = new Set(
    level. It IS a reason to write the flag back out afterwards: a regeneration
    that silently unwrapped level 100's target would take a milestone away and
    nothing would fail. See fmt() below. */
+/* (?!\{ id:) is load-bearing. Without it the lazy [\s\S]*? happily runs from
+   ONE level's opening brace all the way to some LATER level's targetGift, so
+   the id captured is the id of a level that has no gift at all - it stamped
+   the flag onto level 21 the first time a country was regenerated under it.
+   The guard stops the span at the next level object, so a match can only ever
+   be a gift found inside the block it started in. */
 const GIFTED = new Set(
-  (DATA_SRC.match(/\{ id:(\d+)[\s\S]*?targetGift\s*:\s*true/g) || [])
+  (DATA_SRC.match(/\{ id:(\d+),(?:(?!\{ id:)[\s\S])*?targetGift\s*:\s*true/g) || [])
     .map(m => +m.match(/id:(\d+)/)[1]));
 
-for (let i = 0; i < 10; i++){
+/* THE WORLD'S LENGTH IS THE COUNTRY'S OWN RANGE, not a hard-coded ten.
+   Verdholm holds twenty cities and Emberkeep now does too, so a generator
+   that assumed ten silently produced half a world and spliced it over the
+   top of the other half. Every template is handed `n` and shapes its arc
+   from i/(n-1), which is what makes the pacing pattern reusable at any
+   world length rather than only at ten. */
+const N = TO - FROM + 1;
+
+for (let i = 0; i < N; i++){
   const id = FROM + i;
   if (PRESERVED.has(id)){
     console.log(`  ${String(id).padStart(3)} (hand-tuned, kept as written)`);
@@ -910,10 +970,10 @@ for (let i = 0; i < 10; i++){
   const r = mulberry32(0xBEEF * WORLD + id * 7919);
   while (!got && tries < 240){
     tries++; totalTries++;
-    const cand = spec.make(r, i, 10, accepted.map(l => l.target));
+    const cand = spec.make(r, i, N, accepted.map(l => l.target));
     if (!cand){ lastWhy = 'target too close to another in this world'; continue; }
     cand.id = id;
-    const v = await verify(cand, i);
+    const v = await verify(cand, i, N);
     if (v.ok) got = { lv: cand, v }; else lastWhy = v.why || 'no solution';
   }
   if (!got){
@@ -926,7 +986,7 @@ for (let i = 0; i < 10; i++){
   accepted.push(lv);
   console.log(`  ${String(id).padStart(3)} ${lv.name.padEnd(12)} ${lv.targetType.padEnd(10)} ` +
     `blk ${lv.maxBlocks}  ob ${lv.obstacles.length}  ` +
-    `band ${(v.tol1 ? '±' + v.tol1.toFixed(1) + '°' : '2-ramp').padStart(7)}  ` +
+    `band ${(v.tol1 ? '±' + v.tol1.toFixed(1) + '°' : '2r:' + v.sols2).padStart(7)}  ` +
     `blind ${(v.blind*100).toFixed(1).padStart(4)}%  ` +
     `obHits ${v.obHits.toFixed(1)}  boosts ${v.boosts.toFixed(1)}  (${tries} tries)`);
 }
@@ -934,7 +994,7 @@ const COUNTRY_TABLE = await page.evaluate(() =>
   window.__gtb.COUNTRIES.map(c => ({ id: c.id, name: c.name, from: c.from, to: c.to })));
 await browser.close();
 
-console.log(`\n  All 10 verified. ${totalTries} candidates tried, ${accepted.length} accepted.`);
+console.log(`\n  All ${N} verified. ${totalTries} candidates tried, ${accepted.length} accepted.`);
 
 if (WRITE){
   const fmt = lv => {

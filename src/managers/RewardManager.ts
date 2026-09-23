@@ -62,12 +62,13 @@ export const RAMP_PRICE = 15;
    really prices is a solved board, not an attempt at one. */
 export const SPRING_PRICE = 30;
 
-/* ---- springs unlock with Solmesa ---- */
+/* ---- springs unlock at the start of world two ---- */
 
-/* Solmesa is where the game stops being only about WHERE the ball goes and
-   starts being about how fast, and the country opens at level 21. Before that
-   the spring does not exist anywhere: not in the shop, not in the bag, and
-   not in a mystery box's prize table. */
+/* Level 21 is where the game stops being only about WHERE the ball goes and
+   starts being about how fast. It is the first board of Emberkeep, and the
+   world closes on the one board that cannot be solved without a spring (40).
+   Before 21 the spring does not exist anywhere: not in the shop, not in the
+   bag, and not in a mystery box's prize table. */
 export const SPRING_UNLOCK_LEVEL = 21;
 /** The same gate as an index into LEVELS, which is what progress is kept in. */
 export const SPRING_UNLOCK_INDEX = SPRING_UNLOCK_LEVEL - 1;
@@ -400,7 +401,7 @@ export class RewardManager {
 
   /** Called whenever a level is entered. The first time that level is 21 or
       deeper, the free spring is handed over - once, ever, and persisted, so
-      every later visit to Solmesa passes straight through here. */
+      every later visit to Emberkeep passes straight through here. */
   noteLevelReached(levelId: number): boolean {
     if (this.springGift || levelId < SPRING_UNLOCK_LEVEL) return false;
     this.springGift = true;

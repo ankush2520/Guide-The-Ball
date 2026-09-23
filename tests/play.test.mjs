@@ -303,13 +303,17 @@ const geo = await page.evaluate(() => {
   };
 });
 console.log(`  cities: ${geo.sample.join(', ')}`);
-check(geo.n === 14, 'fourteen countries are declared', `${geo.n}`);
+check(geo.n === 13, 'thirteen countries are declared', `${geo.n}`);
 check(geo.gaps.length === 0, 'their level ranges are contiguous with no gaps',
   geo.gaps.join('; ') || `${geo.first}-${geo.last}`);
 check(geo.first === 1 && geo.last === 150, 'and they span levels 1-150',
   `${geo.first}-${geo.last}`);
-check(geo.sizes[0] === 20 && geo.sizes.slice(1).every(n => n === 10),
-  'the first country holds twenty cities and the rest ten', geo.sizes.join(','));
+/* TWO twenty-city countries now: Verdholm, and Emberkeep since it absorbed
+   Solmesa's ten into one fire world at 21-40. Everything after it is still
+   ten, and the total is still 150. */
+check(geo.sizes[0] === 20 && geo.sizes[1] === 20 &&
+      geo.sizes.slice(2).every(n => n === 10),
+  'the two built worlds hold twenty cities each and the rest ten', geo.sizes.join(','));
 check(geo.uniqueNames === geo.n, 'every country name is distinct');
 check(geo.uniquePalettes === geo.n, 'every country has its own palette',
   `${geo.uniquePalettes} of ${geo.n}`);
@@ -318,10 +322,11 @@ check(geo.orphan === 0, 'every level falls inside its country range');
 check(geo.uniqueCities === geo.nCities, 'every city name is unique',
   `${geo.uniqueCities} of ${geo.nCities}`);
 /* The four sampled cities are levels 1, 20, 21 and 30 - the two ends of
-   Verdholm and the two ends of Solmesa, so the ordinal is checked where it
-   starts, where it reaches XX, and where it rolls over into the next country. */
-check(geo.sample[0] === 'Verdholm I' && geo.sample[1] === 'Verdholm XX' &&
-      geo.sample[2] === 'Solmesa I'  && geo.sample[3] === 'Solmesa X',
+   Verdholm, then the start and the middle of Emberkeep, so the ordinal is
+   checked where it starts, where it reaches XX, where it rolls over into the
+   next country, and again ten cities into a twenty-city world. */
+check(geo.sample[0] === 'Verdholm I'  && geo.sample[1] === 'Verdholm XX' &&
+      geo.sample[2] === 'Emberkeep I' && geo.sample[3] === 'Emberkeep X',
   'city names are derived from country + position, and roll over at a border',
   geo.sample.join(', '));
 
@@ -1054,7 +1059,7 @@ await topUp();
 /* The legend only covers the board in front of you and the tips fire once,
    so there has to be somewhere to look things up afterwards. */
 section('8c. Info panel');
-await page.evaluate(() => window.__gtb.setLevel(20));      // Solmesa's first board
+await page.evaluate(() => window.__gtb.setLevel(20));      // Emberkeep's first board
 check(await page.locator('#infopanel').isHidden(), 'the info panel starts closed');
 await openSettings();
 await page.locator('#btn-info').click();

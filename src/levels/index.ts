@@ -52,7 +52,7 @@ export function countryOf(id: number): Country {
   return COUNTRIES[0];
 }
 
-/** Where a level sits within its country, 1-based. Level 23 is Solmesa's
+/** Where a level sits within its country, 1-based. Level 23 is Emberkeep's
     third city. */
 export function cityIndex(id: number): number {
   return id - countryOf(id).from + 1;
