@@ -88,6 +88,46 @@ const report = await page.evaluate(([lo, hi]) => {
         }
     }
 
+    /* ---- traced 2-ramp route, when the constructed one finds nothing ----
+       The constructed search puts the second ramp on the straight line the
+       first ramp reflects along. A board whose route is a long arc - out past
+       a top-middle target and back in, as Emberkeep's final exam demands -
+       sits nowhere on that line. So trace each first ramp for real and try
+       the second ramp on points the ball actually passes. One route counted
+       per first ramp, and every one still has to win on every seed. */
+    if (lv.maxBlocks >= 2 && !best.tol && !sols2){
+      for (let ry = lv.spawn.y + 70; ry <= lv.spawn.y + 230 && sols2 < 40; ry += 16)
+        for (let t1 = 22; t1 <= 158 && sols2 < 40; t1 += 6){
+          const r1 = ramp(sx, ry, t1);
+          const pts = window.__gtb.trace([r1], 1, li).samples.filter(p => p.y > ry + 20);
+          route:
+          for (let k = 0; k < pts.length; k += 6)
+            for (let t2 = 20; t2 <= 160; t2 += 7){
+              const cfg = [r1, ramp(pts[k].x + Math.sign(pts[k].vx) * 6, pts[k].y + 6, t2, 100)];
+              if (wins(cfg)){ sols2++; if (!best2cfg) best2cfg = cfg; break route; }
+            }
+        }
+    }
+
+    /* ---- the drop window, on a patrolling board ----
+       The target is already moving while the player plans, so a solution is
+       a layout AND a moment to let go. How many consecutive drop phases the
+       solution found above wins at, on every seed, is how forgiving that
+       moment is. Measured outward from phase 0, wrapping round the patrol. */
+    let dropWin = null;
+    const sol = best.tol ? [ramp(sx, best.ry, best.th)] : best2cfg;
+    if (lv.targetMove && sol){
+      const P = lv.targetMove.period;
+      const at = t => seeds.every(s => simulate(sol, s, li, null, ((t % P) + P) % P).result === 'win');
+      dropWin = 0;
+      if (at(0)){
+        let lo2 = 0, hi2 = 0;
+        while (hi2 + 1 < P && at(hi2 + 1)) hi2++;
+        while (lo2 - 1 > hi2 - P && at(lo2 - 1)) lo2--;
+        dropWin = hi2 - lo2 + 1;
+      }
+    }
+
     /* ---- blind placement ---- */
     let rnd = 20250903;
     const rand = () => (rnd = (rnd*1103515245+12345) & 0x7fffffff) / 0x7fffffff;
@@ -100,6 +140,7 @@ const report = await page.evaluate(([lo, hi]) => {
     }
 
     out.push({ id: lv.id, name: lv.name, type: lv.targetType, max: lv.maxBlocks,
+               spring: !!lv.needsSpring, window: dropWin, period: lv.targetMove ? lv.targetMove.period : 0,
                obst: lv.obstacles.length,
                tol1: best.tol, any1: total1,
                sols2, tol2, blind: blind/N });
@@ -117,8 +158,11 @@ for (const r of report){
   const b2 = r.max >= 2 ? (r.sols2 ? `${String(r.sols2).padStart(3)}✓` : ' -- ') : '  - ';
   console.log(`  ${String(r.id).padStart(2)} ${r.name.padEnd(15)} ${r.type.padEnd(11)} ` +
     `${r.max}  ${r.obst}  ${b1.padStart(7)}      ${b2}   ` +
-    `${(r.blind*100).toFixed(1).padStart(5)}%`);
-  if (!r.tol1 && !r.sols2) problems.push(`L${r.id} ${r.name}: NO SOLUTION FOUND`);
+    `${(r.blind*100).toFixed(1).padStart(5)}%` +
+    (r.window !== null ? `   drop window ${r.window}/${r.period} steps` : ''));
+  /* A spring board is SUPPOSED to have no ramp-only solution; that claim and
+     its spring solution are proved in tests/items.test.mjs, not here. */
+  if (!r.tol1 && !r.sols2 && !r.spring) problems.push(`L${r.id} ${r.name}: NO SOLUTION FOUND`);
   if (r.blind > 0.30)      problems.push(`L${r.id} ${r.name}: trivially winnable (${(r.blind*100).toFixed(0)}% blind)`);
 }
 console.log('\n  1-ramp band = widest winning angle window for a ramp UNDER THE SPAWN.');

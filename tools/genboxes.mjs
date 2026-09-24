@@ -106,6 +106,7 @@ const placed = await page.evaluate(() => {
        much the box is a DETOUR, which is the only thing that makes collecting
        one a decision. Ties break toward the middle of the board, where a spot
        is reachable from more layouts than a corner is. */
+    const choose = () => {
     const cands = [];
     for (const path of paths) {
       if (path.tag === 'bare') continue;
@@ -133,6 +134,19 @@ const placed = await page.evaluate(() => {
     for (const c of cands.slice(0, 40)) {
       const probe = { ...lv, boxes: [{ x: c.x, y: c.y }] };
       if (g.simulate([], 1, g.scratch(probe, 1)).boxes === 0) { best = c; break; }
+    }
+    return best;
+    };
+    let best = choose();
+    /* A FINER FAN, only when the coarse one found nowhere. The closing boards
+       of a world can be packed so tight that the one open air left is the
+       flight line just off the spawn ramp, which rows 70px apart step right
+       over. Only as a fallback, so every level that already had a spot keeps
+       exactly the box it had - a re-run must not move a single one of them. */
+    if (!best) {
+      for (let ry = lv.spawn.y + 70; ry <= lv.spawn.y + 230; ry += 12)
+        for (let th = 18; th <= 162; th += 6) push([ramp(sx, ry, th)], 'r');
+      best = choose();
     }
     out.push(best
       ? { id: lv.id, x: best.x, y: best.y, detour: best.near }

@@ -70,6 +70,10 @@ export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string
    ============================================================ */
 export const GIFT_TIP = 'There is a gift inside this target - land in it and it is yours.';
 
+/** Said when a ramp is let go across a moving target's track. The track is
+    drawn on the board, so this names the rule rather than explaining it. */
+export const LANE_TIP = 'Ramps can\'t cross the moving target\'s track.';
+
 /* ============================================================
    THE FIRST-RUN WALKTHROUGH
 
@@ -167,6 +171,37 @@ export class GameController {
 
   clock = 0;
   private acc = 0;
+  /* ============================================================
+     THE PATROL CLOCK
+
+     A moving target is already moving when its level appears -
+     the player reads where it is and where it will be, and times
+     the drop, the same way they plan around fire. So its clock
+     does not wait for the ball: it starts at 0 on level entry
+     and runs at the simulation's own rate (steps, 60 a second)
+     while the player plans.
+
+     A drop starts at t0 = the clock, floored to a whole step, and
+     the engine takes over from there (BallState.t0): the target
+     never jumps at the moment of release. When the drop ends the
+     clock resumes from wherever the target had got to.
+
+     DETERMINISTIC. Nothing here reads the wall clock into the
+     physics except through t0, and t0 is an integer the solver
+     sweeps over. Entering a level always starts the patrol from
+     the same phase, and Replay re-drops at the SAME t0 as the
+     drop it replays, so a replay of a win is the same win.
+     ============================================================ */
+  private patrolClock = 0;
+  /** The t0 of the last drop - what Replay drops at again. */
+  private lastT0 = 0;
+  /** The patrol clock as it stands, and the phase Replay would use. Read by
+      the test hook; nothing in the game needs them from outside. */
+  get patrolT(): number { return this.patrolClock; }
+  get replayT0(): number { return this.lastT0; }
+  /** Put the patrol clock somewhere exact. Test hook only: a UI test has to
+      be able to drop at a known phase rather than whenever the page got to. */
+  setPatrolClock(t: number): void { if (this.phase === 'plan') this.patrolClock = Math.max(0, t); }
   private last = 0;
   private raf = 0;
   private seenHit = 0;
@@ -254,6 +289,9 @@ export class GameController {
     if (!d) return false;
     const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
     if (len < MIN_RAMP) { this.changed(); return false; }
+    /* Checked BEFORE a spare can be spent: a ramp across a moving target's
+       track is refused, and refusing it must not cost the player anything. */
+    if (!this.levels.rampAllowed(d)) { this.showFlash(LANE_TIP); return false; }
     if (!this.levels.canPlaceRamp && !this.useExtraRamp()) { this.changed(); return false; }
     const ok = this.levels.addRamp(d);
     this.notifyRampsChanged();
@@ -434,6 +472,7 @@ export class GameController {
   stop(): void { cancelAnimationFrame(this.raf); }
 
   private tick(dt: number): void {
+    if (this.phase === 'plan') this.patrolClock += dt / STEP_MS;
     if (this.phase === 'drop' && this.ball) {
       this.acc += dt;
       while (this.acc >= STEP_MS) {
@@ -564,7 +603,9 @@ export class GameController {
     const seed = this.seedOverride !== null
       ? this.seedOverride : (Math.random() * 0x7fffffff) | 0;
     this.releaseBall();
-    this.ball = this.engine.createBall(this.levels.playLevel, seed, this.levels.sessionBroken);
+    const t0 = Math.floor(this.patrolClock);
+    this.lastT0 = t0;
+    this.ball = this.engine.createBall(this.levels.playLevel, seed, this.levels.sessionBroken, t0);
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     /* A box already opened - this session or a previous visit - must not pop
        again, so the run starts with those already accounted for. */
@@ -587,6 +628,8 @@ export class GameController {
      A miss does not stop the game at all - see missed(). */
   private land(result: DropResult): void {
     const b = this.ball!;
+    // the patrol carries on from where the drop left it - see patrolClock
+    this.patrolClock = b.t0 + b.steps;
     // a block broken this run stays broken for the next drop
     this.levels.sessionBroken = b.broken.slice();
     // and a box opened this run stays open, win or lose: it was claimed the
@@ -598,7 +641,7 @@ export class GameController {
     /* Where the target WAS when the ball reached it. On a patrolling board
        the authored centre is only its start, and swallowing the ball toward
        that would drag it sideways to a place the target had already left. */
-    const c = targetAt(this.levels.playLevel, b.steps);
+    const c = targetAt(this.levels.playLevel, b.t0 + b.steps);
     Sound.capture();
     this.setPhase('capture');
     this.capture = { t: 0, bx: b.x, by: b.y, cx: c.x, cy: c.y };
@@ -723,6 +766,8 @@ export class GameController {
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.renderer.invalidateBackdrop();
     this.tries = 0;
+    // every visit starts the patrol from the same phase
+    this.patrolClock = 0; this.lastT0 = 0;
     this.hideFlash();
     this.setPhase('plan');
     if (this.levels.levelIndex > this.rewards.highest) {
@@ -744,8 +789,10 @@ export class GameController {
 
   nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
 
-  /** Replay: drop the same layout again, which costs a ball like any drop. */
+  /** Replay: drop the same layout again, which costs a ball like any drop -
+      and at the same patrol phase, so it is the same drop, not a new roll. */
   retry(): void {
+    this.patrolClock = this.lastT0;
     this.setPhase('plan');
     this.winCard = null; this.pendingCard = null; this.gift = null;
     this.drop();
@@ -892,11 +939,11 @@ export class GameController {
       phase: this.phase,
       clock: this.clock,
       alpha: this.acc / STEP_MS,
-      /* Steps plus the part-step the renderer is interpolating through, so a
-         patrolling target slides instead of stepping. Zero with no ball on
-         the board, which parks it at the start of its run - the position the
-         player plans against. */
-      simT: this.ball ? this.ball.steps + this.acc / STEP_MS : 0,
+      /* The patrol clock: during a drop, its start phase plus the steps run
+         plus the part-step being interpolated, so the target slides instead
+         of stepping; while planning, the planning clock itself, because the
+         target is already moving - see patrolClock. */
+      simT: this.ball ? this.ball.t0 + this.ball.steps + this.acc / STEP_MS : this.patrolClock,
       ball: this.ball,
       broken: this.ball ? this.ball.broken : this.levels.sessionBroken,
       got: this.ball ? this.ball.got : GameController.NO_GOT,

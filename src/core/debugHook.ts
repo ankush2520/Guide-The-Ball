@@ -17,6 +17,7 @@ import { RAMP_LEN } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
 import * as C from '../physics/constants';
 import { targetAt } from '../levels/target';
+import { patrolLane, rampAllowed, layoutAllowed } from '../levels/patrol';
 import { CAPTURE_MS } from '../render/constants';
 import { VIEW_SCALE } from '../render/view';
 import { DEL_OFF, DEL_R, DEL_GRAB } from '../managers/LevelManager';
@@ -36,6 +37,24 @@ import { Sound } from '../audio/Sound';
    sweeps them with the real simulator, and only levels that pass are ever
    written into the shipped set. */
 const scratchIx: number[] = [];
+
+/* ============================================================
+   A LAYOUT THE GAME WOULD REFUSE
+
+   A ramp across a moving target's lane cannot be placed (see
+   levels/patrol.ts), so no headless probe may count it either:
+   every solver in the repo - the generator's sweep, the box
+   placer, the suite - reaches the simulator through here, and a
+   level proved with a ramp the player is not allowed to draw is
+   not proved. Reported as its own result rather than as a miss,
+   so a tool that cares can tell "refused" from "lost".
+   ============================================================ */
+const ILLEGAL = Object.freeze({
+  result: 'illegal' as const, steps: 0, hits: 0, segHits: 0,
+  spdMin: 0, spdMax: 0, vyMax: 0, restMin: 0, secs: 0,
+  stars: 0, boosts: 0, springs: 0, boxes: 0,
+  broken: [] as boolean[], bounces: [], x: 0, y: 0,
+});
 
 const physics = {
   LEVELS,
@@ -116,9 +135,19 @@ const physics = {
   /* The legacy argument order, kept exactly: (ramps, seed, levelIdx, broken).
      levelIdx is optional, as it was - the tuning rig calls simulate(ramps,
      seed) and expects the current level, which is level 1 headlessly. */
-  simulate(ramps: Segment[], seed: number, levelIdx = 0, broken?: boolean[] | null) {
-    return createEngine().simulate(LEVELS[levelIdx], ramps, seed, broken);
+  /* `t0` is the patrol clock at the moment of the drop (see BallState.t0),
+     appended so every existing call keeps its meaning: omitted, a drop starts
+     at the patrol's beginning, exactly as every level was proved. */
+  simulate(ramps: Segment[], seed: number, levelIdx = 0, broken?: boolean[] | null, t0 = 0) {
+    if (!layoutAllowed(LEVELS[levelIdx], ramps)) return ILLEGAL;
+    return createEngine().simulate(LEVELS[levelIdx], ramps, seed, broken, t0);
   },
+
+  /* The moving target's rules, so a tool can ask the same question the game
+     asks before it spends a candidate - see levels/patrol.ts. */
+  patrolLane,
+  rampAllowed,
+  layoutAllowed,
 
   /** Matter with every guard removed - see MATTER_PURE. */
   simulatePureMatter(ramps: Segment[], seed: number, levelIdx = 0) {
@@ -139,10 +168,11 @@ const physics = {
   /* Per-step samples of a whole drop. The isolation tests assert on the
      velocity curve itself rather than inferring a mechanic from where the
      ball happened to land. */
-  trace(ramps: Segment[], seed: number, levelIdx: number, broken?: boolean[] | null) {
+  trace(ramps: Segment[], seed: number, levelIdx: number, broken?: boolean[] | null, t0 = 0) {
     const lv: Level = LEVELS[levelIdx];
+    if (!layoutAllowed(lv, ramps)) return { result: ILLEGAL.result, steps: 0, samples: [] };
     const engine = createEngine();
-    const b = engine.createBall(lv, seed >>> 0, broken);
+    const b = engine.createBall(lv, seed >>> 0, broken, t0);
     const out = [];
     while (!b.result && out.length < 900) {
       engine.step(b, lv, ramps);
@@ -172,10 +202,14 @@ export function installGameHook(s: GameServices): void {
        same engine, but defaulting to the level on screen. A solution found
        here has to be one the live drop reproduces, or every headless probe in
        the suite is answering a different question from the one on screen. */
-    simulate(ramps: Segment[], seed: number, levelIdx?: number, broken?: boolean[] | null) {
-      return createEngine()
-        .simulate(LEVELS[levelIdx ?? levels.levelIndex], ramps, seed, broken);
+    simulate(ramps: Segment[], seed: number, levelIdx?: number, broken?: boolean[] | null, t0 = 0) {
+      const lv = LEVELS[levelIdx ?? levels.levelIndex];
+      if (!layoutAllowed(lv, ramps)) return ILLEGAL;
+      return createEngine().simulate(lv, ramps, seed, broken, t0);
     },
+
+    /** Pin the moving target's clock, so a test drops at a known phase. */
+    setPatrolClock(t: number) { c.setPatrolClock(t); },
 
     state() {
       const lv = levels.level;
@@ -192,6 +226,7 @@ export function installGameHook(s: GameServices): void {
            position that comes out of it - so a test can assert on the drawn
            patrol rather than on a number it recomputed for itself. */
         simT: c.renderState().simT,
+        patrolT: c.patrolT, replayT0: c.replayT0,
         targetNow: { ...targetAt(lv, c.renderState().simT) },
         capturing: !!c.capture, selected: c.selected,
         dragging: c.dragging ? c.dragging.mode : null,
@@ -212,7 +247,7 @@ export function installGameHook(s: GameServices): void {
         tips: { ...rewards.tipsSeen },
         flash: c.flash, flashOn: !!c.flash,
         result: b ? b.result : c.lastResult,
-        ball: b ? { x: b.x, y: b.y, px: b.px, py: b.py, vx: b.vx, vy: b.vy,
+        ball: b ? { x: b.x, y: b.y, px: b.px, py: b.py, vx: b.vx, vy: b.vy, t0: b.t0,
                     hits: b.hit.n, speed: b.speed } : null,
         mech: b ? { boosts: b.boosts, springs: b.springs, stars: b.stars,
                     broken: b.broken.slice() }
@@ -410,6 +445,8 @@ export function installGameHook(s: GameServices): void {
     canDraw: () => c.canDraw,
     RAMP_LEN,
     drop: () => c.drop(),
+    /** The win card's Replay: the same layout, dropped at the same phase. */
+    retry: () => c.retry(),
     clock: () => c.clock,
 
     reset() {

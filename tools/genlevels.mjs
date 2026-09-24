@@ -18,6 +18,13 @@ import fs from 'node:fs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORLD = Number(process.argv[2]);
 const WRITE = process.argv.includes('--write');
+const VERBOSE = process.argv.includes('--verbose');
+const DUMP = (process.argv.find(a => a.startsWith('--dump=')) || '').slice(7);
+/* --only=35-39 generates just those ids, for iterating on one stretch of a
+   country. Dry runs only: a write always regenerates the whole country, so
+   the spread check between targets sees every one of them. */
+const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7).split('-').map(Number);
+if (ONLY[0] && WRITE){ console.error('--only is for dry runs; --write regenerates the whole country'); process.exit(1); }
 const W = 480, H = 800;
 
 /* deterministic RNG, so a regeneration reproduces the same set exactly */
@@ -30,12 +37,17 @@ function mulberry32(a){
   };
 }
 const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+/* The narrowest drop window, in steps, a patrolling board may be proved with:
+   12 steps is 0.2s - a moment a player can see coming and tap inside, where
+   one or two steps would be a frame-perfect reflex test. See verify(). */
+const MIN_DROP_WINDOW = 12;
 const rng  = (r, lo, hi) => lo + r() * (hi - lo);
 const rint = (r, lo, hi) => Math.round(rng(r, lo, hi));
 
 /* ---------------------------------------------------------------- */
 /* Country specs. `make` builds a candidate; `gate` is what it must clear.
-   Keyed by country id - country 6 is Emberkeep, levels 21-40. */
+   Keyed by country id - country 1 is Verdholm (1-20), country 6 is
+   Emberkeep (21-40). */
 /* ---------------------------------------------------------------- */
 
 /** Distance from a point to every existing circle, for overlap rejection. */
@@ -44,6 +56,66 @@ function clear(pt, rad, list, pad = 12){
 }
 
 const SPECS = {
+  1: {
+    name: 'Verdholm',
+    /* ============================================================
+       VERDHOLM - the first world, levels 1-20, ramps only
+
+       It was hand-designed and frozen; it is generated now, by
+       the same template-and-proof pipeline as every other world,
+       because its density had to climb far past what twenty hand
+       layouts carried (four obstacles at most).
+
+       RAMPS ONLY, in spirit and in fact: the red obstacle is the
+       only furniture, and it is the density driver. VERD_DENSITY
+       is the curve - level N carries about N obstacles:
+
+         1-3     1 -> 3, one ramp, a lesson each
+         4-10    4 -> 9, two ramps, the field fills
+         11-14   10 -> 13, the first walls round the target
+         15-20   14 -> 19, the final exam
+
+       SPACIOUS, NOT CLUSTERED. Obstacles are laid in horizontal
+       bands down the whole play area, each band filled across the
+       full width by best-candidate sampling, with FREE_GAP of air
+       between any two - and a board that still leaves a third of
+       itself empty is refused (covers). See the placement note
+       above bandSpread().
+
+       THE FINAL EXAM, 15-20: the same shape as every world's
+       closing stretch (see Emberkeep's note, which measures why
+       "top-middle" means the upper third). The target sits in the
+       upper middle inside a cage of obstacles open only on the
+       far side; the route goes out past it and back in; the gate
+       proves every winning route crosses the board. The rest of
+       the obstacles are spread evenly over what is left, not piled
+       in one place.
+
+       MOVING TARGETS on 17, 19 and 20 - where they first lived.
+       Each has to matter (frozen, the route loses) and has to be
+       fair (it wins across a drop window of MIN_DROP_WINDOW steps,
+       because the target is already moving while you plan).
+       ============================================================ */
+    gate: (i, n) => {
+      const t = n > 1 ? i / (n - 1) : 0;
+      const exam = verdPhase(i) === 'final';
+      return { minTol: 3,
+               /* the first three are lessons: a wide band and a board a
+                  first-time player can win without being told how */
+               maxTol: i < 3 ? 40 : 30 - 22 * t,
+               maxBlind: i < 3 ? 0.35 : 0.06,
+               maxSols2: Math.round(30 - 26 * t),
+               requireTwoRamp: exam,
+               requireCross: exam,
+               moveMustMatter: true,
+               minWindow: MIN_DROP_WINDOW,
+               maxObHits: exam ? 1.6 : 1.4 };
+    },
+    make(r, i, n, taken){
+      return verdPhase(i) === 'final' ? verdExam(r, i, taken) : verdField(r, i, taken);
+    }
+  },
+
   6: {
     name: 'Emberkeep',
     /* ============================================================
@@ -55,39 +127,63 @@ const SPECS = {
        you are ALLOWED to spend a drop on, a fire is one you are
        not, and learning which is which is the country.
 
-       THE ARC, in three phases, keyed off t = i/(n-1) so the
-       same shape works at any world length:
+       DENSITY IS SCHEDULED, NOT RANDOM. EMBER_DENSITY below is
+       the total hazard count per city - fires + obstacles +
+       breakables, and a moving target counts as one - and it is
+       the curve the world is built on:
 
-         t < 0.35   (21-27)  one fire, in the fall line. Nothing
-                             else to read. This is the "reset to
-                             easy" a new world opens on.
-         t < 0.70   (28-34)  a second fire appears, breakables
-                             thicken, the first plain obstacles
-                             arrive, and the first walls with
-                             them - the same place Verdholm put
-                             its own (level 11).
-         t >= 0.70  (35-40)  the closing stretch. Two or three
-                             fires, a packed middle, walled
-                             targets. Meaningfully harder than
-                             the middle phase, not a shade of it.
+         21        1   one fire in the fall line, nothing else
+         22-34     2 -> 10, a steady climb, a step every city or two
+         35-39     12 -> 20, the final exam
+         40        the hand-tuned spring boss, kept as written
 
-       THE FIELD SITS BETWEEN SPAWN AND TARGET, and the target
-       stays LOW and across the board. That is the one arrangement
-       that actually forces a full-board route in a game where the
-       ball falls: a target near the top is reached before the
-       ball ever descends to the field, which leaves the field
-       decorative - measured, not assumed, and the reason this
-       template does not chase a high target. The one board that
-       does put the target up at spawn height is level 40, and it
-       is hand-written (needsSpring) precisely because that shape
-       is unsolvable by ramps and is what the spring is for.
+       THREE PHASES, keyed off the city index so the same shape
+       works at any world length:
+
+         21-27  early   the fire in the fall line; from 25 a second
+                        fire, and breakables.
+                        Target LOW and across the board.
+         28-34  middle  a third fire, plain obstacles and the first
+                        walls. Still low and across; the field
+                        spreads over the whole board (bandSpread).
+         35-39  final   THE FINAL EXAM, a different shape - below.
+
+       THE FINAL EXAM. The target moves UP to the top-middle of
+       the board and the hazards fill the board, so a drop has to
+       travel the whole width: out to the far side and back in.
+
+       "Top-middle" is the UPPER THIRD (y ~230-310), not the top
+       edge, and that is physics, not caution: the ball tops out
+       at terminal speed and keeps 90% of it on a bounce, so it
+       climbs back less than ~90px. A target at the very top is
+       reached before the ball ever descends into the field - the
+       field is then scenery - or needs the spring (level 40 is
+       exactly that board). Measured: a target in the upper third
+       still has hundreds of two-ramp routes that go out to the
+       far side and back, which is the route this layout is for.
+
+       What makes it an exam and not "more of the same":
+         - the fall-line fire burns the do-nothing drop;
+         - a guard of hazards on the NEAR side of the target, and
+           a lid over it, refuse the short diagonal from spawn;
+         - a POCKET target is open only on the FAR side;
+         - the far side and the flight line over the top are kept
+           clear, so the long way round exists;
+         - everything else is spread over the rest of the board,
+           band by band across the full width, so a drop that
+           comes in short or low meets it wherever it falls;
+         - the gate proves the WINNING ROUTE CROSSES the board
+           (requireCross): a route that reaches the target without
+           going past its far side rejects the board.
+
+       MOVING TARGETS are a tool here, not a rule: two cities of
+       the final five patrol (EMBER_MOVERS - 36, and 39 to close). A patrol has to matter - the
+       winning route must lose against a frozen copy of the target
+       - or the city is rejected as decoration.
        ============================================================ */
-    /* Bands stay wide compared to a precision country: the difficulty here is
-       a routing decision, not a precision one. The ceiling tightens smoothly
-       across the whole world rather than across ten, so 21 is a lesson and
-       39 is a test. */
     gate: (i, n) => {
       const t = n > 1 ? i / (n - 1) : 0;
+      const exam = emberPhase(i) === 'final';
       return { minTol: 3,
                /* Down to a band barely wider than the floor by the close, so
                   a board that one ramp CAN solve has to be an exact one. */
@@ -97,120 +193,19 @@ const SPECS = {
                maxSols2: Math.round(28 - 25 * t),
                /* the closing stretch: two ramps minimum, by construction */
                requireTwoRamp: t >= 0.70,
-               requireFire: true, maxObHits: 1.4 };
+               /* ...and the route has to go all the way round */
+               requireCross: exam,
+               /* a patrol that the winning route could ignore is decoration */
+               moveMustMatter: true,
+               /* ...and one that needs a frame-perfect drop is a reflex test */
+               minWindow: MIN_DROP_WINDOW,
+               requireFire: true,
+               /* a packed board brushes a hazard now and then; the cap is
+                  still what keeps a winning route from being a pinball run */
+               maxObHits: exam ? 1.6 : 1.4 };
     },
     make(r, i, n, taken){
-      const t = n > 1 ? i / (n - 1) : 0;
-      const last = i === n - 1;
-      const mid  = t >= 0.35 && t < 0.70;
-      const late = t >= 0.70;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 80, 170) : rint(r, 310, 400), y: 40 };
-
-      /* THE FIRE SITS IN THE FALL LINE. That is the whole board: do nothing
-         and you burn, so the first ramp is not an optimisation, it is the
-         only way the drop survives. Placed high enough that the player has
-         room to turn the ball before reaching it. */
-      const fires = [{ x: clampX(spawn.x + rint(r, -10, 10), 40),
-                       y: rint(r, 215, 300), r: rint(r, 24, 30) }];
-      /* A SECOND FIRE from the middle phase on, guarding the far approach -
-         the turn that saved the drop must not also be the whole solution. */
-      if (mid || late) {
-        const f2 = { x: clampX(spawn.x + (leftSpawn ? rint(r, 150, 230) : -rint(r, 150, 230)), 60),
-                     y: rint(r, 370, 470), r: rint(r, 22, 28) };
-        if (clear(f2, f2.r, fires, 30)) fires.push(f2);
-      }
-      /* ...and a third only in the closing stretch, low and on the far side,
-         so the last approach has to be threaded rather than fallen into. */
-      if (late) {
-        const f3 = { x: clampX(spawn.x + (leftSpawn ? rint(r, 250, 330) : -rint(r, 250, 330)), 60),
-                     y: rint(r, 480, 560), r: rint(r, 20, 26) };
-        if (clear(f3, f3.r, fires, 28)) fires.push(f3);
-      }
-
-      /* Target across and LOW, so the route has to travel rather than just
-         sidestep the flame and drop. A wide band and many attempts: most of
-         the low corners already belong to some other country's target, and a
-         narrow window here does not make a harder level, it makes a
-         generator that runs out of dice. */
-      let target = null;
-      for (let a = 0; a < 260 && !target; a++){
-        const tx = leftSpawn ? rint(r, 270, 424) : rint(r, 56, 210);
-        const ty = rint(r, 545, 745);
-        if (Math.abs(tx - spawn.x) < 150) continue;
-        if (taken.some(q => Math.hypot(q.x - tx, q.y - ty) < 44)) continue;
-        if (!clear({ x: tx, y: ty }, 40, fires, 26)) continue;
-        target = { x: tx, y: ty, r: late ? rint(r, 26, 32) : rint(r, 30, 38) };
-      }
-      if (!target) return null;
-
-      /* Breakables sit between the fire and the target: something the route
-         is allowed to go THROUGH, next to something it is not. */
-      const breakables = [];
-      const wantB = late ? rint(r, 2, 3) : mid ? 2 : (t < 0.18 ? 1 : 2);
-      let guard = 0;
-      while (breakables.length < wantB && guard++ < 220){
-        const o = { x: rint(r, 70, 410), y: rint(r, 330, 600), r: rint(r, 26, 34) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (!clear(o, o.r, fires, 26)) continue;
-        if (!clear(o, o.r, breakables, 16)) continue;
-        breakables.push(o);
-      }
-
-      /* PLAIN OBSTACLES are the density-driver on top of the fire, and they
-         arrive at the same point in the arc Verdholm's did. */
-      const obstacles = [];
-      const wantO = late ? 2 : mid ? 1 : 0;
-      let g2 = 0;
-      while (obstacles.length < wantO && g2++ < 200){
-        const o = { x: rint(r, 70, 410), y: rint(r, 340, 580), r: rint(r, 26, 32) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (!clear(o, o.r, fires, 24) || !clear(o, o.r, breakables, 18)) continue;
-        /* ...and against EACH OTHER, which nothing checked. Two obstacles
-           were free to land on the same spot - level 35 shipped a pair
-           seven pixels apart - so a board asking for two got one fat blob
-           and measured as the softest board in its own closing stretch. */
-        if (!clear(o, o.r, obstacles, 16)) continue;
-        obstacles.push(o);
-      }
-
-      /* WALLS enter in the back half, exactly as Verdholm's do, and the
-         closing stretch mixes them. OPEN early: the fire is the obstruction
-         this country is about, and a wall too soon adds a second unrelated
-         one before the first has been learned. */
-      /* NOT ALL WALLS MAKE A BOARD HARDER, which is the thing that caught
-         this world out. A SIDE_WALL is a BACKSTOP: it catches a ball that
-         came in long and feeds it back toward the target, so a stretch built
-         out of them measured EASIER for a careless two-ramp layout than the
-         middle of the world it was supposed to close. A NARROW_GAP is the
-         opposite - it has to be threaded - and ENCLOSED and POCKET sit
-         between. So the closing phase is weighted toward the ones that ask
-         something, and the backstop is left to the middle where a little
-         help is the point. */
-      let targetType = 'OPEN';
-      /* ENCLOSED is off the closing pool for the same reason SIDE_WALL is:
-         measured against random two-ramp play it came out the most forgiving
-         wall of the four - it rings the target, so a ball that arrives near
-         it gets kept rather than turned away. NARROW_GAP has to be threaded
-         and POCKET has to be entered from one side; those two are what the
-         end of a world is built from. */
-      if (late)      targetType = pick(r, ['NARROW_GAP', 'NARROW_GAP', 'POCKET']);
-      else if (mid)  targetType = pick(r, ['OPEN', 'OPEN', 'SIDE_WALL', 'POCKET']);
-
-      const lv = {
-        /* Indexed, not rolled: a twenty-city world rolling a nine-name pool
-           produced "Hot Gate" three times. The pool is longer than any world
-           is, so i is already a unique pick. */
-        name: FIRE_NAMES[i % FIRE_NAMES.length],
-        maxBlocks: late ? 3 : 2,
-        targetType,
-        wallSide: leftSpawn ? 'right' : 'left',
-        spawn, obstacles, breakables, fires, target
-      };
-      /* Tight by the close - Verdholm's hardest gap is 38, and this world
-         has no business being gentler than the one before it. */
-      if (targetType === 'NARROW_GAP') lv.gapW = late ? rint(r, 38, 46) : rint(r, 44, 54);
-      return lv;
+      return emberPhase(i) === 'final' ? emberExam(r, i, taken) : emberField(r, i, taken);
     }
   },
 
@@ -652,6 +647,394 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
   return lv;
 }
 
+/* ================================================================ */
+/* THE FIRST TWO WORLDS' BUILDERS - Verdholm (1-20), Emberkeep (21-40) */
+/* ================================================================ */
+
+/* ---- placement: spread over the WHOLE board, never clustered ----
+
+   Two rules every object on these boards is placed under.
+
+   SPACING. A free-standing object keeps FREE_GAP of clear air to every other
+   one, rim to rim: wider than the ball, so a dense board is still a field to
+   thread, and wide enough that nothing is ever drawn touching. The pieces of
+   an exam CAGE are the one exception - see CAGE_GAP - and even they never
+   touch.
+
+   COVERAGE. Objects are laid in horizontal BANDS down the play area, about
+   one band per two or three objects, and each band is filled across the
+   FULL WIDTH of the board by best-candidate sampling: of a few dozen random
+   spots, the one farthest from everything already placed wins. Bands stop
+   a field piling into one height; best-candidate stops it piling into one
+   side. covers() then refuses any board that still leaves a whole third of
+   the board - a column or a row - empty. */
+const FREE_GAP = 30;
+/* A cage (guard, lid, floor) has to be SEALED - no gap the ball fits
+   through - and still read as separate pieces: 10-12px of air between
+   them, against a ball 18px across. */
+const CAGE_GAP = 11;
+const CAGE_R = 19;
+const CAGE_STEP = 2 * CAGE_R + CAGE_GAP;
+
+/** Whether a circle clears every keep-out rect by `pad`. */
+function clearOfRects(o, rects, pad = 8){
+  return rects.every(q => {
+    const nx = Math.max(q.x, Math.min(o.x, q.x + q.w));
+    const ny = Math.max(q.y, Math.min(o.y, q.y + q.h));
+    return Math.hypot(o.x - nx, o.y - ny) > o.r + pad;
+  });
+}
+
+/** Best-candidate placement (Mitchell's algorithm) inside one region: each
+    object is the candidate, of `tries`, farthest from everything already on
+    the board. The side walls count as neighbours too, so a field does not
+    hug the edge of the board. */
+function spreadOut(r, want, region, radius, placed, keep, rects, gap, tries = 40){
+  const out = [];
+  for (let k = 0; k < want; k++){
+    let best = null, bestScore = -Infinity;
+    for (let c = 0; c < tries; c++){
+      const rad = rint(r, radius[0], radius[1]);
+      const o = { x: rint(r, Math.max(region.x0, rad + 8), Math.min(region.x1, W - rad - 8)),
+                  y: rint(r, region.y0, region.y1), r: rad };
+      if (!clear(o, o.r, keep, 14)) continue;
+      if (!clear(o, o.r, placed, gap) || !clear(o, o.r, out, gap)) continue;
+      if (!clearOfRects(o, rects)) continue;
+      let score = Math.min(o.x - o.r, W - o.x - o.r);
+      for (const q of placed) score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - q.r - o.r);
+      for (const q of out)    score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - q.r - o.r);
+      for (const q of keep)   score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - q.r - o.r);
+      if (score > bestScore){ bestScore = score; best = o; }
+    }
+    if (!best) break;
+    out.push(best);
+  }
+  return out;
+}
+
+/** `want` objects laid in horizontal bands down `region`, each band filled
+    across the full width. Whatever a band could not take (a keep-out ate it)
+    is topped up anywhere in the region, still by best-candidate. */
+function bandSpread(r, want, region, radius, placed, keep, rects, gap = FREE_GAP){
+  if (want <= 0) return [];
+  const nb = Math.max(1, Math.round(want / 2.5));
+  const h = (region.y1 - region.y0) / nb;
+  const counts = new Array(nb).fill(Math.floor(want / nb));
+  const order = [...counts.keys()].sort(() => r() - 0.5);
+  for (let k = 0; k < want - Math.floor(want / nb) * nb; k++) counts[order[k]]++;
+  const out = [];
+  for (let b = 0; b < nb; b++){
+    const band = { x0: region.x0, x1: region.x1,
+                   y0: Math.round(region.y0 + b * h), y1: Math.round(region.y0 + (b + 1) * h) };
+    out.push(...spreadOut(r, counts[b], band, radius, [...placed, ...out], keep, rects, gap));
+  }
+  if (out.length < want)
+    out.push(...spreadOut(r, want - out.length, region, radius, [...placed, ...out],
+                          keep, rects, gap, 80));
+  return out;
+}
+
+/** No third of the board left empty. On a board of six or more objects every
+    column (left / centre / right) and every row (top / middle / bottom) of
+    the play area must hold at least one; on twelve or more, at least seven of
+    the nine cells must. Rows are measured from under the spawn to the floor. */
+function covers(objs){
+  if (objs.length < 6) return true;
+  const col = o => Math.min(2, Math.floor(o.x / (W / 3)));
+  const row = o => Math.min(2, Math.max(0, Math.floor((o.y - 90) / ((H - 50 - 90) / 3))));
+  const cols = new Set(objs.map(col)), rows = new Set(objs.map(row));
+  if (cols.size < 3 || rows.size < 3) return false;
+  if (objs.length >= 12 && new Set(objs.map(o => col(o) + 3 * row(o))).size < 7) return false;
+  return true;
+}
+
+/* THE WHOLE PLAY AREA the free objects are spread over: under the spawn's
+   first-ramp room, down to just above the floor, wall to wall. */
+const FIELD = { x0: 30, x1: 450, y0: 110, y1: 745 };
+
+/* ---------------------------------------------------------------- */
+/* VERDHOLM - see the country's note in SPECS above                  */
+/* ---------------------------------------------------------------- */
+
+/* Obstacles per level, 1..20. Level N carries about N of them. */
+const VERD_DENSITY = [1, 2, 3, 4, 4, 5, 6, 7, 8, 9,
+                      10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+/* The names the hand-made twenty shipped with, kept: a player who knows
+   "Master's Drop" as the finale should still find it there. */
+const VERD_NAMES = ['First Drop', 'Long Reach', 'Watch Out', 'Two Steps', 'Around It',
+                    'The Gap', 'One Shot', 'Staircase', 'Tight Corridor', 'Cross Court',
+                    'One Way In', 'The Pocket', 'Threading It', 'Steady Hands', 'The Basket',
+                    'Breather', 'Full House', 'No Room', 'The Gauntlet', "Master's Drop"];
+/* Levels 17, 19 and 20 patrol their target - their historical spots. */
+const VERD_MOVERS = new Set([16, 18, 19]);
+/* The final exam picks its spawn side per level rather than alternating, so
+   two patrols that start from the same side never want the same few pixels
+   (a patrol starts at its near end). true = spawn on the left. */
+const VERD_EXAM_LEFT = { 14: true, 15: false, 16: true, 17: false, 18: false, 19: true };
+
+function verdPhase(i){ return i < 10 ? 'early' : i < 14 ? 'middle' : 'final'; }
+
+/* ---- 1-14: a field spread over the whole board, target LOW and across ---- */
+function verdField(r, i, taken){
+  const N = VERD_DENSITY[i];
+  const middle = verdPhase(i) === 'middle';
+  const leftSpawn = i % 2 === 0;
+  const spawn = { x: leftSpawn ? rint(r, 70, 170) : rint(r, 310, 410), y: 40 };
+  const target = lowTarget(r, spawn, leftSpawn, taken, Math.round(46 - i * 1.1));
+  if (!target) return null;
+  /* the room under the spawn is where the first ramp goes */
+  const keep = [{ x: target.x, y: target.y, r: target.r + 30 }];
+  const rects = [{ x: spawn.x - 55, y: 40, w: 110, h: 190 }];
+  const rMax = Math.max(19, Math.min(34, 37 - N)), rMin = rMax - 6;
+  const obstacles = bandSpread(r, N, FIELD, [rMin, rMax], [], keep, rects);
+  if (obstacles.length < N || !covers(obstacles)) return null;
+  const WALLS = ['SIDE_WALL', 'POCKET', 'NARROW_GAP', 'POCKET'];
+  const targetType = middle ? WALLS[i - 10] : 'OPEN';
+  const lv = { name: VERD_NAMES[i], maxBlocks: i < 3 ? 1 : 2, targetType,
+               wallSide: leftSpawn ? 'right' : 'left', spawn, obstacles, target };
+  if (targetType === 'NARROW_GAP') lv.gapW = rint(r, 46, 54);
+  return lv;
+}
+
+function verdExam(r, i, taken){
+  /* Verdholm's density is an OBSTACLE count, so a patrol is on top of it -
+     examBoard counts a moving target as one hazard, the way Emberkeep does */
+  const mover = VERD_MOVERS.has(i);
+  return examBoard(r, taken, { N: VERD_DENSITY[i] + (mover ? 1 : 0), mover,
+                               leftSpawn: VERD_EXAM_LEFT[i], name: VERD_NAMES[i],
+                               fire: false });
+}
+
+/* ---------------------------------------------------------------- */
+/* EMBERKEEP - see the country's note in SPECS above                  */
+/* ---------------------------------------------------------------- */
+
+/* Total hazards per city, 21..39 (40 is the hand-tuned spring boss and is
+   never generated). A moving target counts as one. */
+const EMBER_DENSITY = [1, 2, 3, 3, 4, 4, 5,          // 21-27 early
+                       6, 6, 7, 8, 8, 9, 10,         // 28-34 middle
+                       12, 14, 16, 18, 20];          // 35-39 final exam
+/* Which final-exam cities patrol their target, by city index: 36, and 39 to
+   close the world. One right-spawn board and one left-spawn board on
+   purpose - a patrol STARTS at its near end, and two from the same side
+   would both want the same few pixels, which the spread rule between a
+   country's targets will not allow. */
+const EMBER_MOVERS = new Set([15, 18]);
+
+function emberPhase(i){ return i < 7 ? 'early' : i < 14 ? 'middle' : 'final'; }
+function emberCount(i){ return EMBER_DENSITY[Math.min(i, EMBER_DENSITY.length - 1)]; }
+
+/** Split a hazard total into fires / breakables / obstacles for the early
+    and middle phases. The final exam builds its cage first and fills what is
+    left - see examBoard. */
+function emberMix(N, phase){
+  if (phase === 'early'){
+    const F = N >= 4 ? 2 : 1;
+    const B = Math.min(2, N - F);
+    return { F, B, O: N - F - B };
+  }
+  const F = N >= 8 ? 3 : 2;
+  const B = N >= 9 ? 3 : 2;
+  return { F, B, O: N - F - B };
+}
+
+/* ---- 21-34: fire in the fall line, the rest spread over the board ---- */
+function emberField(r, i, taken){
+  const phase = emberPhase(i);
+  const mid = phase === 'middle';
+  const N = emberCount(i);
+  const { F, B, O } = emberMix(N, phase);
+  const leftSpawn = i % 2 === 0;
+  const spawn = { x: leftSpawn ? rint(r, 80, 170) : rint(r, 310, 400), y: 40 };
+
+  /* THE FIRE SITS IN THE FALL LINE. That is the whole board at 21: do
+     nothing and you burn, so the first ramp is not an optimisation, it is
+     the only way the drop survives. Placed high enough that the player has
+     room to turn the ball before reaching it. */
+  const fall = { x: clampX(spawn.x + rint(r, -10, 10), 40), y: rint(r, 215, 300), r: rint(r, 24, 30) };
+  const target = lowTarget(r, spawn, leftSpawn, taken, mid ? 34 : 38, [fall]);
+  if (!target) return null;
+
+  /* Everything else - the other fires, the breakables, the obstacles - is
+     spread over the whole board in bands, then dealt out as kinds in a
+     shuffled order so no kind collects in one place. Radii shrink as the
+     count climbs, so a busier board is busier, not solid. */
+  const keep = [{ x: target.x, y: target.y, r: target.r + 30 }];
+  const rects = [{ x: spawn.x - 55, y: 40, w: 110, h: fall.y - fall.r - 50 }];
+  const shrink = N >= 8 ? 0.8 : N >= 6 ? 0.9 : 1;
+  const rest = bandSpread(r, N - 1, FIELD, [Math.round(24 * shrink), Math.round(31 * shrink)],
+                          [fall], keep, rects);
+  if (rest.length < N - 1 || !covers([fall, ...rest])) return null;
+  const kinds = [...Array(F - 1).fill('f'), ...Array(B).fill('b'), ...Array(O).fill('o')]
+    .sort(() => r() - 0.5);
+  const fires = [fall], breakables = [], obstacles = [];
+  rest.forEach((o, k) => (kinds[k] === 'f' ? fires : kinds[k] === 'b' ? breakables : obstacles).push(o));
+
+  /* WALLS enter in the middle phase, exactly where Verdholm put its own.
+     SIDE_WALL is a backstop - it catches a long ball and feeds it back - so
+     it belongs to the middle, where a little help is the point. */
+  const targetType = mid ? pick(r, ['OPEN', 'OPEN', 'SIDE_WALL', 'POCKET']) : 'OPEN';
+  return {
+    /* Indexed, not rolled: a twenty-city world rolling a nine-name pool
+       produced "Hot Gate" three times. */
+    name: FIRE_NAMES[i % FIRE_NAMES.length],
+    maxBlocks: 2,
+    targetType,
+    wallSide: leftSpawn ? 'right' : 'left',
+    spawn, obstacles, breakables, fires, target
+  };
+}
+
+function emberExam(r, i, taken){
+  return examBoard(r, taken, { N: emberCount(i), mover: EMBER_MOVERS.has(i),
+                               leftSpawn: i % 2 === 0, name: FIRE_NAMES[i % FIRE_NAMES.length],
+                               fire: true });
+}
+
+/* ---------------------------------------------------------------- */
+/* SHARED                                                             */
+/* ---------------------------------------------------------------- */
+
+/** A target LOW and across the board from the spawn, clear of `avoid`. */
+function lowTarget(r, spawn, leftSpawn, taken, big, avoid = []){
+  for (let a = 0; a < 260; a++){
+    const tx = leftSpawn ? rint(r, 270, 424) : rint(r, 56, 210);
+    const ty = rint(r, 545, 740);
+    if (Math.abs(tx - spawn.x) < 150) continue;
+    if (taken.some(q => Math.hypot(q.x - tx, q.y - ty) < 44)) continue;
+    if (!clear({ x: tx, y: ty }, 40, avoid, 26)) continue;
+    return { x: tx, y: ty, r: rint(r, big - 4, big) };
+  }
+  return null;
+}
+
+/* ============================================================
+   THE FINAL EXAM - one builder, both worlds
+
+   The target in the UPPER MIDDLE of the board, the route out
+   past it to the far side and back in, and the gate proving
+   every winning route crosses the board (requireCross). See
+   Emberkeep's note in SPECS for why "top-middle" is the upper
+   third and not the top edge - the ball cannot climb back.
+
+   THE CAGE. A hazard in the fall line (the do-nothing drop meets
+   it); a GUARD column on the spawn side of the target; a LID
+   over it, sealed to the guard; and for a static target a FLOOR.
+   Open only toward the far side. Its pieces are CAGE_GAP apart:
+   separate to the eye, too narrow for the ball.
+
+   A PATROL gets no floor, and that is what makes it matter: a
+   ball that arrives when the target is elsewhere drops through.
+   Its lane sits a little lower and is short, because the ball
+   has to be thrown over the whole lid and sideways speed is
+   capped - measured, a long high lid is simply out of range.
+
+   EVERYTHING ELSE is spread over the rest of the board, band by
+   band across the full width - under the cage, beside it, down
+   to the floor, on both sides - never piled in one place. The
+   only open strip is the one the throw flies through, over the
+   top, and the far side where the second ramp goes: that is the
+   route, and a hazard there would simply close it.
+
+   `fire` picks the world's vocabulary: Emberkeep's cage burns
+   (fire in the fall line and the lid) and its free hazards mix
+   fire, breakables and obstacles; Verdholm's is all obstacles.
+   ============================================================ */
+function examBoard(r, taken, { N, mover, leftSpawn, name, fire }){
+  const toward = leftSpawn ? 1 : -1;
+  const spawn = { x: leftSpawn ? rint(r, 40, 80) : rint(r, 400, 440), y: 40 };
+
+  let target = null, targetMove = null;
+  for (let a = 0; a < 200 && !target; a++){
+    const tx = rint(r, 205, 275), ty = mover ? rint(r, 330, 400) : rint(r, 230, 310);
+    if (taken.some(q => Math.hypot(q.x - tx, q.y - ty) < 44)) continue;
+    const tr = rint(r, 24, 28);
+    if (mover){
+      const span = rint(r, 40, 60);
+      const lo = Math.max(200, tx - Math.round(span / 2)), hi = lo + span;
+      if (hi > 280) continue;
+      /* start at the NEAR end, so the board the player first sees shows the
+         target on the side the drop is guarded from */
+      const [x0, x1] = leftSpawn ? [lo, hi] : [hi, lo];
+      if (taken.some(q => Math.hypot(q.x - x0, q.y - ty) < 44)) continue;
+      target = { x: x0, y: ty, r: tr };
+      targetMove = { x0, x1, period: rint(r, 80, 170) };
+    } else target = { x: tx, y: ty, r: tr };
+  }
+  if (!target) return null;
+  const lo = targetMove ? Math.min(targetMove.x0, targetMove.x1) : target.x;
+  const hi = targetMove ? Math.max(targetMove.x0, targetMove.x1) : target.x;
+  const near = leftSpawn ? lo : hi, far = leftSpawn ? hi : lo;
+  const ty = target.y, tr = target.r;
+
+  /* What must stay EMPTY for the long way round to exist: the target and
+     its lane, its far mouth, the throw over the top, and the far side down
+     to just below the target. */
+  const keep = [];
+  for (let x = lo; x <= hi; x += 12) keep.push({ x, y: ty, r: tr + 24 });
+  keep.push({ x: far + toward * (tr + 30), y: ty, r: 34 });
+  const flightTop = 60, flightH = Math.max(20, ty - tr - 78 - flightTop);
+  const farX = far + toward * (tr + 36);
+  const rects = [
+    leftSpawn ? { x: spawn.x - 40, y: flightTop, w: W - spawn.x + 40, h: flightH }
+              : { x: 0, y: flightTop, w: spawn.x + 40, h: flightH },
+    leftSpawn ? { x: farX, y: flightTop, w: W - farX, h: ty + tr + 70 - flightTop }
+              : { x: 0, y: flightTop, w: farX, h: ty + tr + 70 - flightTop },
+  ];
+
+  /* THE CAGE */
+  const fall = { x: clampX(spawn.x + rint(r, -8, 8), 40), y: rint(r, 250, 310), r: rint(r, 22, 25) };
+  const pocket = !mover && pick(r, [true, false]);
+  const guardX = near - toward * (tr + 40);
+  if (Math.abs(guardX - spawn.x) < CAGE_R + 34) return null;
+  const lidY = ty - tr - rint(r, 38, 44);
+  const guardTop = pocket ? ty - 34 : lidY + CAGE_STEP;
+  const guard = [0, 1, 2].map(k => ({ x: guardX, y: guardTop + k * CAGE_STEP, r: CAGE_R }));
+  const lid = [], floor = [];
+  if (!pocket){
+    /* from over the guard column to past the target's far rim, one CAGE_STEP
+       apart - so the corner is sealed and no lob falls in beyond it */
+    const lidEnd = far + toward * Math.round(tr * 0.5);
+    for (let x = guardX; toward * (x - lidEnd) <= CAGE_STEP / 2; x += toward * CAGE_STEP)
+      lid.push({ x, y: lidY, r: CAGE_R });
+  }
+  if (!mover){
+    const floorY = ty + tr + 36, floorEnd = far + toward * Math.round(tr * 0.5);
+    for (let x = guardX + toward * CAGE_STEP; toward * (x - floorEnd) <= CAGE_STEP / 2; x += toward * CAGE_STEP)
+      floor.push({ x, y: floorY, r: CAGE_R });
+  }
+  const cage = [fall, ...guard, ...lid, ...floor];
+  if (!cage.every((a, k) => cage.every((b, m) => m === k ||
+        Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r + CAGE_GAP - 1))) return null;
+
+  /* THE REST, spread over the whole board around the cage */
+  const left = N - (mover ? 1 : 0) - cage.length;
+  if (left < 0) return null;
+  const rest = bandSpread(r, left, FIELD, [17, 23], cage, keep, rects);
+  if (rest.length < left) return null;
+  if (!covers([...cage, ...rest])) return null;
+
+  /* the world's vocabulary */
+  const obstacles = [], fires = [], breakables = [];
+  if (fire){
+    fires.push(fall, ...lid);
+    obstacles.push(...guard);
+    floor.forEach((o, k) => (k % 2 ? fires : obstacles).push(o));
+    const B = Math.ceil(left * 0.4), F = Math.ceil((left - B) / 2);
+    const kinds = [...Array(B).fill('b'), ...Array(F).fill('f'), ...Array(left - B - F).fill('o')]
+      .sort(() => r() - 0.5);
+    rest.forEach((o, k) => (kinds[k] === 'f' ? fires : kinds[k] === 'b' ? breakables : obstacles).push(o));
+  } else obstacles.push(...cage, ...rest);
+
+  const lv = { name, maxBlocks: 3, targetType: pocket ? 'POCKET' : 'OPEN',
+               /* the pocket's wall is on the NEAR side: open only toward the far side */
+               wallSide: leftSpawn ? 'left' : 'right', spawn, obstacles, target };
+  if (fires.length) lv.fires = fires;
+  if (breakables.length) lv.breakables = breakables;
+  if (targetMove) lv.targetMove = targetMove;
+  return lv;
+}
+
 const WIND_NAMES = ['Crosswind','The Drift','Squall','Headwind','Bluster','Leeward','Updraught'];
 const ICE_NAMES  = ['Glasswork','Skid','The Rink','Hoarfrost','Slick','Frostbite','Glide'];
 const RUIN_NAMES = ['Threshold','The Narrows','Stonework','Wayhouse','Passage','Colonnade','Doorstep'];
@@ -672,6 +1055,12 @@ const FIRE_NAMES = ['Firebreak','Cinder Run','The Forge','Ashfall','Emberline',
 const MOVE_NAMES = ['Metronome','Pendulum','Crosswalk','The Shuttle','Tempo',
                     'Sidestep','Drift','Interception','Windowpane'];
 function clampX(v, m){ return Math.max(m, Math.min(W - m, v)); }
+/** Hazard total as the density curves count it: fires, obstacles and
+    breakables, and a moving target as one more. */
+function hazards(lv){
+  return (lv.fires || []).length + (lv.obstacles || []).length +
+         (lv.breakables || []).length + (lv.targetMove ? 1 : 0);
+}
 
 /* ---------------------------------------------------------------- */
 if (!SPECS[WORLD]){
@@ -767,8 +1156,15 @@ async function verify(lv, i, n){
 
     /* constructed two-ramp route, for levels one ramp cannot solve */
     let sols2 = 0, best2 = null;
+    const winners2 = [];
     if (L.maxBlocks >= 2 && !best){
       const tc = L.target, AIMS = [-18,-9,0,9,18];
+      /* A patrolling target is aimed at along its whole lane - where it
+         starts, the middle and the far waypoint - because the ball meets it
+         wherever it has got to, not where it was parked. A static target is
+         the one point it always was. */
+      const mv = L.targetMove;
+      const goals = mv ? [mv.x0, (mv.x0 + mv.x1) / 2, mv.x1] : [tc.x];
       outer:
       for (let ry = L.spawn.y + 90; ry <= CONSTS.H - 170; ry += 30)
         for (let t1 = 28; t1 <= 152; t1 += 8){
@@ -776,11 +1172,53 @@ async function verify(lv, i, n){
           for (let len = 80; len <= 440; len += 36){
             const p2 = { x: sx + Math.cos(phi1) * len, y: ry + Math.sin(phi1) * len };
             if (p2.x < 25 || p2.x > CONSTS.W - 25 || p2.y < 25 || p2.y > CONSTS.H - 55) continue;
-            const phi2 = Math.atan2(tc.y - p2.y, tc.x - p2.x);
-            const aim = ((phi2 + phi1) / 2) * (180 / Math.PI);
-            for (const A of AIMS){
-              const cfg = [ramp(sx, ry, t1), ramp(p2.x, p2.y, aim + A, 100)];
-              if (wins(cfg)){ sols2++; if (!best2) best2 = cfg; if (sols2 > 40) break outer; }
+            for (const gx of goals){
+              const phi2 = Math.atan2(tc.y - p2.y, gx - p2.x);
+              const aim = ((phi2 + phi1) / 2) * (180 / Math.PI);
+              for (const A of AIMS){
+                const cfg = [ramp(sx, ry, t1), ramp(p2.x, p2.y, aim + A, 100)];
+                if (wins(cfg)){ sols2++; winners2.push(cfg); if (!best2) best2 = cfg;
+                                if (sols2 > 40) break outer; }
+              }
+            }
+          }
+        }
+    }
+    /* THE LONG WAY ROUND, found along the ball's real path. The constructed
+       search above puts the second ramp on the STRAIGHT line the first ramp
+       reflects along - fine for a target below and across, blind to a board
+       whose route is a long arc out past a top-middle target and back. So on
+       a board that demands the crossing, each first ramp is traced for real,
+       and the second ramp is tried on the points where that ball actually
+       passes the far side at the target's height. It only FINDS candidates:
+       every one still has to win on all seven seeds, and every gate below
+       still applies to it. */
+    if (gate.requireCross && L.maxBlocks >= 2 && !best && sols2 <= 40){
+      const dir = L.spawn.x < CONSTS.W / 2 ? 1 : -1, tc = L.target;
+      const mv = L.targetMove;
+      const farEdge = mv ? (dir > 0 ? Math.max(mv.x0, mv.x1) : Math.min(mv.x0, mv.x1)) : tc.x;
+      const line = farEdge + dir * (tc.r + 30);
+      outer3:
+      for (let ry = L.spawn.y + 70; ry <= L.spawn.y + 200; ry += 16)
+        for (let t1 = 22; t1 <= 158; t1 += 6){
+          const r1 = ramp(sx, ry, t1);
+          const tr = g.trace([r1], 1, ix);
+          const pts = tr.samples.filter(p => dir * (p.x - line) > 12 &&
+                                             p.y > tc.y - 130 && p.y < tc.y + 50);
+          /* ONE route per first ramp. The second ramp can slide a few pixels
+             along the same arc and still win, and counting each of those
+             would grade a single way through as dozens - maxSols2 asks how
+             many DIFFERENT ways there are. */
+          route:
+          for (let k = 0; k < pts.length; k += Math.max(1, Math.floor(pts.length / 5))){
+            const p = pts[k];
+            for (let t2 = 20; t2 <= 160; t2 += 7){
+              /* centred a little PAST the sample, so the ball meets the ramp
+                 rather than being spawned inside it */
+              const cfg = [r1, ramp(p.x + dir * 6, p.y + 6, t2, 100)];
+              if (wins(cfg)){ sols2++; winners2.push(cfg); if (!best2) best2 = cfg;
+                              if (sols2 > 40) break outer3;
+                              break route; }
             }
           }
         }
@@ -807,7 +1245,10 @@ async function verify(lv, i, n){
       for (let j = 0; j < L.maxBlocks; j++)
         cfg.push(ramp(40 + rand() * (CONSTS.W - 80), 110 + rand() * (CONSTS.H - 260),
                       -85 + rand() * 170, 70 + rand() * 80));
-      if (simulate(cfg, 1 + (k % 7), ix).result === 'win') blind++;
+      /* a blind player also drops whenever they like - on a patrolling board
+         that is a random phase of the patrol, not its start */
+      const bt0 = L.targetMove ? Math.floor(rand() * L.targetMove.period) : 0;
+      if (simulate(cfg, 1 + (k % 7), ix, null, bt0).result === 'win') blind++;
     }
     blind /= N;
 
@@ -902,14 +1343,60 @@ async function verify(lv, i, n){
               + (L.targetMove ? 1 : 0);
       if (n < gate.minMechanics) why.push(`only ${n} mechanics, wanted ${gate.minMechanics}`);
     }
-    if (gate.requireMove){
+    /* `moveMustMatter` is the same check made conditional: a country where
+       patrols are optional still may not ship one that is decoration. */
+    if (gate.requireMove || (gate.moveMustMatter && lv.targetMove)){
       const frozen = { ...lv, targetMove: undefined,
                        target: { ...lv.target, x: lv.targetMove.x0 } };
       const fz = g.scratch(frozen, 3);
       if (simulate(solution, 1, fz).result === 'win')
         why.push('the target may as well be static - the route wins frozen');
     }
-    return { ok: why.length === 0, why: why.join(', '),
+    /* THE DROP WINDOW. A moving target is already moving while the player
+       plans, so WHEN they let go is part of the solution: the layout wins
+       only if the drop starts at the right phase of the patrol (t0). A proof
+       at one exact step would be a proof that needs a frame-perfect tap, so
+       the claim made is the honest one: the winning layout wins, on every
+       seed, across a contiguous window of drop phases at least
+       `minWindow` steps wide. Measured outward from the phase it was found
+       at, wrapping round the patrol. */
+    let dropWin = 0;
+    if (L.targetMove){
+      const P = L.targetMove.period;
+      const at = t => seeds.every(s => simulate(solution, s, ix, null, ((t % P) + P) % P).result === 'win');
+      let lo = 0, hi = 0;
+      if (at(0)){
+        while (hi + 1 < P && at(hi + 1)) hi++;
+        while (lo - 1 > hi - P && at(lo - 1)) lo--;
+        dropWin = hi - lo + 1;
+      }
+      if (gate.minWindow && dropWin < gate.minWindow)
+        why.push(`drop window ${dropWin} steps < ${gate.minWindow}`);
+      /* ...and the other side of the same coin: a layout that wins whenever
+         it is dropped never asks the player to read the target at all. The
+         patrol runs while they plan so that WHEN is part of the puzzle. */
+      if ((gate.moveMustMatter || gate.requireMove) && dropWin >= P)
+        why.push('the drop wins at every phase - timing never matters');
+    }
+    /* THE ROUTE HAS TO GO ALL THE WAY ROUND. A final-exam board puts the
+       target top-middle and packs the middle; the point is that the ball is
+       carried out PAST the target's far side and brought back in. So every
+       winning route the sweep found - not just the one it keeps - is traced,
+       and one that reaches the target without ever getting past its far edge
+       is a shortcut the layout failed to close, and the board is rejected.
+       "Far" is measured from the far end of the lane on a patrolling board. */
+    if (gate.requireCross){
+      const dir = L.spawn.x < CONSTS.W / 2 ? 1 : -1;
+      const mv = L.targetMove;
+      const farEdge = mv ? (dir > 0 ? Math.max(mv.x0, mv.x1) : Math.min(mv.x0, mv.x1))
+                         : L.target.x;
+      const line = farEdge + dir * (L.target.r + 30);
+      const crosses = cfg => g.trace(cfg, 1, ix).samples.some(p => dir * (p.x - line) > 0);
+      const routes = best ? [best] : winners2.slice(0, 16);
+      const short = routes.filter(c => !crosses(c)).length;
+      if (short) why.push(`${short}/${routes.length} routes reach the target without crossing the board`);
+    }
+    return { ok: why.length === 0, why: why.join(', '), solution, window: dropWin,
              tol1, sols2, blind, obHits, seedWin,
              boosts: boosts / seeds.length,
              picked: picked / seeds.length };
@@ -962,6 +1449,7 @@ const N = TO - FROM + 1;
 
 for (let i = 0; i < N; i++){
   const id = FROM + i;
+  if (ONLY[0] && (id < ONLY[0] || id > (ONLY[1] || ONLY[0]))) continue;
   if (PRESERVED.has(id)){
     console.log(`  ${String(id).padStart(3)} (hand-tuned, kept as written)`);
     continue;
@@ -975,6 +1463,9 @@ for (let i = 0; i < N; i++){
     cand.id = id;
     const v = await verify(cand, i, N);
     if (v.ok) got = { lv: cand, v }; else lastWhy = v.why || 'no solution';
+    if (VERBOSE && !v.ok) console.log(`      ${id} try ${tries}: ${lastWhy}`);
+    if (DUMP && !v.ok && tries <= 3)
+      fs.appendFileSync(DUMP, JSON.stringify({ id, tries, why: lastWhy, cand, solution: v.solution }) + '\n');
   }
   if (!got){
     console.log(`  ! LEVEL ${id}: no acceptable candidate in ${tries} tries - last reason: ${lastWhy}`);
@@ -985,16 +1476,18 @@ for (let i = 0; i < N; i++){
   const { lv, v } = got;
   accepted.push(lv);
   console.log(`  ${String(id).padStart(3)} ${lv.name.padEnd(12)} ${lv.targetType.padEnd(10)} ` +
-    `blk ${lv.maxBlocks}  ob ${lv.obstacles.length}  ` +
+    `blk ${lv.maxBlocks}  haz ${String(hazards(lv)).padStart(2)}${lv.targetMove ? '*' : ' '} ` +
+    `(f${(lv.fires || []).length} o${lv.obstacles.length} b${(lv.breakables || []).length})  ` +
     `band ${(v.tol1 ? '±' + v.tol1.toFixed(1) + '°' : '2r:' + v.sols2).padStart(7)}  ` +
     `blind ${(v.blind*100).toFixed(1).padStart(4)}%  ` +
-    `obHits ${v.obHits.toFixed(1)}  boosts ${v.boosts.toFixed(1)}  (${tries} tries)`);
+    `obHits ${v.obHits.toFixed(1)}  boosts ${v.boosts.toFixed(1)}` +
+    (lv.targetMove ? `  window ${v.window}/${lv.targetMove.period}` : '') + `  (${tries} tries)`);
 }
 const COUNTRY_TABLE = await page.evaluate(() =>
   window.__gtb.COUNTRIES.map(c => ({ id: c.id, name: c.name, from: c.from, to: c.to })));
 await browser.close();
 
-console.log(`\n  All ${N} verified. ${totalTries} candidates tried, ${accepted.length} accepted.`);
+console.log(`\n  All ${ONLY[0] ? accepted.length : N} verified. ${totalTries} candidates tried, ${accepted.length} accepted.`);
 
 if (WRITE){
   const fmt = lv => {

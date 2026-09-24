@@ -12,7 +12,7 @@
    ============================================================ */
 import type { GameBus } from '../core/events';
 import type { Level, Segment, Vec } from '../levels/types';
-import { LEVELS, countryOf, cityOf } from '../levels';
+import { LEVELS, countryOf, cityOf, rampAllowed } from '../levels';
 import type { Country } from '../levels/types';
 import { EntityFactory, Entity } from '../entities/EntityFactory';
 import { Ramp } from '../entities/Ramp';
@@ -216,9 +216,22 @@ export class LevelManager {
     return { x: p.x + dx / len * MAX_RAMP, y: p.y + dy / len * MAX_RAMP };
   }
 
+  /* ============================================================
+     THE RAMP-PLACEMENT REGION
+
+     The play area, minus the lane of any patrolling target (see
+     levels/patrol.ts). Every door a ramp comes through - drawn,
+     end-dragged, slid - checks it, so a ramp can never sit where
+     the target is about to slide through it. An edit that would
+     carry a ramp into the lane is refused outright rather than
+     clamped: the ramp stays where it was, which the player can
+     see, instead of being bent into a shape they did not draw.
+     ============================================================ */
+  rampAllowed(seg: Segment): boolean { return rampAllowed(this.level, seg); }
+
   addRamp(seg: Segment): boolean {
     const len = Math.hypot(seg.x2 - seg.x1, seg.y2 - seg.y1);
-    if (len < MIN_RAMP || !this.canPlaceRamp) return false;
+    if (len < MIN_RAMP || !this.canPlaceRamp || !this.rampAllowed(seg)) return false;
     this.ramps.push(seg);
     return true;
   }
@@ -255,6 +268,8 @@ export class LevelManager {
       q = { x: ax + Math.cos(a) * MIN_RAMP, y: ay + Math.sin(a) * MIN_RAMP };
     }
     q = { x: clamp(q.x, PLAY.x0, PLAY.x1), y: clamp(q.y, PLAY.y0, PLAY.y1) };
+    const next = which === 1 ? { ...s, x1: q.x, y1: q.y } : { ...s, x2: q.x, y2: q.y };
+    if (!this.rampAllowed(next)) return;
     if (which === 1) { s.x1 = q.x; s.y1 = q.y; } else { s.x2 = q.x; s.y2 = q.y; }
   }
 
@@ -266,6 +281,7 @@ export class LevelManager {
     const loY = Math.min(s.y1, s.y2), hiY = Math.max(s.y1, s.y2);
     dx = clamp(dx, PLAY.x0 - loX, PLAY.x1 - hiX);
     dy = clamp(dy, PLAY.y0 - loY, PLAY.y1 - hiY);
+    if (!this.rampAllowed({ ...s, x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy })) return;
     s.x1 += dx; s.x2 += dx; s.y1 += dy; s.y2 += dy;
   }
 

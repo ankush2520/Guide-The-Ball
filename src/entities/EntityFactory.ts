@@ -24,6 +24,8 @@ import { WindZone } from './WindZone';
 import { SlipperyZone } from './SlipperyZone';
 import { StarPickup } from './StarPickup';
 import { Target } from './Target';
+import { MovingTarget } from './MovingTarget';
+import { isMoving } from '../levels/target';
 import { Wall } from './Wall';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
@@ -34,16 +36,21 @@ import { Ramp } from './Ramp';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ctor = new (def: any, index: number) => Entity<any>;
 
-/** The registry. `pick` says where on a level this kind's defs live. */
+/** The registry. `pick` says where on a level this kind's defs live, and
+    `ctorFor`, when present, picks a variant class from the level itself. */
 interface Spec {
   ctor: Ctor;
   pick: (lv: Level) => readonly unknown[];
+  ctorFor?: (lv: Level) => Ctor;
 }
 
 const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   slippery:  { ctor: SlipperyZone, pick: lv => lv.slippery },
   wind:      { ctor: WindZone,     pick: lv => lv.wind },
-  target:    { ctor: Target,       pick: lv => [lv.target] },
+  /* One target per level; a patrolling one is the same kind with its lane
+     drawn under it - see MovingTarget. */
+  target:    { ctor: Target,       pick: lv => [lv.target],
+               ctorFor: lv => (isMoving(lv) ? MovingTarget : Target) },
   wall:      { ctor: Wall,         pick: lv => lv.walls },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },
   fire:      { ctor: FireObstacle, pick: lv => lv.fires },
@@ -71,7 +78,8 @@ export class EntityFactory {
     for (const kind of Object.keys(REGISTRY) as EntityKind[]) {
       const spec = REGISTRY[kind]!;
       const defs = spec.pick(lv);
-      for (let i = 0; i < defs.length; i++) out.push(new spec.ctor(defs[i], i));
+      const Cls = spec.ctorFor ? spec.ctorFor(lv) : spec.ctor;
+      for (let i = 0; i < defs.length; i++) out.push(new Cls(defs[i], i));
     }
     return out.sort((a, b) => a.layer - b.layer);
   }

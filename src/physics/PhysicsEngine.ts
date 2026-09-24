@@ -19,6 +19,11 @@ export interface BallState {
   vx: number; vy: number;
 
   steps: number;
+  /** The patrol clock when this ball was let go, in steps. A moving target
+      runs from the moment its level is entered, so a drop starts partway
+      through the patrol; the target's clock during the drop is t0 + steps.
+      Zero on any level whose target stands still, where it changes nothing. */
+  readonly t0: number;
   hits: number;
   segHits: number;
 
@@ -50,14 +55,14 @@ export interface BallState {
 }
 
 export interface PhysicsEngine {
-  createBall(lv: Level, seed: number, broken?: boolean[] | null): BallState;
+  createBall(lv: Level, seed: number, broken?: boolean[] | null, t0?: number): BallState;
 
   /** Advance one 1/60s step. Sets ball.result when the run ends. */
   step(ball: BallState, lv: Level, ramps: readonly Segment[]): void;
 
   /** Run a whole drop headlessly and report the outcome. */
   simulate(lv: Level, ramps: readonly Segment[], seed: number,
-           broken?: boolean[] | null): SimulationResult;
+           broken?: boolean[] | null, t0?: number): SimulationResult;
 
   /** Release anything the engine holds for a finished run. Matter builds a
       world per drop and tears it down here. */

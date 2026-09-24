@@ -20,8 +20,13 @@
    near the bounds, which reads as a target that is barely
    moving and then suddenly is.
 
-   t = 0 puts it at x0, which is where the board sits while the
-   player is still planning.
+   t = 0 puts it at x0, which is where it stands the moment its
+   level is entered. It is ALREADY MOVING while the player plans
+   (the controller runs the same step clock from level entry), and
+   a drop starts partway through the patrol at t0 - see
+   BallState.t0. Entering the level, or pressing Replay, always
+   restarts it from a fixed phase, so the whole thing stays a
+   pure function of integers the solver can sweep.
    ============================================================ */
 import type { Circle, Level, RawLevel } from './types';
 

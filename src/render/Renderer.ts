@@ -16,6 +16,7 @@ import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
 import { RAMP_STYLE } from '../entities/Ramp';
+import { rampAllowed } from '../levels/patrol';
 import { drawSpring } from './Spring';
 import { Backdrop } from './Backdrop';
 import { drawStarfield } from './Starfield';
@@ -50,8 +51,9 @@ export interface RenderState {
   clock: number;
   /** Interpolation: how far through the current physics step we are. */
   alpha: number;
-  /** Elapsed simulation steps, fractional, 0 when no drop is running. Drives
-      a patrolling target and nothing else. */
+  /** The patrol clock in steps, fractional - running from level entry, not
+      from the drop (see GameController.patrolClock). Drives a patrolling
+      target and nothing else. */
   simT: number;
   ball: { x: number; y: number; px: number; py: number } | null;
   /* read-only: the renderer never writes game state, and these are reused
@@ -216,7 +218,9 @@ export class Renderer {
     if (s.draft) {
       const len = Math.hypot(s.draft.x2 - s.draft.x1, s.draft.y2 - s.draft.y1);
       ctx.save();
-      if (len < s.minRamp) ctx.globalAlpha = 0.45;
+      /* ...and across a moving target's track, which is the same promise:
+         nothing is placed there. */
+      if (len < s.minRamp || !rampAllowed(s.level, s.draft)) ctx.globalAlpha = 0.45;
       drawSeg(ctx, s.draft, RAMP_HT, RAMP_STYLE);
       ctx.restore();
     }

@@ -32,9 +32,11 @@ export const GLOSSARY: GlossaryEntry[] = [
           'completely. It is the flickering one with flames; the plain red circle only ' +
           'knocks you off course.' },
   { cls: 'mt', has: lv => !!lv.targetMove, name: 'Moving target',
-    long: 'This target slides side to side at a steady rate, and it starts moving when you ' +
-          'drop. Where it will be is fixed - it depends only on how long the ball has been ' +
-          'falling - so it is a timing puzzle you can plan, not a reflex test.' },
+    long: 'This target slides side to side at a steady rate, and it is already moving when ' +
+          'the level opens - watch where it is and time your drop, the way you plan around ' +
+          'fire. It always starts from the same spot when you enter the level, and Replay ' +
+          'drops at the same moment again. The pale track it rides on is its own: ramps ' +
+          'cannot be drawn across it.' },
   { cls: 'bk', has: lv => lv.breakables.length > 0, name: 'Breakable block',
     long: 'Bounces you randomly exactly like an obstacle, then shatters and is gone. It stays ' +
           'gone for your next drop on this level, so a first attempt can be spent clearing a path.' },

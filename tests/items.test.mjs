@@ -266,6 +266,12 @@ const reach = await page.evaluate((N) => {
     for (let ry = lv.spawn.y + 90; ry <= 620 && !got; ry += 35)
       for (let th = 20; th <= 160; th += 5)
         if (simulate([ramp(sx, ry, th)], 1, li).boxes > 0) { got = true; break; }
+    /* ...and the placer's FINER fallback fan, which is what it falls back on
+       for a board packed so tight that the only open air is just off the
+       spawn ramp (see tools/genboxes.mjs). Still one real collecting drop. */
+    for (let ry = lv.spawn.y + 70; ry <= lv.spawn.y + 230 && !got; ry += 12)
+      for (let th = 18; th <= 162; th += 6)
+        if (simulate([ramp(sx, ry, th)], 1, li).boxes > 0) { got = true; break; }
     if (!got) unreachable.push(lv.id);
   }
   return unreachable;

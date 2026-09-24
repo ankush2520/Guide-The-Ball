@@ -266,6 +266,85 @@ console.log('\nMOVING TARGET — the win tests where it IS, not where it started
     `result ${stat.result}`);
 }
 
+console.log('\nMOVING TARGET — its lane is carved out of the ramp-placement region');
+{
+  /* The bug that got the mechanic cut the first time: a patrol sliding
+     through a ramp the player had just drawn. The lane is the capsule the
+     target sweeps, grown by a ramp's half-thickness and a gap, and no ramp
+     may enter it - so the drawn ramp and the drawn target can never overlap
+     at ANY point of the patrol. Checked on the rule itself, on the headless
+     simulate every solver uses, and on every patrolling level in the game. */
+  const mv={...base, target:{x:160,y:500,r:24}, targetMove:{x0:160,x1:320,period:120}};
+  const res=await p.evaluate(([mv,base])=>{
+    const g=window.__gtb, lane=g.patrolLane(mv);
+    const flat=(cx,cy,len=100)=>({x1:cx-len/2,y1:cy,x2:cx+len/2,y2:cy});
+    /* the closest a ramp's EDGE can get to the target's RIM, anywhere along
+       the patrol - sampled, so this does not trust the rule's own maths */
+    const gap=seg=>{
+      let min=Infinity;
+      for(let k=0;k<=200;k++){
+        const c=g.targetAt(mv, mv.targetMove.period*k/400);
+        const dx=seg.x2-seg.x1, dy=seg.y2-seg.y1, L2=dx*dx+dy*dy;
+        let t=((c.x-seg.x1)*dx+(c.y-seg.y1)*dy)/L2; t=Math.max(0,Math.min(1,t));
+        min=Math.min(min, Math.hypot(c.x-seg.x1-t*dx, c.y-seg.y1-t*dy)-c.r-g.CONSTS.RAMP_HT);
+      }
+      return min;
+    };
+    const across=flat(240,500), above=flat(240,500-lane.radius-2), justIn=flat(240,500-lane.radius+2);
+    const beyond=flat(320+lane.radius+60,500);           // level with the lane, past its end
+    const ix=g.scratch(mv);
+    return {
+      radius: lane.radius, r: mv.target.r,
+      across: g.rampAllowed(mv,across), above: g.rampAllowed(mv,above),
+      justIn: g.rampAllowed(mv,justIn), beyond: g.rampAllowed(mv,beyond),
+      aboveGap: gap(above), beyondGap: gap(beyond),
+      simAcross: g.simulate([across],1,ix).result,
+      simAbove: g.simulate([above],1,ix).result,
+      traceAcross: g.trace([across],1,ix).result,
+      staticAcross: g.rampAllowed(base, across),
+      layout: g.layoutAllowed(mv,[above,across]),
+      /* every patrolling board in the game: its lane inside the board, and
+         none of the level's own furniture sitting in it */
+      levels: g.LEVELS.filter(l=>l.targetMove).map(l=>{
+        const ln=g.patrolLane(l);
+        const inBoard=ln.path.x1-l.target.r>=0 && ln.path.x2+l.target.r<=g.CONSTS.W;
+        return {id:l.id, inBoard};
+      }),
+    };
+  }, [mv,base]);
+  chk(!res.across,'a ramp laid across the patrol is refused');
+  chk(!res.justIn,'and so is one that only clips the edge of the lane',
+    `lane radius ${res.radius.toFixed(1)}`);
+  chk(res.above && res.beyond,'while one clear of the lane - above it, or past its end - is allowed');
+  chk(res.aboveGap>0 && res.beyondGap>0,
+    'and an allowed ramp never touches the target anywhere along its patrol',
+    `closest edge-to-rim ${Math.min(res.aboveGap,res.beyondGap).toFixed(1)}px`);
+  chk(res.simAcross==='illegal' && res.traceAcross==='illegal',
+    'the headless simulate refuses a layout the game would refuse, so no solver can prove a level with one',
+    `simulate ${res.simAcross}, trace ${res.traceAcross}`);
+  chk(res.simAbove!=='illegal','and runs an allowed layout exactly as before',`result ${res.simAbove}`);
+  chk(!res.layout,'one illegal ramp makes the whole layout illegal');
+  chk(res.staticAcross,'a level whose target stands still has no lane at all');
+  chk(res.levels.length>0 && res.levels.every(l=>l.inBoard),
+    'every patrolling level keeps its whole lane on the board',
+    res.levels.filter(l=>!l.inBoard).map(l=>l.id).join(',')||`${res.levels.length} levels`);
+
+  /* Authoring rules throw at load, so a bad patrol never ships quietly. */
+  const thrown=await p.evaluate(base=>{
+    const g=window.__gtb, t=lv=>{ try{ g.scratch(lv,9); return ''; }catch(e){ return e.message; } };
+    return {
+      walled: t({...base, targetType:'POCKET', target:{x:200,y:500,r:24}, targetMove:{x0:200,x1:300,period:90}}),
+      offBoard: t({...base, target:{x:10,y:500,r:24}, targetMove:{x0:10,x1:200,period:90}}),
+      still: t({...base, target:{x:200,y:500,r:24}, targetMove:{x0:200,x1:200,period:90}}),
+      fine: t({...base, target:{x:200,y:500,r:24}, targetMove:{x0:200,x1:300,period:90}}),
+    };
+  }, base);
+  chk(/must be OPEN/.test(thrown.walled),'a walled target may not patrol',thrown.walled);
+  chk(/off the board/.test(thrown.offBoard),'nor may a patrol carry the target off the board',thrown.offBoard);
+  chk(/two different waypoints/.test(thrown.still),'nor may a "patrol" go nowhere',thrown.still);
+  chk(thrown.fine==='','and a well-formed patrol loads');
+}
+
 console.log('\nSPEED_CAP — nothing stacks into runaway speed');
 {
   /* The gale alone, with nothing to boost off: held to the general cap.

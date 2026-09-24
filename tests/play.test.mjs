@@ -258,8 +258,9 @@ const lvinfo = await page.evaluate(() => {
    way: build a country and forget to give it the next free block and the
    numbering splits, which is exactly what it used to do. */
 const PLAN_ID_GAPS = '';
-/* Only Needlecrest patrols its target - country 10, shipped third, at 41-50. */
-const PLAN_MOVING  = '41,42,43,44,45,46,47,48,49,50';
+/* Needlecrest patrols every target (41-50); Emberkeep uses the moving target
+   as one tool of its final exam, on two of those five boards (36 and 39). */
+const PLAN_MOVING  = '36,39,41,42,43,44,45,46,47,48,49,50';
 const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,2,2,3,3';
 const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,3';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
@@ -347,7 +348,7 @@ check(lvinfo.types === PLAN_TYPES, 'world 1 target types match the plan');
    and is checked on its own terms just below. */
 check(lvinfo.moving === '' && !lvinfo.hasMoveKey,
   'the old 2D `move` waypoint block is still gone', lvinfo.moving || 'none');
-check(lvinfo.movingIds === PLAN_MOVING, 'only Needlecrest patrols its target',
+check(lvinfo.movingIds === PLAN_MOVING, 'only the planned boards patrol their target',
   lvinfo.movingIds || 'none');
 check(lvinfo.movingNotOpen === '',
   'and every patrolling target is OPEN, so no wall is ever dragged with it',
@@ -565,11 +566,11 @@ check(stat.planMismatch === 0, 'a patrol starts exactly where the planning board
   `${stat.planMismatch} mismatched`);
 check(stat.wallsStale === 0, 'cached walls match a fresh build for every level');
 check(stat.clockRan > 0.2, 'the animation clock is still running', `${stat.clockRan.toFixed(2)}s`);
-/* Still the sharpest check in this section, and sharper than it was: a patrol
-   runs on the SIMULATION clock, so even on a patrolling board the target must
-   sit perfectly still while the player is only planning. Movement driven off
-   the animation clock would pass every other check here and fail this one. */
-check(stat.drift === 0, 'the target does not move while the animation clock advances',
+/* A STATIC target must not drift as the animation clock runs - the board this
+   runs on has no patrol. (A patrolling target now DOES move while the player
+   plans, deliberately and on the simulation's own step clock; that is
+   checked on its own terms just below.) */
+check(stat.drift === 0, 'a static target does not move while the animation clock advances',
   `${stat.drift.toFixed(3)}px`);
 
 /* the same thing, but through a real drop: the target the ball is chasing
@@ -585,6 +586,58 @@ const statDrop = await page.evaluate(() => {
   return moved;
 });
 check(statDrop === 0, 'simulating a drop never displaces a target');
+
+/* THE PATROL CLOCK, live. A moving target is already moving when its level
+   opens, so the player reads it and times the drop. Entering the level must
+   start it from the same phase every time; a drop must start at the phase the
+   clock had reached; and Replay must re-drop at exactly that phase again, so
+   it is the same drop and matches the headless simulator to the step. */
+const patrol = await page.evaluate(async () => {
+  const g = window.__gtb;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const li = g.LEVELS.findIndex(l => l.id === 41);          // Needlecrest, untouched
+  const lv = g.LEVELS[li];
+  g.setBalls(9); g.setLevel(li); g.setRamps([]); g.setSeed(1);
+  const enter = g.state();
+  await wait(600);
+  const planned = g.state();
+  g.setLevel(li);
+  const reentered = g.state();
+  // pin the clock, drop, and let the miss come back to planning
+  g.setPatrolClock(37.6);
+  g.drop();
+  const t0 = g.state().ball ? g.state().ball.t0 : null;
+  for (let k = 0; k < 400 && g.state().phase !== 'plan'; k++) await wait(25);
+  const after = g.state();
+  const liveResult = after.result;
+  await wait(200);
+  g.retry();
+  const replayT0 = g.state().ball ? g.state().ball.t0 : null;
+  for (let k = 0; k < 400 && g.state().phase !== 'plan'; k++) await wait(25);
+  const replayResult = g.state().result;
+  const headless = g.simulate([], 1, li, null, 37).result;
+  g.setLevel(0);
+  return { x0: lv.targetMove.x0, enterT: enter.patrolT, enterX: enter.targetNow.x,
+           plannedT: planned.patrolT, plannedX: planned.targetNow.x,
+           reT: reentered.patrolT, t0, afterT: after.patrolT, replayT0,
+           liveResult, replayResult, headless };
+});
+check(patrol.enterT < 3 && Math.abs(patrol.enterX - patrol.x0) < 6,
+  'a patrolling target starts at its first waypoint when the level opens',
+  `clock ${patrol.enterT.toFixed(1)} steps, x ${patrol.enterX.toFixed(1)} vs ${patrol.x0}`);
+check(patrol.plannedT > 20 && Math.abs(patrol.plannedX - patrol.enterX) > 1,
+  'and is already moving while the player plans - no drop needed',
+  `${patrol.plannedT.toFixed(0)} steps in, moved ${Math.abs(patrol.plannedX - patrol.enterX).toFixed(0)}px`);
+check(patrol.reT < 3, 'entering the level again restarts it from the same phase',
+  `clock ${patrol.reT.toFixed(1)} steps`);
+check(patrol.t0 === 37, 'a drop starts at the phase the clock had reached, to the whole step',
+  `t0 ${patrol.t0}`);
+check(patrol.afterT >= 37, 'and the patrol carries on from where the drop left it, never jumping back',
+  `clock ${patrol.afterT.toFixed(1)}`);
+check(patrol.replayT0 === 37, 'Replay re-drops at exactly the same phase', `t0 ${patrol.replayT0}`);
+check(patrol.liveResult === patrol.headless && patrol.replayResult === patrol.headless,
+  'and the drop and its replay both match the headless simulator at that phase',
+  `live ${patrol.liveResult}, replay ${patrol.replayResult}, headless ${patrol.headless}`);
 
 /* ---------------------------------------------------------------- */
 section('4. Obstacle bounce quality');
@@ -651,6 +704,10 @@ const inv = await page.evaluate(() => {
       for (let k = 0; k < LEVELS[li].maxBlocks; k++)
         cfg.push(ramp(30+rand()*420, 120+rand()*520, -85+rand()*170, 60+rand()*90));
       const o = simulate(cfg, 1 + (i%64), li);
+      /* a layout across a moving target's lane is one the game refuses to
+         place, so the simulator refuses it too - it never ran, and is not a
+         run to hold to these invariants */
+      if (o.result === 'illegal') continue;
       runs++; bounces += o.hits; segs += o.segHits;
       if (boosted) {
         boostRuns++;

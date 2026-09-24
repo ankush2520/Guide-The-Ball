@@ -143,7 +143,7 @@ export class MatterBall implements BallState {
   pending: { tag: BodyTag; nx: number; ny: number }[] = [];
 
   constructor(lv: Level, seed: number, broken: boolean[] | null | undefined,
-              readonly cfg: MatterConfig) {
+              readonly cfg: MatterConfig, readonly t0 = 0) {
     this.px = lv.spawn.x; this.py = lv.spawn.y;
     this.restX = lv.spawn.x; this.restY = lv.spawn.y;
     this.boostIn = falses(lv.boosters.length);
@@ -370,8 +370,8 @@ function circleBody(o: Circle, restitution: number): MBody {
 export class MatterEngine implements PhysicsEngine {
   constructor(readonly cfg: MatterConfig = MATTER_TUNED) {}
 
-  createBall(lv: Level, seed: number, broken?: boolean[] | null): MatterBall {
-    return new MatterBall(lv, seed, broken, this.cfg);
+  createBall(lv: Level, seed: number, broken?: boolean[] | null, t0 = 0): MatterBall {
+    return new MatterBall(lv, seed, broken, this.cfg, t0);
   }
 
   dispose(ball: BallState): void { (ball as MatterBall).dispose(); }
@@ -601,16 +601,18 @@ export class MatterEngine implements PhysicsEngine {
     }
 
     /* The target's position NOW, which on a patrolling board is not where it
-       was authored. b.steps is the simulation's own clock - see targetAt. */
-    const c = targetAt(lv, b.steps);
+       was authored. The clock is the drop's start phase plus the steps it has
+       run - the target was already moving while the player planned, and t0
+       is where it had got to when the ball was let go. See targetAt. */
+    const c = targetAt(lv, b.t0 + b.steps);
     if (reached(c, c.r)) { b.result = 'win'; return; }
     if (b.isOutOfBounds()) { b.result = 'out'; return; }
     b.tickStallWatch();
   }
 
   simulate(lv: Level, ramps: readonly Segment[], seed: number,
-           broken?: boolean[] | null): SimulationResult {
-    const b = this.createBall(lv, seed, broken);
+           broken?: boolean[] | null, t0 = 0): SimulationResult {
+    const b = this.createBall(lv, seed, broken, t0);
     while (!b.result) this.step(b, lv, ramps);
     const out = b.toResult();
     b.dispose();

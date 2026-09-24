@@ -35,9 +35,9 @@ export interface DrawContext {
       being an ordinary one, the same way a taken chest goes to an outline:
       the board must never promise a prize it can no longer pay. */
   giftTaken: boolean;
-  /** Elapsed SIMULATION time in steps, fractional, and 0 whenever no drop is
-      running. The one thing on the board that is not drawn off the wall
-      clock: a patrolling target has to be painted where the physics says it
+  /** The PATROL clock in steps, fractional: the planning clock while the
+      player plans, the drop's start phase plus its steps during a drop. The
+      one thing on the board that is not drawn off the wall clock: a patrolling target has to be painted where the physics says it
       is, or the board would show a different game than it plays. */
   simT: number;
 }
