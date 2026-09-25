@@ -231,8 +231,8 @@ const lvinfo = await page.evaluate(() => {
     seen.forEach(q => { if (q.w === w && Math.hypot(q.x-l.target.x, q.y-l.target.y) < 30) tooClose++; });
     seen.push({x:l.target.x, y:l.target.y, w:w});
   });
-  // Verdholm (country 1) is pinned exactly; later countries are generated and
-  // only have to obey the structural rules, not a hand-written plan
+  // Verdholm (country 1) is pinned exactly to its generated plan; later
+  // countries only have to obey the structural rules
   const W1 = LEVELS.slice(0, 20);
   return { n: LEVELS.length, badId, badType, outOfBoard, overlap,
            countries: window.__gtb.COUNTRIES.map(c => `${c.id}:${c.from}-${c.to}`).join(' '),
@@ -258,13 +258,16 @@ const lvinfo = await page.evaluate(() => {
    way: build a country and forget to give it the next free block and the
    numbering splits, which is exactly what it used to do. */
 const PLAN_ID_GAPS = '';
-/* Needlecrest patrols every target (41-50); Emberkeep uses the moving target
-   as one tool of its final exam, on two of those five boards (36 and 39). */
-const PLAN_MOVING  = '36,39,41,42,43,44,45,46,47,48,49,50';
-const PLAN_BLOCKS = '1,1,1,2,2,2,1,3,2,2,2,2,3,2,3,2,2,2,3,3';
-const PLAN_OBST   = '0,0,1,0,1,2,2,2,3,2,0,1,1,2,2,3,2,3,4,3';
+/* Needlecrest patrols every target (41-50); Verdholm and Emberkeep use the
+   moving target as one tool of their final exams - 17, 19 and 20, then 36
+   and 39. */
+const PLAN_MOVING  = '17,19,20,36,39,41,42,43,44,45,46,47,48,49,50';
+/* Verdholm is generated (tools/genlevels.mjs, VERD_DENSITY): level N carries
+   about N obstacles, one ramp for the three lessons, three for the exam. */
+const PLAN_BLOCKS = '1,1,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3';
+const PLAN_OBST   = '1,2,3,4,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
-                    'SIDE_WALL,POCKET,NARROW_GAP,NARROW_GAP,ENCLOSED,OPEN,SIDE_WALL,NARROW_GAP,POCKET,ENCLOSED';
+                    'SIDE_WALL,POCKET,NARROW_GAP,POCKET,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN';
 console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
             `target y spread ${lvinfo.ySpread}px`);
 console.log(`  countries: ${lvinfo.countries}`);
@@ -340,7 +343,7 @@ check(lvinfo.idGaps === PLAN_ID_GAPS, 'the only id gaps are the un-authored coun
 check(lvinfo.badType === 0, 'every targetType is one of the five');
 check(lvinfo.outOfBoard === 0, 'spawns, targets and obstacles are inside the board');
 check(lvinfo.overlap === 0, 'no obstacle sits on a target or blocks a spawn');
-check(lvinfo.blocks === PLAN_BLOCKS, 'world 1 ramp budgets match the plan, drops at 7/14/17/18 intact');
+check(lvinfo.blocks === PLAN_BLOCKS, 'world 1 ramp budgets match the plan');
 check(lvinfo.obst === PLAN_OBST, 'world 1 obstacle counts match the plan');
 check(lvinfo.types === PLAN_TYPES, 'world 1 target types match the plan');
 /* The OLD 2D waypoint block stays gone for good - that is the one that
@@ -406,7 +409,9 @@ const mouths = await page.evaluate(() => {
 for (const m of mouths)
   console.log(`  L${String(m.id).padStart(2)} ${m.type.padEnd(10)} mouth ${String(m.open).padStart(5)}px ` +
               `-> ${String(m.clear).padStart(5)}px clear after obstacles`);
-check(mouths.length >= 5, 'the walled-target levels are being checked', `${mouths.length} levels`);
+/* One since Verdholm was regenerated (level 13's NARROW_GAP); the hand-made
+   twenty carried five. What matters is that the check is not vacuous. */
+check(mouths.length >= 1, 'the walled-target levels are being checked', `${mouths.length} levels`);
 check(mouths.every(m => m.clear >= 20),
   'every obligatory passage leaves the ball real room, not a sliver',
   `tightest ${Math.min(...mouths.map(m => m.clear))}px`);
@@ -1926,10 +1931,32 @@ async function winLevel(li){
         const cfg = [ramp(sx, ry, th)];
         if (g.simulate(cfg, 1, li).result === 'win'){ g.setRamps(cfg); return true; }
       }
+    /* A final-exam board refuses every single ramp by construction, so find
+       a two-ramp route the way the generator does: trace a first ramp for
+       real and put the second where that ball passes. Searched at patrol
+       phase 0, which the drop below is pinned to. */
+    if (lv.maxBlocks < 2) return false;
+    for (let ry = lv.spawn.y + 70; ry <= lv.spawn.y + 200; ry += 16)
+      for (let t1 = 22; t1 <= 158; t1 += 6){
+        const r1 = ramp(sx, ry, t1);
+        const pts = g.trace([r1], 1, li).samples;
+        for (let k = 0; k < pts.length; k += Math.max(1, Math.floor(pts.length / 12)))
+          for (let t2 = 20; t2 <= 160; t2 += 7){
+            const dir = pts[k].x < sx ? -1 : 1;
+            const cfg = [r1, ramp(pts[k].x + dir * 6, pts[k].y + 6, t2, 100)];
+            const t0s = lv.targetMove ? [0, 1, 2, 3] : [0];
+            if (t0s.every(t0 => g.simulate(cfg, 1, li, null, t0).result === 'win')){
+              g.setRamps(cfg); return true; }
+          }
+      }
     return false;
   }, li);
   if (!armed) return false;
-  await dropBall();
+  /* On a patrolling board the clock runs while the test taps, so pin it and
+     drop in the same turn - the phase the route was searched at. */
+  const moving = await page.evaluate(li => !!window.__gtb.LEVELS[li].targetMove, li);
+  if (moving) await page.evaluate(() => { window.__gtb.setPatrolClock(0); window.__gtb.drop(); });
+  else await dropBall();
   await page.waitForFunction(() => window.__gtb.state().phase === 'over', null, { timeout: 25000 });
   return true;
 }
@@ -3414,7 +3441,7 @@ await ratePage.waitForFunction(() => !!window.__gtb);
 
 const RATES = [60, 75, 90, 120, 144, 165, 240];
 const rateRows = [];
-for (const li of [0, 12, 19]){
+for (const li of [0, 9, 12]){
   let truth = null, ref = null;
   for (const rate of RATES){
     await ratePage.evaluate(() => {
@@ -3459,7 +3486,7 @@ for (const li of [0, 12, 19]){
 }
 await rateCtx.close();
 
-for (const li of [0, 12, 19]){
+for (const li of [0, 9, 12]){
   const rows = rateRows.filter(r => r.li === li);
   if (!rows.length) continue;
   const t = rows[0].truth;
