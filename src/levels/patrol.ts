@@ -1,7 +1,8 @@
 /* ============================================================
    THE MOVING TARGET - its rules
 
-   A target that patrols horizontally between two waypoints, and
+   A target that patrols between two waypoints (side to side, or
+   up and down with y0/y1), and
    everything the rest of the game needs to know about one: where
    its path is, where a ramp may NOT go because of it, and how it
    is drawn. Any country can use it - a level opts in with a
@@ -36,7 +37,7 @@
    The entity that draws a patrol is entities/MovingTarget.ts.
    ============================================================ */
 import type { RawLevel, Segment } from './types';
-import { RAMP_HT, W } from '../physics/constants';
+import { RAMP_HT, W, H } from '../physics/constants';
 import { closestOnSeg } from '../physics/math';
 
 /** Clear air between a ramp's edge and the target's rim at its closest pass.
@@ -51,8 +52,7 @@ type PatrolLevel = Pick<RawLevel, 'target' | 'targetMove'>;
 export function patrolPath(lv: PatrolLevel): Segment | null {
   const mv = lv.targetMove;
   if (!mv || !(mv.period > 0)) return null;
-  return { x1: Math.min(mv.x0, mv.x1), y1: lv.target.y,
-           x2: Math.max(mv.x0, mv.x1), y2: lv.target.y };
+  return { x1: mv.x0, y1: mv.y0 ?? lv.target.y, x2: mv.x1, y2: mv.y1 ?? lv.target.y };
 }
 
 /** The lane: every point within `radius` of the patrol's centre line. A
@@ -91,9 +91,11 @@ export function validatePatrol(lv: Pick<RawLevel, 'id' | 'target' | 'targetMove'
     return `level ${lv.id}: a moving target must be OPEN, not ${lv.targetType} - ` +
            `walls are built from the target centre and would move with it`;
   if (!(mv.period > 0)) return `level ${lv.id}: a patrol needs a positive period`;
-  if (mv.x0 === mv.x1) return `level ${lv.id}: a patrol needs two different waypoints`;
+  const y0 = mv.y0 ?? lv.target.y, y1 = mv.y1 ?? lv.target.y;
+  if (mv.x0 === mv.x1 && y0 === y1) return `level ${lv.id}: a patrol needs two different waypoints`;
   const lo = Math.min(mv.x0, mv.x1), hi = Math.max(mv.x0, mv.x1);
-  if (lo - lv.target.r < 0 || hi + lv.target.r > W)
+  if (lo - lv.target.r < 0 || hi + lv.target.r > W ||
+      Math.min(y0, y1) - lv.target.r < 0 || Math.max(y0, y1) + lv.target.r > H)
     return `level ${lv.id}: the patrol carries the target off the board`;
   return null;
 }

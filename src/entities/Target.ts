@@ -2,6 +2,7 @@ import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Circle } from '../levels/types';
 import { targetAt } from '../levels/target';
 import { INK, TARGET } from '../render/palette';
+import { TARGET_GLOW } from '../render/glow';
 import { TIE, WRAP } from './MysteryBox';
 
 /* A bullseye well. Concentric rings, a pulsing core and a few drifting
@@ -38,11 +39,11 @@ export class Target extends Entity<Circle> {
     };
 
     // soft halo, breathing
-    const halo = ctx.createRadialGradient(0, 0, c.r * 0.6, 0, 0, c.r * 1.5);
+    const halo = ctx.createRadialGradient(0, 0, c.r * 0.6, 0, 0, c.r * TARGET_GLOW);
     halo.addColorStop(0, `rgba(47,201,90,${0.22 + pulse * 0.14})`);
     halo.addColorStop(1, 'rgba(47,201,90,0)');
     ctx.fillStyle = halo;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, c.r * TARGET_GLOW, 0, Math.PI * 2); ctx.fill();
 
     /* A bullseye: a pale outer pad, a white band, a solid green centre. Every
        band carries the ink line, so the goal is a hard-edged shape rather

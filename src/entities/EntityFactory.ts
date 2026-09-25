@@ -27,6 +27,8 @@ import { Target } from './Target';
 import { MovingTarget } from './MovingTarget';
 import { isMoving } from '../levels/target';
 import { Wall } from './Wall';
+import { Oval } from './Oval';
+import { OVAL_SEGS } from '../levels/ovals';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
 
@@ -51,7 +53,10 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
      drawn under it - see MovingTarget. */
   target:    { ctor: Target,       pick: lv => [lv.target],
                ctorFor: lv => (isMoving(lv) ? MovingTarget : Target) },
-  wall:      { ctor: Wall,         pick: lv => lv.walls },
+  /* an oval's rim segments are walls to the physics, but the Oval entity
+     paints the whole shape, so the wall painter skips them */
+  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !OVAL_SEGS.has(s)) },
+  oval:      { ctor: Oval,         pick: lv => lv.ovals ?? [] },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },
   fire:      { ctor: FireObstacle, pick: lv => lv.fires },
   breakable: { ctor: Breakable,    pick: lv => lv.breakables },

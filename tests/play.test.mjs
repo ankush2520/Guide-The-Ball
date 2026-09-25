@@ -258,14 +258,15 @@ const lvinfo = await page.evaluate(() => {
    way: build a country and forget to give it the next free block and the
    numbering splits, which is exactly what it used to do. */
 const PLAN_ID_GAPS = '';
-/* Needlecrest patrols every target (41-50); Verdholm and Emberkeep use the
-   moving target as one tool of their final exams - 17, 19 and 20, then 36
-   and 39. */
-const PLAN_MOVING  = '17,19,20,36,39,41,42,43,44,45,46,47,48,49,50';
+/* Needlecrest patrols every target (41-50). Verdholm uses the moving target
+   in its final exam (17, 19, 20); Emberkeep through its whole back half -
+   three middle cities (28, 31, 34) and two of its exam (36, 39). */
+const PLAN_MOVING  = '17,19,20,28,31,34,36,39,41,42,43,44,45,46,47,48,49,50';
 /* Verdholm is generated (tools/genlevels.mjs, VERD_DENSITY): level N carries
-   about N obstacles, one ramp for the three lessons, three for the exam. */
+   about N obstacles, levelling off at 14-18 hazards in the exam (a patrol
+   counts as one); one ramp for the three lessons, three for the exam. */
 const PLAN_BLOCKS = '1,1,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3';
-const PLAN_OBST   = '1,2,3,4,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19';
+const PLAN_OBST   = '1,2,3,4,4,5,6,7,8,9,10,11,12,13,14,15,15,17,16,17';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
                     'SIDE_WALL,POCKET,NARROW_GAP,POCKET,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN';
 console.log(`  ${lvinfo.n} levels; ${lvinfo.right} reach right, ${lvinfo.left} reach left; ` +
@@ -3101,27 +3102,15 @@ check(/wrapped|gift/i.test(await page.evaluate(() => window.__gtb.state().flash)
   'and the board says so on the way in',
   await page.evaluate(() => window.__gtb.state().flash));
 
-/* A layout that wins this board, found the way every other section finds one. */
-const gWin = await page.evaluate(i => {
-  const g = window.__gtb, R = Math.PI / 180;
-  const ramp = (cx, cy, d, l = 120) => { const a = d * R,
-    hx = Math.cos(a) * l / 2, hy = Math.sin(a) * l / 2;
-    return { x1: cx - hx, y1: cy - hy, x2: cx + hx, y2: cy + hy }; };
-  const lv = g.LEVELS[i], sx = lv.spawn.x;
-  for (let ry = lv.spawn.y + 80; ry <= 700; ry += 10)
-    for (let th = 20; th <= 160; th += 1.5)
-      for (const cfg of [[ramp(sx, ry, th)]])
-        if (g.simulate(cfg, 1, i).result === 'win') { g.setRamps(cfg); g.setSeed(1); return true; }
-  return false;
-}, GIX);
-check(gWin, `level ${gifted[0].id} is winnable with one ramp (test setup)`);
-
+/* Won the way every other section wins a board: winLevel() finds a layout
+   (two ramps on an exam board) and drops it at the phase it was found at. */
 const gBefore = await page.evaluate(() => ({ coins: window.__gtb.coins(),
                                             balls: window.__gtb.balls(),
                                             ramps: window.__gtb.spareRamps(),
                                             springs: window.__gtb.springInfo().owned,
                                             bonus: window.__gtb.bonusSpins() }));
-await dropBall();
+const gWin = await winLevel(GIX);
+check(gWin, `level ${gifted[0].id} is winnable (test setup)`);
 await page.waitForSelector('#giftpanel', { timeout: 25000 });
 gi = await page.evaluate(() => window.__gtb.giftInfo());
 check(!!gi.showing, 'winning it opens the gift panel with a prize behind the wrapping',

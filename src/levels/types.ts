@@ -50,12 +50,18 @@ export type StarDef = Vec;
     level's data having to change when the prize table is retuned. */
 export type BoxDef = Vec;
 
+/** A big solid OVAL. Centre, the two semi-axes, and a tilt in degrees
+    (clockwise on screen). It collides as a closed ring of wall segments -
+    see levels/ovals.ts - so it is a wall the ball goes round, not a red
+    obstacle that scatters it. */
+export interface OvalDef extends Vec { rx: number; ry: number; angle?: number; }
+
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
     the same shape of data - what differs is entirely what contact means. The
     red obstacle deflects; this ends the drop. */
 export type FireDef = Circle;
 
-/** Horizontal-only patrol for a target.
+/** A patrol for a target: side to side, or up and down with y0/y1.
 
     `x0`/`x1` bound the target CENTRE, and `period` is the full round trip in
     simulation STEPS - steps rather than seconds because the step count is the
@@ -67,7 +73,13 @@ export type FireDef = Circle;
     player drew a ramp in, which is precisely the bug that got moving targets
     cut the first time. This mechanic is therefore confined to OPEN targets,
     which have no walls to drag - initLevel() enforces it. */
-export interface TargetMove { x0: number; x1: number; period: number; }
+export interface TargetMove {
+  x0: number; x1: number;
+  /** Optional vertical waypoints. When set, the target travels the straight
+      line from (x0, y0) to (x1, y1), so x0 === x1 gives an up-and-down patrol. */
+  y0?: number; y1?: number;
+  period: number;
+}
 
 export type TargetType = 'OPEN' | 'SIDE_WALL' | 'POCKET' | 'NARROW_GAP' | 'ENCLOSED';
 export type WallSide = 'left' | 'right';
@@ -97,6 +109,7 @@ export interface RawLevel {
   breakables?: BreakableDef[];
   stars?: StarDef[];
   fires?: FireDef[];
+  ovals?: OvalDef[];
   /** Optional bonus pickups. Scenery to the physics, like stars: a box can
       never change where the ball goes, which is what makes it safe to add to
       a level whose solution is already proved. */
@@ -142,6 +155,7 @@ export interface Level extends RawLevel {
   stars: StarDef[];
   fires: FireDef[];
   boxes: BoxDef[];
+  ovals: OvalDef[];
   walls: Segment[];
 }
 

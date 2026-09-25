@@ -24,16 +24,27 @@ import { attachHarness } from './harness.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
+import esbuild from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRITE = process.argv.includes('--write');
+
+/* The glow multiples the entities draw with - see src/render/glow.ts. A box
+   blooms well past its collection radius, and that bloom may not cross any
+   other object's visible edge, fire haze and target halo included. */
+const GLOW = await (async () => {
+  const out = await esbuild.build({ entryPoints: [path.join(root, 'src/render/glow.ts')],
+                                    bundle: true, write: false, format: 'esm', platform: 'node' });
+  return { ...(await import('data:text/javascript;base64,' +
+                            Buffer.from(out.outputFiles[0].text).toString('base64'))) };
+})();
 
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
 page.on('pageerror', e => console.log('  PAGE ERROR:', e.message));
 await attachHarness(page);
 
-const placed = await page.evaluate(() => {
+const placed = await page.evaluate(({ FIRE_GLOW, TARGET_GLOW, BOX_GLOW, GLOW_PAD }) => {
   const g = window.__gtb, { LEVELS, CONSTS, MECH } = g;
   const R = Math.PI / 180;
   /* READ FROM THE GAME, never copied: the box's collection radius is what
@@ -78,25 +89,31 @@ const placed = await page.evaluate(() => {
       bare.some(p => Math.hypot(p.x - x, p.y - y) <= BOX_R + CONSTS.BALL_R + 14);
 
     /* ---- what a spot has to clear ---- */
+    /* `vr` is how far each one is SEEN to reach - its glow, or its rim */
     const circles = [
-      ...lv.obstacles.map(o => ({ ...o, pad: 12 })),
-      ...lv.fires.map(o => ({ ...o, pad: 16 })),
-      ...lv.breakables.map(o => ({ ...o, pad: 12 })),
-      ...lv.boosters.map(o => ({ ...o, pad: 14 })),
-      { ...lv.target, pad: 34 },      // never on the target or its mouth
+      ...lv.obstacles.map(o => ({ ...o, pad: 12, vr: o.r })),
+      ...lv.fires.map(o => ({ ...o, pad: 16, vr: o.r * FIRE_GLOW })),
+      ...lv.breakables.map(o => ({ ...o, pad: 12, vr: o.r })),
+      ...lv.boosters.map(o => ({ ...o, pad: 14, vr: o.r })),
+      { ...lv.target, pad: 34, vr: lv.target.r * TARGET_GLOW },  // never on the target or its mouth
     ];
+    const boxGlow = BOX_R * BOX_GLOW;
     const ok = (x, y) => {
       if (x < 46 || x > CONSTS.W - 46 || y < 150 || y > CONSTS.H - 130) return false;
       if (Math.hypot(x - sx, y - lv.spawn.y) < 90) return false;
-      for (const c of circles) if (Math.hypot(x - c.x, y - c.y) < c.r + BOX_R + c.pad) return false;
+      for (const c of circles) {
+        const d = Math.hypot(x - c.x, y - c.y);
+        if (d < c.r + BOX_R + c.pad || d < c.vr + boxGlow + GLOW_PAD) return false;
+      }
       for (const w of lv.walls) if (distToSeg(x, y, w) < BOX_R + CONSTS.WALL_HT + 10) return false;
       /* A patrolling target sweeps a band, so the whole sweep is off limits,
          not just where it happens to start. */
       if (lv.targetMove) {
         const t = lv.target;
-        if (y > t.y - t.r - BOX_R - 34 && y < t.y + t.r + BOX_R + 34 &&
-            x > Math.min(lv.targetMove.x0, lv.targetMove.x1) - t.r - BOX_R - 34 &&
-            x < Math.max(lv.targetMove.x0, lv.targetMove.x1) + t.r + BOX_R + 34) return false;
+        const m = Math.max(t.r + BOX_R + 34, t.r * TARGET_GLOW + boxGlow + GLOW_PAD);
+        if (y > t.y - m && y < t.y + m &&
+            x > Math.min(lv.targetMove.x0, lv.targetMove.x1) - m &&
+            x < Math.max(lv.targetMove.x0, lv.targetMove.x1) + m) return false;
       }
       return !onBareLine(x, y);
     };
@@ -153,7 +170,7 @@ const placed = await page.evaluate(() => {
       : { id: lv.id, x: null, y: null, detour: 0 });
   }
   return out;
-});
+}, GLOW);
 
 await browser.close();
 

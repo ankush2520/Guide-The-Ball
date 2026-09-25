@@ -39,6 +39,9 @@ try {
   /* The booster/box solver gate. Headless like the two above: it proves
      claims about LEVELS against the simulator, and needs no app. */
   await run('node', ['tests/items.test.mjs']);
+  /* What the first two worlds look like: no clustering, no crossed glows.
+     Reads the data only. */
+  await run('node', ['tests/spread.test.mjs']);
 
   /* ---- the real app ---- */
   console.log('\nbuilding for the UI tests…');

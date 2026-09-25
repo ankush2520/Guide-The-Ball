@@ -42,7 +42,8 @@ export function targetAt(lv: Pick<RawLevel, 'target' | 'targetMove'>, t: number)
      +p handles a negative t rather than trusting callers not to pass one. */
   const k = (((t % p) + p) % p) / p;
   const tri = k < 0.5 ? k * 2 : 2 - k * 2;      // 0 -> 1 -> 0
-  return { x: mv.x0 + (mv.x1 - mv.x0) * tri, y: lv.target.y, r: lv.target.r };
+  const y0 = mv.y0 ?? lv.target.y, y1 = mv.y1 ?? lv.target.y;
+  return { x: mv.x0 + (mv.x1 - mv.x0) * tri, y: y0 + (y1 - y0) * tri, r: lv.target.r };
 }
 
 /** Whether this level's target patrols at all. Cheaper to read than the

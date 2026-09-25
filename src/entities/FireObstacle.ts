@@ -1,5 +1,6 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { FireDef } from '../levels/types';
+import { FIRE_GLOW } from '../render/glow';
 
 /* ============================================================
    FIRE - the hazard that ends the run
@@ -58,12 +59,12 @@ export class FireObstacle extends Entity<FireDef> {
     ctx.save();
 
     // heat haze, wider and hotter than the obstacle's cool red bloom
-    const bloom = ctx.createRadialGradient(o.x, o.y, o.r * 0.5, o.x, o.y, o.r * 2.15);
+    const bloom = ctx.createRadialGradient(o.x, o.y, o.r * 0.5, o.x, o.y, o.r * FIRE_GLOW);
     bloom.addColorStop(0,   'rgba(255,120,40,.34)');
     bloom.addColorStop(0.5, 'rgba(255,70,40,.16)');
     bloom.addColorStop(1,   'rgba(255,60,40,0)');
     ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 2.15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r * FIRE_GLOW, 0, Math.PI * 2); ctx.fill();
 
     /* The flame body. `up` is 1 straight up and 0 straight down, so the
        tongues only ever grow upward - fire that licked sideways and down

@@ -109,6 +109,30 @@ const report = await page.evaluate(([lo, hi]) => {
         }
     }
 
+    /* ---- the long way round, exactly as the generator finds it ----
+       An exam route goes out PAST the target's far side and comes back in,
+       so the second ramp belongs where the traced ball crosses the far side
+       at about the target's height - not on every sixth sample of the arc.
+       This is tools/genlevels.mjs's own search; without it a board the
+       generator proved could be reported here as having no solution. */
+    if (lv.maxBlocks >= 2 && !best.tol && !sols2){
+      const dir = sx < CONSTS.W / 2 ? 1 : -1, tc = lv.target, mv = lv.targetMove;
+      const farEdge = mv ? (dir > 0 ? Math.max(mv.x0, mv.x1) : Math.min(mv.x0, mv.x1)) : tc.x;
+      const line = farEdge + dir * (tc.r + 30);
+      for (let ry = lv.spawn.y + 70; ry <= lv.spawn.y + 200 && sols2 < 40; ry += 16)
+        for (let t1 = 22; t1 <= 158 && sols2 < 40; t1 += 6){
+          const r1 = ramp(sx, ry, t1);
+          const pts = window.__gtb.trace([r1], 1, li).samples
+            .filter(p => dir * (p.x - line) > 12 && p.y > tc.y - 130 && p.y < tc.y + 50);
+          route:
+          for (let k = 0; k < pts.length; k += Math.max(1, Math.floor(pts.length / 5)))
+            for (let t2 = 20; t2 <= 160; t2 += 7){
+              const cfg = [r1, ramp(pts[k].x + dir * 6, pts[k].y + 6, t2, 100)];
+              if (wins(cfg)){ sols2++; if (!best2cfg) best2cfg = cfg; break route; }
+            }
+        }
+    }
+
     /* ---- the drop window, on a patrolling board ----
        The target is already moving while the player plans, so a solution is
        a layout AND a moment to let go. How many consecutive drop phases the

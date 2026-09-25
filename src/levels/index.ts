@@ -4,6 +4,7 @@ import type { Level, RawLevel, Country } from './types';
 import { RAW_LEVELS } from './levels.data';
 import { COUNTRIES } from './countries.data';
 import { buildWalls } from './walls';
+import { ovalSegments } from './ovals';
 import { validatePatrol } from './patrol';
 import { WIND_CAP } from '../physics/constants';
 import { clamp } from '../physics/math';
@@ -19,6 +20,7 @@ export function initLevel(raw: RawLevel): Level {
     stars: raw.stars ?? [],
     fires: raw.fires ?? [],
     boxes: raw.boxes ?? [],
+    ovals: raw.ovals ?? [],
     walls: [],
   };
   /* A patrol that breaks the moving target's authoring rules - walled, off
@@ -30,13 +32,13 @@ export function initLevel(raw: RawLevel): Level {
   if (bad) throw new Error(bad);
   /* The authored centre and the patrol's start are the same place, so the
      board a player plans against is the board at t=0 whichever field is read. */
-  if (lv.targetMove) lv.target = { ...lv.target, x: lv.targetMove.x0 };
+  if (lv.targetMove) lv.target = { ...lv.target, x: lv.targetMove.x0, y: lv.targetMove.y0 ?? lv.target.y };
   // a level may never configure wind stronger than the ceiling
   for (const z of lv.wind) {
     z.ax = clamp(z.ax || 0, -WIND_CAP, WIND_CAP);
     z.ay = clamp(z.ay || 0, -WIND_CAP, WIND_CAP);
   }
-  lv.walls = buildWalls(lv, lv.target);
+  lv.walls = [...buildWalls(lv, lv.target), ...lv.ovals.flatMap(o => ovalSegments(o))];
   return lv;
 }
 

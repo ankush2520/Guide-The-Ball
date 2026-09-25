@@ -26,6 +26,7 @@ import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { BoxDef } from '../levels/types';
 import { BOX_R } from '../physics/constants';
 import { INK } from '../render/palette';
+import { BOX_GLOW } from '../render/glow';
 
 /* Gift wrap and its ribbon. The wrap is its own family - nothing else on the
    board is magenta - and the ribbon is the game's gold.
@@ -76,11 +77,11 @@ export class MysteryBox extends Entity<BoxDef> {
     }
 
     const glow = 0.5 + 0.5 * Math.sin(t);
-    const bloom = ctx.createRadialGradient(0, 0, BOX_R * 0.4, 0, 0, BOX_R * 2.1);
+    const bloom = ctx.createRadialGradient(0, 0, BOX_R * 0.4, 0, 0, BOX_R * BOX_GLOW);
     bloom.addColorStop(0, `rgba(255,197,58,${0.26 + glow * 0.16})`);
     bloom.addColorStop(1, 'rgba(255,197,58,0)');
     ctx.fillStyle = bloom;
-    ctx.beginPath(); ctx.arc(0, 0, BOX_R * 2.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, BOX_R * BOX_GLOW, 0, Math.PI * 2); ctx.fill();
 
     // the shadow it casts, so the present sits ON the board like everything else
     ctx.fillStyle = 'rgba(42,35,80,.20)';

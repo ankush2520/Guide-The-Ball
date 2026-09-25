@@ -10,12 +10,32 @@
  * level is reported as a template problem - never shipped unverified.
  */
 import { chromium } from 'playwright';
+import esbuild from 'esbuild';
 import { attachHarness } from './harness.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/* How far each glow reaches, read from the file the entities DRAW with - see
+   src/render/glow.ts. Bundled rather than copied, so a bloom widened there
+   is given room by the next regeneration without anyone editing this file. */
+const { FIRE_GLOW, TARGET_GLOW, GLOW_PAD, BALL_R } = await (async () => {
+  const out = await esbuild.build({ stdin: { contents: `export * from './src/render/glow';
+                                                        export { BALL_R } from './src/physics/constants';`,
+                                             resolveDir: root, loader: 'ts' },
+                                    bundle: true, write: false, format: 'esm', platform: 'node' });
+  return import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+})();
+/* THE PASSABLE GAP. Between any two hazards - obstacle, fire or breakable,
+   same kind or not - the edge-to-edge gap is at least the ball's diameter,
+   so every gap on a board is one the ball can actually be routed through.
+   Anything narrower is not an obstacle, it is a dead zone: measured in the
+   simulator, a straight drop between two obstacles is blocked on every seed
+   at a 16px gap and gets through on every seed at 17px and up. Read from
+   BALL_R, never typed, so a resized ball resizes the rule.
+   tools/checkSpacing.mjs holds every shipped level 1-40 to it. */
+const MIN_GAP = 2 * BALL_R;
 const WORLD = Number(process.argv[2]);
 const WRITE = process.argv.includes('--write');
 const VERBOSE = process.argv.includes('--verbose');
@@ -50,9 +70,16 @@ const rint = (r, lo, hi) => Math.round(rng(r, lo, hi));
    Emberkeep (21-40). */
 /* ---------------------------------------------------------------- */
 
-/** Distance from a point to every existing circle, for overlap rejection. */
+/** Distance from a point to every existing circle, for overlap rejection.
+    Used for keep-outs round a target, a star or the spawn; the pad is how
+    much room THAT thing needs. Hazard to hazard goes through spaced(). */
 function clear(pt, rad, list, pad = 12){
   return list.every(o => Math.hypot(o.x - pt.x, o.y - pt.y) > o.r + rad + pad);
+}
+/** Hazard to hazard: centres at least r1 + r2 + MIN_GAP apart, so the ball
+    fits through between any two. */
+function spaced(o, list){
+  return list.every(q => Math.hypot(q.x - o.x, q.y - o.y) >= q.r + o.r + MIN_GAP);
 }
 
 const SPECS = {
@@ -73,7 +100,7 @@ const SPECS = {
          1-3     1 -> 3, one ramp, a lesson each
          4-10    4 -> 9, two ramps, the field fills
          11-14   10 -> 13, the first walls round the target
-         15-20   14 -> 19, the final exam
+         15-20   14 -> 18, the final exam (a patrol counts as one)
 
        SPACIOUS, NOT CLUSTERED. Obstacles are laid in horizontal
        bands down the whole play area, each band filled across the
@@ -134,7 +161,7 @@ const SPECS = {
 
          21        1   one fire in the fall line, nothing else
          22-34     2 -> 10, a steady climb, a step every city or two
-         35-39     12 -> 20, the final exam
+         35-39     12 -> 17, the final exam
          40        the hand-tuned spring boss, kept as written
 
        THREE PHASES, keyed off the city index so the same shape
@@ -176,8 +203,9 @@ const SPECS = {
            (requireCross): a route that reaches the target without
            going past its far side rejects the board.
 
-       MOVING TARGETS are a tool here, not a rule: two cities of
-       the final five patrol (EMBER_MOVERS - 36, and 39 to close). A patrol has to matter - the
+       MOVING TARGETS are a tool here, not a rule: three middle
+       cities (28, 31, 34 - EMBER_FIELD_MOVERS) and two of the final
+       five (EMBER_MOVERS - 36, and 39 to close). A patrol has to matter - the
        winning route must lose against a frozen copy of the target
        - or the city is rejected as decoration.
        ============================================================ */
@@ -252,7 +280,7 @@ const SPECS = {
         const o = { x: rint(r, 60, 420), y: rint(r, 240, 560), r: rint(r, 24, 32) };
         if (o.y > target.y - 110) continue;          // keep the approach clean
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       return {
@@ -306,7 +334,7 @@ const SPECS = {
         const o = { x: rint(r, 60, 420), y: rint(r, 300, 600), r: rint(r, 26, 34) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       return { name: pick(r, last ? ['The Gale'] : WIND_NAMES), maxBlocks: 2,
@@ -347,7 +375,7 @@ const SPECS = {
         const o = { x: rint(r, 60, 420), y: rint(r, 260, 560), r: rint(r, 26, 34) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       return { name: pick(r, last ? ['Black Ice'] : ICE_NAMES), maxBlocks: 2,
@@ -412,7 +440,7 @@ const SPECS = {
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
         /* the tight pad is the point: 10px between rims is a gap a ball can
            be aimed through, where the usual 16 is a corridor it falls down */
-        if (!clear(o, o.r, obstacles, 10)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       if (obstacles.length < want - 1) return null;
@@ -462,7 +490,7 @@ const SPECS = {
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
         if (!clear(o, o.r, stars.map(st => ({ ...st, r: 14 })), 12)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       return { name: pick(r, last ? ['Constellation'] : STAR_NAMES), maxBlocks: 2,
@@ -514,7 +542,7 @@ const SPECS = {
         const o = { x: rint(r, 55, 425), y: rint(r, 240, 640), r: rint(r, 24, 32) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!clear(o, o.r, obstacles, 16)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       return { name: pick(r, last ? ['The Cataract'] : FALL_NAMES), maxBlocks: 3,
@@ -549,7 +577,7 @@ const SPECS = {
         const o = { x: rint(r, 55, 425), y: rint(r, 240, 620), r: rint(r, 22, 30) };
         if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 24 }], 12)) continue;
         if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 190) continue;
-        if (!clear(o, o.r, obstacles, 14)) continue;
+        if (!spaced(o, obstacles)) continue;
         obstacles.push(o);
       }
       return { name: pick(r, last ? ['The Forgeworks'] : IRON_NAMES),
@@ -637,9 +665,9 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
   while (lv.obstacles.length < wantOb && guard++ < 240){
     const o = { x: rint(r, 60, 420), y: rint(r, 260, 600), r: rint(r, 24, 32) };
     if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-    if (!clear(o, o.r, solids, 22)) continue;
+    if (!spaced(o, solids)) continue;
     if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-    if (!clear(o, o.r, lv.obstacles, 16)) continue;
+    if (!spaced(o, lv.obstacles)) continue;
     lv.obstacles.push(o);
   }
   lv.name = last ? bossName : pick(r, names);
@@ -658,8 +686,8 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
    SPACING. A free-standing object keeps FREE_GAP of clear air to every other
    one, rim to rim: wider than the ball, so a dense board is still a field to
    thread, and wide enough that nothing is ever drawn touching. The pieces of
-   an exam CAGE are the one exception - see CAGE_GAP - and even they never
-   touch.
+   an exam CAGE sit closer, at MIN_GAP - the floor no two hazards anywhere
+   may go below, because it is the ball's own width.
 
    COVERAGE. Objects are laid in horizontal BANDS down the play area, about
    one band per two or three objects, and each band is filled across the
@@ -667,12 +695,36 @@ function combo(r, i, n, taken, want, names, bossName, hard = false){
    spots, the one farthest from everything already placed wins. Bands stop
    a field piling into one height; best-candidate stops it piling into one
    side. covers() then refuses any board that still leaves a whole third of
-   the board - a column or a row - empty. */
+   the board - a column or a row - empty.
+
+   GLOW. Spacing is measured to what the player SEES, not only to the body
+   the ball hits. A fire paints a heat haze out to FIRE_GLOW times its
+   radius, so two fires whose bodies clear FREE_GAP can still smear into one
+   blob on screen. need() therefore asks for both: the bodies keep their
+   gap, and when either object glows, the visible edges keep GLOW_PAD too -
+   fire to fire, fire to obstacle, fire to breakable. Obstacle to obstacle
+   is unchanged: neither glows. To make that possible an object's KIND is
+   decided before it is placed, not dealt out afterwards. */
 const FREE_GAP = 30;
-/* A cage (guard, lid, floor) has to be SEALED - no gap the ball fits
-   through - and still read as separate pieces: 10-12px of air between
-   them, against a ball 18px across. */
-const CAGE_GAP = 11;
+
+/** Where what the player sees of an object ends: its glow if it has one. */
+const vis = o => o.vr ?? o.r;
+/** The centre distance two objects need: `gap` between bodies - never less
+    than MIN_GAP, the ball's width - and, when either glows, GLOW_PAD between
+    the visible edges as well. */
+function need(a, b, gap){
+  const body = a.r + b.r + Math.max(gap, MIN_GAP);
+  return (vis(a) > a.r || vis(b) > b.r) ? Math.max(body, vis(a) + vis(b) + GLOW_PAD) : body;
+}
+const apart = (a, b, gap) => Math.hypot(a.x - b.x, a.y - b.y) >= need(a, b, gap);
+/** A placed object of a kind: 'f' fire (glows), 'b' breakable, 'o' obstacle. */
+const piece = (kind, x, y, r) => kind === 'f' ? { x, y, r, vr: r * FIRE_GLOW, kind } : { x, y, r, kind };
+/* A cage (guard, lid, floor) used to be SEALED, 11px between pieces - a
+   gap the ball cannot pass, which made it a wall with holes painted on and
+   level 15 a basket nothing gets into from the side. No exception any more:
+   its pieces keep MIN_GAP like every other pair, so the ball can be routed
+   through any of them. */
+const CAGE_GAP = MIN_GAP;
 const CAGE_R = 19;
 const CAGE_STEP = 2 * CAGE_R + CAGE_GAP;
 
@@ -688,49 +740,54 @@ function clearOfRects(o, rects, pad = 8){
 /** Best-candidate placement (Mitchell's algorithm) inside one region: each
     object is the candidate, of `tries`, farthest from everything already on
     the board. The side walls count as neighbours too, so a field does not
-    hug the edge of the board. */
-function spreadOut(r, want, region, radius, placed, keep, rects, gap, tries = 40){
-  const out = [];
-  for (let k = 0; k < want; k++){
+    hug the edge of the board. `kinds` is one entry per object to place, so
+    a fire is spaced by its glow from the moment it is a candidate. Returns
+    what it placed and the kinds it found no room for. */
+function spreadOut(r, kinds, region, radius, placed, keep, rects, gap, tries = 40){
+  const out = [], missed = [];
+  for (const kind of kinds){
     let best = null, bestScore = -Infinity;
     for (let c = 0; c < tries; c++){
       const rad = rint(r, radius[0], radius[1]);
-      const o = { x: rint(r, Math.max(region.x0, rad + 8), Math.min(region.x1, W - rad - 8)),
-                  y: rint(r, region.y0, region.y1), r: rad };
-      if (!clear(o, o.r, keep, 14)) continue;
-      if (!clear(o, o.r, placed, gap) || !clear(o, o.r, out, gap)) continue;
+      const o = piece(kind, rint(r, Math.max(region.x0, rad + 8), Math.min(region.x1, W - rad - 8)),
+                      rint(r, region.y0, region.y1), rad);
+      if (!keep.every(q => apart(o, q, 14))) continue;
+      if (!placed.every(q => apart(o, q, gap)) || !out.every(q => apart(o, q, gap))) continue;
       if (!clearOfRects(o, rects)) continue;
+      /* scored on VISIBLE edges, so a fire is steered toward open air */
       let score = Math.min(o.x - o.r, W - o.x - o.r);
-      for (const q of placed) score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - q.r - o.r);
-      for (const q of out)    score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - q.r - o.r);
-      for (const q of keep)   score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - q.r - o.r);
+      for (const q of [...placed, ...out, ...keep])
+        score = Math.min(score, Math.hypot(q.x - o.x, q.y - o.y) - vis(q) - vis(o));
       if (score > bestScore){ bestScore = score; best = o; }
     }
-    if (!best) break;
-    out.push(best);
+    if (best) out.push(best); else missed.push(kind);
   }
-  return out;
+  return { out, missed };
 }
 
-/** `want` objects laid in horizontal bands down `region`, each band filled
-    across the full width. Whatever a band could not take (a keep-out ate it)
-    is topped up anywhere in the region, still by best-candidate. */
-function bandSpread(r, want, region, radius, placed, keep, rects, gap = FREE_GAP){
+/** `kinds.length` objects laid in horizontal bands down `region`, each band
+    filled across the full width. Whatever a band could not take (a keep-out
+    ate it) is topped up anywhere in the region, still by best-candidate. */
+function bandSpread(r, kinds, region, radius, placed, keep, rects, gap = FREE_GAP){
+  const want = kinds.length;
   if (want <= 0) return [];
   const nb = Math.max(1, Math.round(want / 2.5));
   const h = (region.y1 - region.y0) / nb;
   const counts = new Array(nb).fill(Math.floor(want / nb));
   const order = [...counts.keys()].sort(() => r() - 0.5);
   for (let k = 0; k < want - Math.floor(want / nb) * nb; k++) counts[order[k]]++;
-  const out = [];
+  const out = [], missed = [];
+  let next = 0;
   for (let b = 0; b < nb; b++){
     const band = { x0: region.x0, x1: region.x1,
                    y0: Math.round(region.y0 + b * h), y1: Math.round(region.y0 + (b + 1) * h) };
-    out.push(...spreadOut(r, counts[b], band, radius, [...placed, ...out], keep, rects, gap));
+    const got = spreadOut(r, kinds.slice(next, next + counts[b]), band, radius,
+                          [...placed, ...out], keep, rects, gap);
+    next += counts[b];
+    out.push(...got.out); missed.push(...got.missed);
   }
-  if (out.length < want)
-    out.push(...spreadOut(r, want - out.length, region, radius, [...placed, ...out],
-                          keep, rects, gap, 80));
+  if (missed.length)
+    out.push(...spreadOut(r, missed, region, radius, [...placed, ...out], keep, rects, gap, 80).out);
   return out;
 }
 
@@ -745,7 +802,35 @@ function covers(objs){
   const cols = new Set(objs.map(col)), rows = new Set(objs.map(row));
   if (cols.size < 3 || rows.size < 3) return false;
   if (objs.length >= 12 && new Set(objs.map(o => col(o) + 3 * row(o))).size < 7) return false;
+  if (emptiest(objs) > MAX_EMPTY) return false;
   return true;
+}
+
+/* THE HOLE. Thirds can all be occupied and the board still carry one big
+   bare patch - measured, spacing fires by their glow pushed six-to-nine
+   piece boards to 290px holes that covers() alone let through. So the
+   largest empty square anywhere in the play area is capped as well. 260px
+   is a little over what an even spread of six leaves (~225px). The same
+   measurement tools/audit-spread.mjs reports. */
+const MAX_EMPTY = 260;
+/** Side of the largest axis-aligned square in the play area, wall to wall
+    and from under the spawn to the floor, that no body touches. */
+function emptiest(objs){
+  const X0 = 0, X1 = W, Y0 = 110, Y1 = 745;
+  let best = 0;
+  for (let x = X0; x < X1; x += 8)
+    for (let y = Y0; y < Y1; y += 8){
+      let lo = best, hi = Math.min(X1 - x, Y1 - y);
+      if (hi <= lo) continue;
+      const free = sz => objs.every(o => {
+        const nx = Math.max(x, Math.min(o.x, x + sz)), ny = Math.max(y, Math.min(o.y, y + sz));
+        return Math.hypot(o.x - nx, o.y - ny) > o.r;
+      });
+      if (!free(lo + 1)) continue;
+      while (hi - lo > 1){ const m = (lo + hi) >> 1; if (free(m)) lo = m; else hi = m; }
+      best = lo;
+    }
+  return best;
 }
 
 /* THE WHOLE PLAY AREA the free objects are spread over: under the spawn's
@@ -756,9 +841,13 @@ const FIELD = { x0: 30, x1: 450, y0: 110, y1: 745 };
 /* VERDHOLM - see the country's note in SPECS above                  */
 /* ---------------------------------------------------------------- */
 
-/* Obstacles per level, 1..20. Level N carries about N of them. */
+/* Obstacles per level, 1..20. Level N carries about N of them - up to the
+   final exam, which levels off at 14-18 hazards (a patrol counts as one).
+   Twenty pieces on a 480px board reads as noise however well it is spaced;
+   past this point difficulty comes from the cage, the patrol and the ramp
+   count, not from cramming. */
 const VERD_DENSITY = [1, 2, 3, 4, 4, 5, 6, 7, 8, 9,
-                      10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+                      10, 11, 12, 13, 14, 15, 15, 17, 16, 17];
 /* The names the hand-made twenty shipped with, kept: a player who knows
    "Master's Drop" as the finale should still find it there. */
 const VERD_NAMES = ['First Drop', 'Long Reach', 'Watch Out', 'Two Steps', 'Around It',
@@ -771,12 +860,13 @@ const VERD_MOVERS = new Set([16, 18, 19]);
    two patrols that start from the same side never want the same few pixels
    (a patrol starts at its near end). true = spawn on the left.
 
-   Three movers means two have to share a side. Measured: with 17 and 20
-   both on the left, 20's lane was boxed in by the four exam targets before
-   it and every board it could still build was "too easy for 2 ramps" - no
-   level 20 in 240 candidates. 17 and 20 on the right, 19 on the left, and
-   all six exam boards pass. */
-const VERD_EXAM_LEFT = { 14: true, 15: false, 16: false, 17: true, 18: true, 19: false };
+   Three movers means two have to share a side, and which two is decided by
+   the targets before 20 as much as by 20 itself: the upper-middle band they
+   all share is barely wider than the spread rule, so level 20 can find its
+   lane already taken ("target too close to another") and never be built.
+   Re-measure this whenever the exam builder or its densities change - with
+   the current ones, 17 and 19 on the right and 20 on the left pass all six. */
+const VERD_EXAM_LEFT = { 14: true, 15: false, 16: false, 17: true, 18: false, 19: true };
 
 function verdPhase(i){ return i < 10 ? 'early' : i < 14 ? 'middle' : 'final'; }
 
@@ -792,7 +882,7 @@ function verdField(r, i, taken){
   const keep = [{ x: target.x, y: target.y, r: target.r + 30 }];
   const rects = [{ x: spawn.x - 55, y: 40, w: 110, h: 190 }];
   const rMax = Math.max(19, Math.min(34, 37 - N)), rMin = rMax - 6;
-  const obstacles = bandSpread(r, N, FIELD, [rMin, rMax], [], keep, rects);
+  const obstacles = bandSpread(r, Array(N).fill('o'), FIELD, [rMin, rMax], [], keep, rects);
   if (obstacles.length < N || !covers(obstacles)) return null;
   const WALLS = ['SIDE_WALL', 'POCKET', 'NARROW_GAP', 'POCKET'];
   const targetType = middle ? WALLS[i - 10] : 'OPEN';
@@ -819,13 +909,18 @@ function verdExam(r, i, taken){
    never generated). A moving target counts as one. */
 const EMBER_DENSITY = [1, 2, 3, 3, 4, 4, 5,          // 21-27 early
                        6, 6, 7, 8, 8, 9, 10,         // 28-34 middle
-                       12, 14, 16, 18, 20];          // 35-39 final exam
+                       12, 13, 15, 16, 17];          // 35-39 final exam, capped at 17
 /* Which final-exam cities patrol their target, by city index: 36, and 39 to
    close the world. One right-spawn board and one left-spawn board on
    purpose - a patrol STARTS at its near end, and two from the same side
    would both want the same few pixels, which the spread rule between a
    country's targets will not allow. */
 const EMBER_MOVERS = new Set([15, 18]);
+/* ...and three middle-phase cities before them, 28, 31 and 34, so the patrol
+   is a presence across the world's back half rather than two late surprises.
+   These are the ordinary field boards with the low target set moving along
+   the far side - see lowPatrol(). */
+const EMBER_FIELD_MOVERS = new Set([7, 10, 13]);
 
 function emberPhase(i){ return i < 7 ? 'early' : i < 14 ? 'middle' : 'final'; }
 function emberCount(i){ return EMBER_DENSITY[Math.min(i, EMBER_DENSITY.length - 1)]; }
@@ -848,7 +943,9 @@ function emberMix(N, phase){
 function emberField(r, i, taken){
   const phase = emberPhase(i);
   const mid = phase === 'middle';
-  const N = emberCount(i);
+  const mover = EMBER_FIELD_MOVERS.has(i);
+  /* a patrol is one of the city's hazards, so it comes out of the pieces */
+  const N = emberCount(i) - (mover ? 1 : 0);
   const { F, B, O } = emberMix(N, phase);
   const leftSpawn = i % 2 === 0;
   const spawn = { x: leftSpawn ? rint(r, 80, 170) : rint(r, 310, 400), y: 40 };
@@ -857,30 +954,43 @@ function emberField(r, i, taken){
      nothing and you burn, so the first ramp is not an optimisation, it is
      the only way the drop survives. Placed high enough that the player has
      room to turn the ball before reaching it. */
-  const fall = { x: clampX(spawn.x + rint(r, -10, 10), 40), y: rint(r, 215, 300), r: rint(r, 24, 30) };
-  const target = lowTarget(r, spawn, leftSpawn, taken, mid ? 34 : 38, [fall]);
+  const fall = piece('f', clampX(spawn.x + rint(r, -10, 10), 40), rint(r, 215, 300), rint(r, 24, 30));
+  const big = mid ? 34 : 38;
+  let target = null, targetMove = null;
+  if (mover){
+    const p = lowPatrol(r, spawn, leftSpawn, taken, big, [fall]);
+    if (p) ({ target, targetMove } = p);
+  } else target = lowTarget(r, spawn, leftSpawn, taken, big, [fall]);
   if (!target) return null;
 
   /* Everything else - the other fires, the breakables, the obstacles - is
-     spread over the whole board in bands, then dealt out as kinds in a
-     shuffled order so no kind collects in one place. Radii shrink as the
-     count climbs, so a busier board is busier, not solid. */
-  const keep = [{ x: target.x, y: target.y, r: target.r + 30 }];
+     spread over the whole board in bands. The kinds are shuffled FIRST, so
+     no kind collects in one place and each fire is spaced by its glow from
+     the moment it is a candidate. Radii shrink as the count climbs, so a
+     busier board is busier, not solid. A patrol keeps its whole lane clear,
+     not just the spot it starts from. */
+  const lo = targetMove ? Math.min(targetMove.x0, targetMove.x1) : target.x;
+  const hi = targetMove ? Math.max(targetMove.x0, targetMove.x1) : target.x;
+  const keep = [];
+  for (let x = lo; x < hi; x += 12) keep.push({ x, y: target.y, r: target.r + 30 });
+  keep.push({ x: hi, y: target.y, r: target.r + 30 });
   const rects = [{ x: spawn.x - 55, y: 40, w: 110, h: fall.y - fall.r - 50 }];
   const shrink = N >= 8 ? 0.8 : N >= 6 ? 0.9 : 1;
-  const rest = bandSpread(r, N - 1, FIELD, [Math.round(24 * shrink), Math.round(31 * shrink)],
-                          [fall], keep, rects);
-  if (rest.length < N - 1 || !covers([fall, ...rest])) return null;
   const kinds = [...Array(F - 1).fill('f'), ...Array(B).fill('b'), ...Array(O).fill('o')]
     .sort(() => r() - 0.5);
-  const fires = [fall], breakables = [], obstacles = [];
-  rest.forEach((o, k) => (kinds[k] === 'f' ? fires : kinds[k] === 'b' ? breakables : obstacles).push(o));
+  const rest = bandSpread(r, kinds, FIELD, [Math.round(24 * shrink), Math.round(31 * shrink)],
+                          [fall], keep, rects);
+  if (rest.length < N - 1 || !covers([fall, ...rest])) return null;
+  const fires = [fall, ...rest.filter(o => o.kind === 'f')];
+  const breakables = rest.filter(o => o.kind === 'b');
+  const obstacles = rest.filter(o => o.kind === 'o');
 
   /* WALLS enter in the middle phase, exactly where Verdholm put its own.
      SIDE_WALL is a backstop - it catches a long ball and feeds it back - so
-     it belongs to the middle, where a little help is the point. */
-  const targetType = mid ? pick(r, ['OPEN', 'OPEN', 'SIDE_WALL', 'POCKET']) : 'OPEN';
-  return {
+     it belongs to the middle, where a little help is the point. A patrol is
+     always OPEN: its walls would be dragged along with it (levels/patrol). */
+  const targetType = mid && !mover ? pick(r, ['OPEN', 'OPEN', 'SIDE_WALL', 'POCKET']) : 'OPEN';
+  const lv = {
     /* Indexed, not rolled: a twenty-city world rolling a nine-name pool
        produced "Hot Gate" three times. */
     name: FIRE_NAMES[i % FIRE_NAMES.length],
@@ -889,6 +999,8 @@ function emberField(r, i, taken){
     wallSide: leftSpawn ? 'right' : 'left',
     spawn, obstacles, breakables, fires, target
   };
+  if (targetMove) lv.targetMove = targetMove;
+  return lv;
 }
 
 function emberExam(r, i, taken){
@@ -901,15 +1013,44 @@ function emberExam(r, i, taken){
 /* SHARED                                                             */
 /* ---------------------------------------------------------------- */
 
+/** The room a target needs from `avoid`: its old 40px body clearance, and
+    its halo kept off any glow (see need()). */
+const targetRoom = (x, y, tr) => ({ x, y, r: 40, vr: Math.max(40, tr * TARGET_GLOW) });
+
 /** A target LOW and across the board from the spawn, clear of `avoid`. */
 function lowTarget(r, spawn, leftSpawn, taken, big, avoid = []){
   for (let a = 0; a < 260; a++){
     const tx = leftSpawn ? rint(r, 270, 424) : rint(r, 56, 210);
     const ty = rint(r, 545, 740);
+    const tr = rint(r, big - 4, big);
     if (Math.abs(tx - spawn.x) < 150) continue;
     if (taken.some(q => Math.hypot(q.x - tx, q.y - ty) < 44)) continue;
-    if (!clear({ x: tx, y: ty }, 40, avoid, 26)) continue;
-    return { x: tx, y: ty, r: rint(r, big - 4, big) };
+    if (!avoid.every(q => apart(targetRoom(tx, ty, tr), q, 26))) continue;
+    return { x: tx, y: ty, r: tr };
+  }
+  return null;
+}
+
+/** lowTarget's patrolling twin: the same low spot across the board, with the
+    target sliding along the far side. It STARTS at a random end - the board
+    the player plans against shows it there - and the whole lane has to clear
+    `avoid`, because the target passes every point of it. */
+function lowPatrol(r, spawn, leftSpawn, taken, big, avoid = []){
+  for (let a = 0; a < 260; a++){
+    const span = rint(r, 60, 110);
+    const lo = leftSpawn ? rint(r, 250, 424 - span) : rint(r, 56, 230 - span);
+    const hi = lo + span;
+    const ty = rint(r, 560, 700);
+    const tr = rint(r, big - 4, big);
+    if (Math.min(Math.abs(lo - spawn.x), Math.abs(hi - spawn.x)) < 130) continue;
+    const [x0, x1] = r() < 0.5 ? [lo, hi] : [hi, lo];
+    if (taken.some(q => Math.hypot(q.x - x0, q.y - ty) < 44)) continue;
+    let ok = true;
+    for (let x = lo; x <= hi && ok; x += 12)
+      ok = avoid.every(q => apart(targetRoom(x, ty, tr), q, 26));
+    if (!ok) continue;
+    return { target: { x: x0, y: ty, r: tr },
+             targetMove: { x0, x1, period: rint(r, 80, 170) } };
   }
   return null;
 }
@@ -925,9 +1066,10 @@ function lowTarget(r, spawn, leftSpawn, taken, big, avoid = []){
 
    THE CAGE. A hazard in the fall line (the do-nothing drop meets
    it); a GUARD column on the spawn side of the target; a LID
-   over it, sealed to the guard; and for a static target a FLOOR.
-   Open only toward the far side. Its pieces are CAGE_GAP apart:
-   separate to the eye, too narrow for the ball.
+   over it; and for a static target a FLOOR. Its pieces are
+   CAGE_GAP (= MIN_GAP, the ball's width) apart, so it GUARDS the
+   short way in rather than walling it off: the ball can thread a
+   gap in it, but only on an exact line.
 
    A PATROL gets no floor, and that is what makes it matter: a
    ball that arrives when the target is elsewhere drops through.
@@ -942,9 +1084,10 @@ function lowTarget(r, spawn, leftSpawn, taken, big, avoid = []){
    top, and the far side where the second ramp goes: that is the
    route, and a hazard there would simply close it.
 
-   `fire` picks the world's vocabulary: Emberkeep's cage burns
-   (fire in the fall line and the lid) and its free hazards mix
-   fire, breakables and obstacles; Verdholm's is all obstacles.
+   `fire` picks the world's vocabulary: Emberkeep's fall line
+   burns and its free hazards mix fire, breakables and obstacles;
+   Verdholm's is all obstacles. The cage itself is solid in both -
+   its pieces sit closer than a fire's glow reaches (see need()).
    ============================================================ */
 function examBoard(r, taken, { N, mover, leftSpawn, name, fire }){
   const toward = leftSpawn ? 1 : -1;
@@ -988,8 +1131,10 @@ function examBoard(r, taken, { N, mover, leftSpawn, name, fire }){
               : { x: 0, y: flightTop, w: farX, h: ty + tr + 70 - flightTop },
   ];
 
-  /* THE CAGE */
-  const fall = { x: clampX(spawn.x + rint(r, -8, 8), 40), y: rint(r, 250, 310), r: rint(r, 22, 25) };
+  /* THE CAGE. Only the fall-line hazard may burn: the guard, lid and floor
+     are sealed CAGE_GAP apart, far closer than a fire's glow reaches, so a
+     burning lid could only ever be drawn as one smear. */
+  const fall = piece(fire ? 'f' : 'o', clampX(spawn.x + rint(r, -8, 8), 40), rint(r, 250, 310), rint(r, 22, 25));
   const pocket = !mover && pick(r, [true, false]);
   const guardX = near - toward * (tr + 40);
   if (Math.abs(guardX - spawn.x) < CAGE_R + 34) return null;
@@ -1010,27 +1155,25 @@ function examBoard(r, taken, { N, mover, leftSpawn, name, fire }){
       floor.push({ x, y: floorY, r: CAGE_R });
   }
   const cage = [fall, ...guard, ...lid, ...floor];
-  if (!cage.every((a, k) => cage.every((b, m) => m === k ||
-        Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r + CAGE_GAP - 1))) return null;
+  if (!cage.every((a, k) => cage.every((b, m) => m === k || apart(a, b, CAGE_GAP)))) return null;
 
-  /* THE REST, spread over the whole board around the cage */
+  /* THE REST, spread over the whole board around the cage. Kinds first, so
+     each fire is placed with room for its glow. */
   const left = N - (mover ? 1 : 0) - cage.length;
   if (left < 0) return null;
-  const rest = bandSpread(r, left, FIELD, [17, 23], cage, keep, rects);
+  const B = fire ? Math.ceil(left * 0.4) : 0, F = fire ? Math.ceil((left - B) / 2) : 0;
+  const kinds = [...Array(B).fill('b'), ...Array(F).fill('f'), ...Array(left - B - F).fill('o')]
+    .sort(() => r() - 0.5);
+  const rest = bandSpread(r, kinds, FIELD, [17, 23], cage, keep, rects);
   if (rest.length < left) return null;
   if (!covers([...cage, ...rest])) return null;
 
-  /* the world's vocabulary */
-  const obstacles = [], fires = [], breakables = [];
-  if (fire){
-    fires.push(fall, ...lid);
-    obstacles.push(...guard);
-    floor.forEach((o, k) => (k % 2 ? fires : obstacles).push(o));
-    const B = Math.ceil(left * 0.4), F = Math.ceil((left - B) / 2);
-    const kinds = [...Array(B).fill('b'), ...Array(F).fill('f'), ...Array(left - B - F).fill('o')]
-      .sort(() => r() - 0.5);
-    rest.forEach((o, k) => (kinds[k] === 'f' ? fires : kinds[k] === 'b' ? breakables : obstacles).push(o));
-  } else obstacles.push(...cage, ...rest);
+  /* the world's vocabulary: Emberkeep's fall line burns, the cage is solid,
+     and the free hazards are whatever kind they were placed as */
+  const all = [...cage, ...rest];
+  const obstacles = all.filter(o => o.kind !== 'f' && o.kind !== 'b');
+  const fires = all.filter(o => o.kind === 'f');
+  const breakables = all.filter(o => o.kind === 'b');
 
   const lv = { name, maxBlocks: 3, targetType: pocket ? 'POCKET' : 'OPEN',
                /* the pocket's wall is on the NEAR side: open only toward the far side */

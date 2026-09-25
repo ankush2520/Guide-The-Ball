@@ -39,14 +39,16 @@ function drawTrack(ctx: CanvasRenderingContext2D, lane: Lane): void {
   ctx.lineWidth = radius * 2;
   ctx.beginPath(); ctx.moveTo(path.x1, path.y1); ctx.lineTo(path.x2, path.y2); ctx.stroke();
   // its outline, dashed, so it reads as a boundary and not as a solid
+  const a = Math.atan2(path.y2 - path.y1, path.x2 - path.x1);
+  const nx = -Math.sin(a) * radius, ny = Math.cos(a) * radius;
   ctx.setLineDash([6, 6]);
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = 'rgba(23,150,61,0.45)';
   ctx.beginPath();
-  ctx.moveTo(path.x1, path.y1 - radius); ctx.lineTo(path.x2, path.y2 - radius);
-  ctx.arc(path.x2, path.y2, radius, -Math.PI / 2, Math.PI / 2);
-  ctx.lineTo(path.x1, path.y1 + radius);
-  ctx.arc(path.x1, path.y1, radius, Math.PI / 2, Math.PI * 1.5);
+  ctx.moveTo(path.x1 - nx, path.y1 - ny); ctx.lineTo(path.x2 - nx, path.y2 - ny);
+  ctx.arc(path.x2, path.y2, radius, a - Math.PI / 2, a + Math.PI / 2);
+  ctx.lineTo(path.x1 + nx, path.y1 + ny);
+  ctx.arc(path.x1, path.y1, radius, a + Math.PI / 2, a + Math.PI * 1.5);
   ctx.stroke();
   ctx.setLineDash([]);
   // the rail the centre rides on, and a tick at each waypoint
@@ -54,8 +56,8 @@ function drawTrack(ctx: CanvasRenderingContext2D, lane: Lane): void {
   ctx.strokeStyle = TARGET.dark;
   ctx.globalAlpha = 0.5;
   ctx.beginPath(); ctx.moveTo(path.x1, path.y1); ctx.lineTo(path.x2, path.y2); ctx.stroke();
-  for (const x of [path.x1, path.x2]) {
-    ctx.beginPath(); ctx.arc(x, path.y1, 4, 0, Math.PI * 2);
+  for (const [x, y] of [[path.x1, path.y1], [path.x2, path.y2]]) {
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
     ctx.fillStyle = TARGET.base; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
   }
