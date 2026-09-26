@@ -6,7 +6,7 @@ import { COUNTRIES } from './countries.data';
 import { buildWalls } from './walls';
 import { ovalSegments } from './ovals';
 import { validatePatrol } from './patrol';
-import { WIND_CAP } from '../physics/constants';
+import { WIND_CAP, W } from '../physics/constants';
 import { clamp } from '../physics/math';
 
 export function initLevel(raw: RawLevel): Level {
@@ -34,10 +34,21 @@ export function initLevel(raw: RawLevel): Level {
      board a player plans against is the board at t=0 whichever field is read. */
   if (lv.targetMove) lv.target = { ...lv.target, x: lv.targetMove.x0, y: lv.targetMove.y0 ?? lv.target.y };
   // a level may never configure wind stronger than the ceiling
-  for (const z of lv.wind) {
-    z.ax = clamp(z.ax || 0, -WIND_CAP, WIND_CAP);
-    z.ay = clamp(z.ay || 0, -WIND_CAP, WIND_CAP);
-  }
+  /* Copies, never the authored objects. A zone that reaches an edge of the
+     design box runs on out to the edge of the PLAY area (which is wider -
+     see constants.ts), so a gust never stops halfway across what the player
+     can see: drawn and pushed alike. */
+  lv.wind = lv.wind.map(z => {
+    const w = { ...z };
+    w.ax = clamp(w.ax || 0, -WIND_CAP, WIND_CAP);
+    w.ay = clamp(w.ay || 0, -WIND_CAP, WIND_CAP);
+    let left = w.x, right = w.x + w.w;
+    if (left <= 0) left = -1000;
+    if (right >= W) right = W + 1000;
+    w.x = left; w.w = right - left;
+    w.look = lv.storm ? 'rain' : lv.fish && lv.fish.length ? 'current' : 'air';
+    return w;
+  });
   lv.walls = [...buildWalls(lv, lv.target), ...lv.ovals.flatMap(o => ovalSegments(o))];
   return lv;
 }

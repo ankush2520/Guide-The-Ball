@@ -25,4 +25,4 @@ export const NAMES = {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url))
-  await runWorld({ from: 81, names: NAMES, addOn: 'fish', noFire: true });
+  await runWorld({ from: 81, names: NAMES, addOn: 'fish', noFire: true, windChance: 0.4 });

@@ -22,7 +22,7 @@
  * Stormhold (77-80) gets a six-point thunderstorm instead of the wind, and
  * Coralis Deep (97-100) two eater fish.
  */
-import { NAMES as WIND_NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, stormFor, fishFor, fishPath } from './windLevels.mjs';
+import { NAMES as WIND_NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, stormFor, fishFor, fishPath, mix } from './windLevels.mjs';
 import { loadRaw, writeLevels } from './levelData.mjs';
 import { NAMES as STORM_NAMES } from './stormLevels.mjs';
 import { NAMES as FISH_NAMES } from './fishLevels.mjs';
@@ -249,6 +249,24 @@ function cornerTarget(lv, seed){
   return lv;
 }
 
+/** OCCASIONAL WIND for an exam level: with chance `p` (its own random draw,
+    so the layout never moves), one zone on the NEAR-side drop lane - the
+    spawn's side of the oval - blowing toward the oval, like 57-60's. */
+function maybeWind(L, id, p){
+  const wr = rng(mix(id));
+  if (mix(id + 1000) / 4294967296 >= p) return;
+  const pts = ovalPts(L.oval);
+  const yLow = Math.max(...pts.map(q => q.y));
+  const leftSpawn = L.spawn.x < W / 2;
+  const edge = leftSpawn ? Math.min(...pts.map(q => q.x)) - WALL_HT - 12
+                         : Math.max(...pts.map(q => q.x)) + WALL_HT + 12;
+  const zw = Math.floor(leftSpawn ? edge : W - edge);
+  const zy = rint(wr, 140, 200), zh = Math.min(rint(wr, 180, 280), Math.floor(yLow) - 30 - zy);
+  if (zw < 60 || zh < 120) return;
+  L.zones = [{ x: leftSpawn ? 0 : W - zw, y: zy, w: zw, h: zh,
+               ax: (leftSpawn ? 1 : -1) * rint(wr, 35, 70) / 100, ay: 0 }];
+}
+
 /* --only=57-60 writes just those ids, so re-running for one country never
    rewrites another's. Without it, every oval level is rebuilt. */
 const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7).split('-').map(Number);
@@ -269,6 +287,7 @@ for (const id of [57, 58, 59, 60]) if (want(id))
 for (const id of [77, 78, 79, 80]) if (want(id)){
   const L = build(id, id * 7919, true, { extraRed: 8, storm: true });
   L.obstacles = [...L.obstacles, ...L.fires]; L.fires = [];
+  maybeWind(L, id, 0.4);
   out.push(ovalLevel(byId(id), L, STORM_NAMES[id]));
 }
 /* Coralis Deep's exam: Emberkeep's, under water - two eater fish, and no
@@ -276,6 +295,7 @@ for (const id of [77, 78, 79, 80]) if (want(id)){
 for (const id of [97, 98, 99, 100]) if (want(id)){
   const L = build(id, id * 7919, true, { extraRed: 8, fish: true });
   L.obstacles = [...L.obstacles, ...L.fires]; L.fires = [];
+  maybeWind(L, id, 0.4);
   out.push(ovalLevel(byId(id), L, FISH_NAMES[id]));
 }
 writeLevels(out);
