@@ -26,11 +26,12 @@ import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import { strikeAt } from '../levels/storm';
-import { levelSeed } from '../levels';
+import { levelSeed, LEVELS } from '../levels';
+import { INTROS, GLOSSARY, type IntroCtx } from '../ui/glossary';
 import { track } from '../analytics/track';
 import { HINTS } from '../levels/hints.data';
 import { boardCycles } from '../levels/fish';
-import type { Level, Segment, Vec } from '../levels/types';
+import type { Circle, Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
 const STEP_MS = STEP_MS_DEFAULT;
@@ -44,31 +45,11 @@ const HIT_COLOR: Record<string, string> = {
   boost: '#ff7a18',
 };
 
-/* The mechanics tips. The game is plan-first, so a new mechanic is taught the
-   moment it APPEARS on a board - not when the ball hits it, by which point
-   the plan it should have informed is already committed. The obstacle keeps
-   its on-contact tip: "that scattered you randomly" only means something once
-   it has. Short on purpose: the flash is one fixed-height line. */
-export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string }[] = [
-  { key: 'booster',   has: lv => lv.boosters.length > 0,
-    text: 'Booster: fires you where the arrow points.' },
-  { key: 'wind',      has: lv => lv.wind.length > 0,
-    text: 'Wind: pushes the ball while it is inside.' },
-  { key: 'slippery',  has: lv => lv.slippery.length > 0,
-    text: 'Ice: bounces here keep nearly all their speed.' },
-  { key: 'breakable', has: lv => lv.breakables.length > 0,
-    text: 'Breakable: bounces once, then shatters.' },
-  { key: 'star',      has: lv => lv.stars.length > 0,
-    text: 'Gold stars are optional pickups.' },
-  { key: 'box',       has: lv => lv.boxes.length > 0,
-    text: 'Mystery box: hit it for a random reward.' },
-];
-
 /* ============================================================
    "THERE IS A GIFT IN THIS TARGET"
 
-   Not in MECH_TIPS, and the difference is the whole reason: a
-   mechanic tip is taught ONCE, ever, because a mechanic is a rule
+   Not an intro card (ui/glossary), and the difference is the whole
+   reason: a mechanic is introduced ONCE, ever, because it is a rule
    to learn. A gift in the target is not a rule, it is a fact
    about the board in front of you - the same class of thing as
    `needsSpring` - so it is said every time that board is
@@ -124,6 +105,10 @@ export interface IntroCard {
   /** Which drawing the card shows - see ui/introIcons. */
   icon: string;
   onDone?: () => void;
+  /** The board objects to pulse while this card is up. */
+  highlight?: (lv: Level, simT: number) => Circle[];
+  /** A WORLD card: bigger, in the world's own sky. */
+  world?: { sky: [string, string, string]; accent: string };
 }
 
 /** What a finished level shows on the win card. */
@@ -1026,6 +1011,7 @@ export class GameController {
         key: 'spring', icon: 'spring', title: 'New power: Spring!',
         text: 'Put it on a ramp you drew and the ball launches 4x harder. Only used up if you win.',
         onDone: () => {
+          this.markSeen('spring');
           const n = this.rewards.claimSpringGift();
           if (n > 0) this.bus.emit('springs:gifted', { n });
           this.startSpringCoach();
@@ -1152,26 +1138,80 @@ export class GameController {
   }
 
   /** Skip means skip all of it, the just-in-time obstacle tip included. */
+  /** Skip ends the level-1 walkthrough and the on-contact obstacle tip. The
+      intro cards are NOT skipped with it: each is one card, once, and it is
+      the only place a new mechanic is explained before it matters. */
   tutorialSkip(): void {
     this.rewards.tutorialSeen = true;
     this.tutRetry = false;
     this.rewards.obstacleTipSeen = true;
-    for (const t of MECH_TIPS) this.rewards.tipsSeen[t.key] = true;
     this.rewards.saveProgress();
     this.changed();
   }
 
+  /* ============================================================
+     "NEW THING" INTRO CARDS
+
+     On entering a level: first, on the first visit to a new WORLD,
+     its world card ("New here: ..."); then a card for every thing
+     on this board the player has never been introduced to, in the
+     registry's order (ui/glossary INTROS). Each is recorded in
+     tipsSeen when its "Got it" is pressed, and never comes back on
+     its own. The Info panel can replay a board's cards.
+     ============================================================ */
+  private introCtx(): IntroCtx {
+    return { spares: this.sparesAllowed ? this.rewards.extraRamps : 0,
+             hint: !!HINTS[this.levels.level.id] };
+  }
+
+  private markSeen(key: string): void {
+    if (this.rewards.tipsSeen[key]) return;
+    this.rewards.tipsSeen[key] = true;
+    this.rewards.saveProgress();
+  }
+
+  private queueEntry(e: (typeof INTROS)[number], mark: boolean): void {
+    this.queueIntro({ key: e.key, title: e.title!, text: e.intro!, icon: e.icon ?? '',
+                      highlight: e.highlight,
+                      onDone: mark ? () => this.markSeen(e.key) : undefined });
+  }
+
   private teachNewMechanics(): void {
     if (!this.rewards.tutorialSeen) return;      // the ramp lesson comes first
-    const lv = this.levels.level;
-    for (const t of MECH_TIPS) {
-      if (!this.rewards.tipsSeen[t.key] && t.has(lv)) {
-        this.rewards.tipsSeen[t.key] = true;
-        this.rewards.saveProgress();
-        this.showFlash(t.text);
-        this.bus.emit('tip:shown', { key: t.key, text: t.text });
-        return;
-      }
+    const lv = this.levels.level, seen = this.rewards.tipsSeen, ctx = this.introCtx();
+    /* the world card, the first time a world after the first is entered */
+    const country = this.levels.country, wkey = `world-${country.id}`;
+    if (country.from > 1 && !seen[wkey]) {
+      const inWorld = LEVELS.filter(l => l.id >= country.from && l.id <= country.to);
+      const news = INTROS.filter(e => !seen[e.key] && e.key !== 'balls' && e.key !== 'spareRamp'
+                                      && e.key !== 'hint' && inWorld.some(l => e.has(l, ctx)));
+      this.queueIntro({ key: wkey, icon: '', title: `Welcome to ${country.name}!`,
+                        text: news.length ? `New here: ${news.map(e => e.title!.replace(/^New power: /, '').replace(/!$/, '')).join(' + ')}`
+                                          : 'A new world - same rules, harder boards.',
+                        world: { sky: country.sky, accent: country.accent },
+                        onDone: () => this.markSeen(wkey) });
+    }
+    for (const e of INTROS) {
+      if (seen[e.key] || !e.has(lv, ctx)) continue;
+      if (e.key === 'spring' && this.intros.some(c => c.key === 'spring')) continue;
+      this.queueEntry(e, true);
+    }
+    this.devGuard();
+  }
+
+  /** The Info panel's "show this board's cards again". */
+  replayIntros(): void {
+    const lv = this.levels.level, ctx = this.introCtx();
+    for (const e of INTROS) if (e.has(lv, ctx)) this.queueEntry(e, false);
+  }
+
+  /** DEV builds: warn about any entity on this board that no registry entry
+      explains, so no future mechanic ships without a card. */
+  private devGuard(): void {
+    if (!import.meta.env?.DEV) return;
+    for (const ent of this.levels.entities) {
+      if (!GLOSSARY.some(g => g.covers?.includes(ent.kind)))
+        console.warn(`[intro] level ${this.levels.level.id}: '${ent.kind}' has no glossary/intro entry`);
     }
   }
 
@@ -1274,6 +1314,9 @@ export class GameController {
       /* the hint's ghost ramps, while it is shown, and whether the drop point
          should pulse right now (a timed board at the proven moment) */
       hint: this.hintShown ? HINTS[lv.id]?.ramps ?? null : null,
+      /* what the intro card on screen is about, pulsing on the board */
+      introHighlight: this.intro?.highlight
+        ? this.intro.highlight(this.levels.playLevel, this.patrolClock) : null,
       hintPulse: this.hintShown && this.phase === 'plan' && this.atHintMoment(),
     };
   }

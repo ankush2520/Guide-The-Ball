@@ -28,7 +28,7 @@ import { ParticleSystem } from './Particles';
 import { drawSeg } from './primitives';
 import { VIEW_SCALE } from './view';
 import type { Phase } from '../core/events';
-import type { Country, Segment } from '../levels/types';
+import type { Circle, Country, Segment } from '../levels/types';
 
 export const MAX_SCALE = 2;
 
@@ -86,6 +86,8 @@ export interface RenderState {
   hint: readonly Segment[] | null;
   /** A timed board's hint: the board is at the proven drop moment now. */
   hintPulse: boolean;
+  /** What the intro card on screen is about: pulse a glow ring round each. */
+  introHighlight: readonly Circle[] | null;
   /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
       the board adds only what has to sit ON the board - see drawCoach. */
   tutorial: { step: string | null };
@@ -225,6 +227,10 @@ export class Renderer {
         e.drawCapture(ctx, s.capture.t / s.captureMs, s.capture.cx, s.capture.cy);
     }
 
+    /* THE INTRO CARD'S SUBJECT: a breathing glow ring round every object the
+       card on screen is about, so the player sees exactly which one it is. */
+    if (s.introHighlight) this.drawIntroHighlight(s.introHighlight, s.clock);
+
     /* THE HINT: its ramps as a dashed ghost under the player's own, so a
        ramp drawn over one sits right on top of it. */
     if (s.hint) this.drawHint(s.hint, s.clock);
@@ -291,6 +297,23 @@ export class Renderer {
     ctx.setLineDash([]);
     ctx.globalAlpha = 0.45;
     for (const r of ramps) if (r.spring) drawSpring(ctx, r, clock);
+    ctx.restore();
+  }
+
+  private drawIntroHighlight(list: readonly Circle[], clock: number): void {
+    const ctx = this.ctx, k = 0.5 + 0.5 * Math.sin(clock * 5);
+    ctx.save();
+    for (const c of list) {
+      const r = c.r + 8 + k * 6;
+      const g = ctx.createRadialGradient(c.x, c.y, c.r, c.x, c.y, r + 10);
+      g.addColorStop(0, 'rgba(255,214,64,0)');
+      g.addColorStop(0.55, `rgba(255,214,64,${0.35 + 0.3 * k})`);
+      g.addColorStop(1, 'rgba(255,214,64,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r + 10, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(240,160,0,${0.6 + 0.4 * k})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.restore();
   }
 

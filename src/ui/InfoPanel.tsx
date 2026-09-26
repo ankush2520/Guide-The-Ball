@@ -8,7 +8,7 @@ import { BALLS_PER_LEVEL, BALLS_EXAM, CONTINUE_BALLS, STARTING_COINS,
          COIN_CLEAR } from '../managers/RewardManager';
 
 export function InfoPanel({ onClose }: { onClose: () => void }) {
-  const { levels } = useGame();
+  const { levels, controller } = useGame();
   useGameVersion();
   /* The PLAY level, so anything the player has just put down is marked as
      being on this board - which it is. */
@@ -34,8 +34,15 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              the next go is an adjustment, not a rebuild.</p>
 
           <h4>On the board</h4>
-          {GLOSSARY.map(g => (
-            <div key={g.cls} className={'iline' + (g.has(lv) ? ' here' : '')}>
+          {/* the intro cards for everything on this board, again */}
+          <div className="row">
+            <button id="btn-replay-intros"
+                    onClick={() => { controller.replayIntros(); onClose(); }}>
+              Show this board's intro cards
+            </button>
+          </div>
+          {GLOSSARY.filter(g => g.onBoard !== false).map(g => (
+            <div key={g.key} className={'iline' + (g.has(lv) ? ' here' : '')}>
               <span className={'sw ' + g.cls} />
               <span><b>{g.name}</b><span className="d">{g.long}</span></span>
             </div>

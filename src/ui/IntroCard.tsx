@@ -32,9 +32,15 @@ export function IntroCard({ hidden }: { hidden: boolean }) {
 
   if (!card || hidden) return null;
   const total = controller.introTotal, at = controller.introIndex;
+  /* A WORLD card is the big moment: centred over a blurred board, in the
+     world's own sky. A MECHANIC card keeps the board sharp and sits low, so
+     the pulsing objects it is about can be seen. */
+  const world = card.world;
   return (
-    <div className="overlay" id="introcard">
-      <div className="card intro" data-key={card.key}>
+    <div className={'overlay introlay' + (world ? ' world' : '')} id="introcard">
+      <div className={'card intro' + (world ? ' worldcard' : '')} data-key={card.key}
+           style={world ? { background: `linear-gradient(180deg, ${world.sky[0]}, ${world.sky[1]} 55%, ${world.sky[2]})`,
+                            ['--accent' as string]: world.accent } : undefined}>
         {hasIcon(card.icon) && <canvas ref={cv} className="introicon" aria-hidden="true" />}
         <div className="big">{card.title}</div>
         <div className="sub">{card.text}</div>
