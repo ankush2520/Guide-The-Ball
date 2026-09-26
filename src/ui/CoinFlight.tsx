@@ -110,7 +110,7 @@ const easeInOut = (t: number) =>
     `from` may also be a viewport POINT, which is how a mystery box launches
     its reward out of the chest the ball just hit rather than out of a panel
     that is not on screen. */
-export function flyReward(kind: FlightKind, fromSel: string | Pt): void {
+export function flyReward(kind: FlightKind, fromSel: string | Pt, label?: string): void {
   const land = LANDS[kind];
   const from = typeof fromSel === 'string' ? centreOf(fromSel) : fromSel;
   const to = centreOf(land.to);
@@ -121,6 +121,7 @@ export function flyReward(kind: FlightKind, fromSel: string | Pt): void {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     Sound.coin(0);
     bump(kind);
+    if (label) floatLabel(to, label);
     return;
   }
   /* The counter is holding these coins back until they land, so the flight
@@ -128,6 +129,19 @@ export function flyReward(kind: FlightKind, fromSel: string | Pt): void {
   if (kind === 'coins') launchedCoins(COINS);
   for (let i = 0; i < COINS; i++)
     window.setTimeout(() => launch(layerEl!, from, to, i, kind), i * STAGGER);
+  // a "+2" that rises off the counter as the last mark lands
+  if (label) window.setTimeout(() => floatLabel(to, label), (COINS - 1) * STAGGER + FLIGHT);
+}
+
+/** A short "+N" that floats up off a counter and fades. CSS does the motion. */
+function floatLabel(at: Pt, text: string): void {
+  if (!layerEl) return;
+  const el = document.createElement('b');
+  el.className = 'flylabel';
+  el.textContent = text;
+  el.style.transform = `translate3d(${at.x}px, ${at.y + 18}px, 0) translate(-50%, 0)`;
+  layerEl.appendChild(el);
+  window.setTimeout(() => el.remove(), 1300);
 }
 
 export function CoinFlight() {

@@ -54,6 +54,12 @@ export interface GameEvents extends Record<string, unknown> {
   'springs:changed':{ springs: number; delta: number; reason: RampChangeReason };
   /* A spin owed outside the daily cadence. The wheel's own cooldown is
      untouched by it - see RewardManager.grantBonusSpin(). */
+  /* The free springs just went into the bag, after their intro card - the
+     UI flies them in. */
+  'springs:gifted':  { n: number };
+  /* Something outside a panel asks the shell to open one (the need-a-spring
+     strip's Shop button). */
+  'panel:open':      { panel: 'shop' };
   'spin:granted':    { bonus: number };
   'spin:won':        { prizeIndex: number; kind: PrizeKind; n: number };
 

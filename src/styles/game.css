@@ -1245,3 +1245,24 @@
    button can be made to look like the "real" one. */
 .row.pair{display:flex;gap:10px}
 .row.pair > button{flex:1 1 0;min-width:0}
+
+/* ---- intro cards ---- */
+#introcard{z-index:54}
+.card.intro{text-align:center}
+.introicon{display:block;width:180px;height:110px;margin:0 auto 6px}
+.introdots{display:flex;gap:6px;justify-content:center;margin:8px 0 2px}
+.introdots i{width:7px;height:7px;border-radius:50%;background:#d6d3e6}
+.introdots i.on{background:var(--ink)}
+
+/* ---- the offer strip: help for this board, with buttons ---- */
+.offerstrip{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);
+            width:min(92%,380px);padding:8px 10px;border-radius:14px;
+            background:rgba(255,255,255,.94);box-shadow:0 0 0 2px var(--edge),0 4px 0 var(--edge);
+            pointer-events:auto;z-index:5;text-align:center}
+.offerstrip .offertext{display:block;font-weight:700;font-size:13px;margin-bottom:6px;color:var(--ink)}
+.offerstrip .row.pair > button{font-size:13px;padding:8px 6px}
+
+/* a "+2" rising off a HUD counter */
+.flylabel{position:absolute;left:0;top:0;font-weight:800;font-size:18px;color:var(--ink);
+          pointer-events:none;animation:flylabel 1.25s ease-out forwards}
+@keyframes flylabel{from{opacity:0;margin-top:0}20%{opacity:1}to{opacity:0;margin-top:-36px}}

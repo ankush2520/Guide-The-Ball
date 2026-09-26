@@ -78,19 +78,21 @@ export const RAMP_PRICE = 15;
    really prices is a solved board, not an attempt at one. */
 export const SPRING_PRICE = 30;
 
-/* ---- springs unlock at the start of world two ---- */
+/* ---- springs unlock at level 10 ---- */
 
-/* Level 21 is where the game stops being only about WHERE the ball goes and
-   starts being about how fast. It is the first board of Emberkeep, and the
-   world closes on the one board that cannot be solved without a spring (40).
-   Before 21 the spring does not exist anywhere: not in the shop, not in the
+/* Level 10 is where the game starts being about how FAST as well as where:
+   the first world's exam (17-20) cannot be solved without a spring, so the
+   spring has to be in the player's hands - and explained - well before it.
+   It used to unlock at 21, which left 17-20 impossible for a real player.
+   Before 10 the spring does not exist anywhere: not in the shop, not in the
    bag, and not in a mystery box's prize table. */
-export const SPRING_UNLOCK_LEVEL = 21;
+export const SPRING_UNLOCK_LEVEL = 10;
 /** The same gate as an index into LEVELS, which is what progress is kept in. */
 export const SPRING_UNLOCK_INDEX = SPRING_UNLOCK_LEVEL - 1;
-/** What reaching level 21 for the first time is worth: one, free, on the
-    house. An item nobody has ever held is an item nobody buys. */
-export const SPRING_GIFT = 1;
+/** What reaching level 10 for the first time is worth: two, free, on the
+    house - one to learn on and one to keep. An item nobody has ever held is
+    an item nobody buys. */
+export const SPRING_GIFT = 2;
 
 /* ---- what the shop sells ---- */
 
@@ -204,7 +206,7 @@ export const SPIN_MS = 4200; // length of the spin animation
 
 /** What the WHEEL can pay. A spring is not on it: the wheel is a daily
     fixture from level 1, and it may not hand out an item that does not exist
-    until level 21. Mystery boxes can, because they know what level they are
+    until level 10. Mystery boxes can, because they know what level they are
     on - see BOX_PRIZES. */
 export type WheelKind = "coins" | "ramps";
 
@@ -397,7 +399,7 @@ export class RewardManager {
      a brand new save.
 
      Two ways in, and they answer different questions. `_highest`
-     is progression: a player who has worked their way to 21 has
+     is progression: a player who has worked their way to 10 has
      reached it whatever level they are standing on now. The gift
      flag is the record of actually having been there, which is
      what covers arriving by the picker.
@@ -406,16 +408,31 @@ export class RewardManager {
     return this.springGift || this._highest >= SPRING_UNLOCK_INDEX;
   }
 
-  /** Called whenever a level is entered. The first time that level is 21 or
-      deeper, the free spring is handed over - once, ever, and persisted, so
-      every later visit to Emberkeep passes straight through here. */
-  noteLevelReached(levelId: number): boolean {
-    if (this.springGift || levelId < SPRING_UNLOCK_LEVEL) return false;
+  /* ============================================================
+     THE SPRING GIFT, IN TWO HALVES
+
+     springGiftDue() - on entering a level of 10 or deeper with the
+     gift not yet given: the controller shows the "New power:
+     Spring!" card first. claimSpringGift() - when that card is
+     dismissed: THEN the springs are credited (and fly into the
+     bag). Splitting them means a reload with the card still up
+     shows the card again rather than having quietly paid already.
+     ============================================================ */
+  springGiftDue(levelId: number): boolean {
+    return !this.springGift && levelId >= SPRING_UNLOCK_LEVEL;
+  }
+
+  claimSpringGift(): number {
+    if (this.springGift) return 0;
     this.springGift = true;
     this.saveProgress();
     this.grantSprings(SPRING_GIFT, "grant");
-    return true;
+    return SPRING_GIFT;
   }
+
+  /** Whether the spring walkthrough (bag -> Use -> ramp) has been shown
+      through to the end, or skipped. Once, ever. */
+  springUnlockSeen = false;
 
   /** Has this level's mystery box already been taken? */
   boxClaimed(levelIndex: number): boolean {
@@ -502,6 +519,7 @@ export class RewardManager {
     this.obstacleTipSeen = !!s.obstacleTipSeen;
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
     this.springGift = !!s.springGift;
+    this.springUnlockSeen = !!s.springUnlockSeen;
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -596,6 +614,7 @@ export class RewardManager {
     this.obstacleTipSeen = false;
     this.tipsSeen = {};
     this.springGift = false;
+    this.springUnlockSeen = false;
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -640,6 +659,7 @@ export class RewardManager {
       boxes: this.claimedBoxes,
       gifts: this.claimedGifts,
       migratedBalls: true,
+      springUnlockSeen: this.springUnlockSeen,
     });
   }
 
@@ -714,7 +734,7 @@ export class RewardManager {
     return true;
   }
 
-  /** Refuses outright before level 21, the same way it refuses an order the
+  /** Refuses outright before level 10, the same way it refuses an order the
       wallet cannot cover. The shop hides the section as well, but the gate
       belongs HERE: a panel that is merely not rendered is not a rule. */
   buySprings(n: number): boolean {

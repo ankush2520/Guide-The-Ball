@@ -14,7 +14,7 @@
    ============================================================ */
 import type { FlightKind, GameBus, Phase } from '../core/events';
 import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
-import { RewardManager, prizeLabel, ballsFor, CONTINUE_BALLS } from './RewardManager';
+import { RewardManager, prizeLabel, ballsFor, CONTINUE_BALLS, SPRING_UNLOCK_LEVEL } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
@@ -97,7 +97,29 @@ export const LANE_TIP = 'Ramps can\'t cross the moving target\'s track.';
    a drawn ramp was aimed BY the drag that made it. That step
    only existed to undo a ramp the game had placed for you.
    ============================================================ */
-export type TutStep = 'intro' | 'draw' | 'drop' | 'retry';
+export type TutStep = 'intro' | 'draw' | 'drop' | 'retry'
+  /* the spring walkthrough, on first reaching level 10 */
+  | 'springBag' | 'springRamp';
+
+/* ============================================================
+   INTRO CARDS
+
+   A card that explains something NEW before the board becomes
+   playable: title, one line, a drawn icon, "Got it". Queued, so
+   several new things on one level come one after another. While
+   any card is up, nothing can be drawn and nothing dropped.
+
+   `onDone` runs when the card is dismissed - the spring card
+   uses it to hand over the springs and start the walkthrough.
+   ============================================================ */
+export interface IntroCard {
+  key: string;
+  title: string;
+  text: string;
+  /** Which drawing the card shows - see ui/introIcons. */
+  icon: string;
+  onDone?: () => void;
+}
 
 /** What a finished level shows on the win card. */
 export interface WinCard {
@@ -123,6 +145,12 @@ export class GameController {
      "Stuck?" offer.
      ============================================================ */
   tries = 0;
+  /** Intro cards waiting to be shown, in order - see IntroCard. */
+  intros: IntroCard[] = [];
+  /** How many cards this batch had, for the "1/2" dots. */
+  introTotal = 0;
+  /** Where the spring walkthrough is, or null when it is not running. */
+  private springCoach = false;
   ballsLeft = 0;
   ballsMax = 0;
   restarts = 0;
@@ -267,7 +295,7 @@ export class GameController {
       budget, or a spare in the drawer to cover it. Read by the canvas before
       a draft begins and by the caption that offers the gesture. */
   get canDraw(): boolean {
-    return this.phase === 'plan' &&
+    return this.phase === 'plan' && !this.intros.length &&
            (this.levels.canPlaceRamp || this.rewards.extraRamps > 0);
   }
 
@@ -353,7 +381,7 @@ export class GameController {
   }
 
   /** Whether the bag may show this item at all. Springs do not exist before
-      level 21 - see RewardManager.springsUnlocked. */
+      level 10 - see RewardManager.springsUnlocked. */
   itemUnlocked(kind: ItemKind): boolean {
     return kind === 'spring' ? this.rewards.springsUnlocked : true;
   }
@@ -407,6 +435,7 @@ export class GameController {
     }
     this.selected = rampIx;
     this.showFlash('Spring fitted - that ramp now throws four times harder.');
+    if (this.springCoach) this.endSpringCoach();
     this.notifyRampsChanged();
     return true;
   }
@@ -627,7 +656,7 @@ export class GameController {
   /* ---------------- the drop ---------------- */
 
   drop(): void {
-    if (this.phase !== 'plan') return;
+    if (this.phase !== 'plan' || this.intros.length) return;
     /* Out of balls. Drop is deliberately left ENABLED for this: a dead grey
        button tells a player they are stuck without telling them what to do
        about it, so the press opens the restart / continue choice instead. */
@@ -887,10 +916,26 @@ export class GameController {
        and the board's appearance, so joining them is this method's job - the
        same cross-manager seam as every other spend here. */
     this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
-    /* Reaching level 21 is what puts the first spring in the bag. Announced
-       with a flash rather than a modal: it is a gift, not an interruption. */
-    if (this.rewards.noteLevelReached(this.levels.level.id))
-      this.showFlash('Springs unlocked - one is in your bag!');
+    this.intros = []; this.introTotal = 0;
+    /* Reaching level 10 is what puts the first springs in the bag. It is a
+       NEW POWER, so it gets a card before the board is playable - and the
+       springs are credited when the card is dismissed, then flown in, then
+       the walkthrough shows how to use one. */
+    if (this.rewards.springGiftDue(this.levels.level.id)) {
+      this.queueIntro({
+        key: 'spring', icon: 'spring', title: 'New power: Spring!',
+        text: 'Put it on a ramp you drew and the ball launches 4x harder. Only used up if you win.',
+        onDone: () => {
+          const n = this.rewards.claimSpringGift();
+          if (n > 0) this.bus.emit('springs:gifted', { n });
+          this.startSpringCoach();
+        },
+      });
+    } else if (this.rewards.springGift && !this.rewards.springUnlockSeen
+               && this.levels.level.id >= SPRING_UNLOCK_LEVEL) {
+      // the walkthrough was interrupted last time - carry on with it
+      this.startSpringCoach();
+    }
     this.teachNewMechanics();
     this.teachSpringBoard();
     this.teachGiftBoard();
@@ -926,10 +971,55 @@ export class GameController {
     this.changed();
   }
 
+  /* ---------------- intro cards ---------------- */
+
+  get intro(): IntroCard | null { return this.intros[0] ?? null; }
+  /** 1-based position of the card on screen within its batch. */
+  get introIndex(): number { return this.introTotal - this.intros.length + 1; }
+
+  queueIntro(card: IntroCard): void {
+    if (this.intros.some(c => c.key === card.key)) return;
+    this.intros.push(card);
+    this.introTotal++;
+    this.changed();
+  }
+
+  /** "Got it" on the card on screen. */
+  dismissIntro(): void {
+    const card = this.intros.shift();
+    if (!this.intros.length) this.introTotal = 0;
+    card?.onDone?.();
+    this.changed();
+  }
+
+  /* ---------------- the spring walkthrough ----------------
+
+     Two coach steps, shown once: point at the bag ("tap Use"), then - once a
+     spring is armed - at the player's ramp ("tap your ramp"). Fitting a spring
+     finishes it; the coach's Skip ends it early. Either way it is recorded,
+     and never runs again. */
+  private startSpringCoach(): void {
+    if (this.rewards.springUnlockSeen) return;
+    this.springCoach = true;
+    this.changed();
+  }
+
+  private endSpringCoach(): void {
+    this.springCoach = false;
+    this.rewards.springUnlockSeen = true;
+    this.rewards.saveProgress();
+    this.changed();
+  }
+
   /* ---------------- teaching ---------------- */
 
   tutorialStep(): TutStep | null {
-    if (this.levels.levelIndex !== 0 || this.phase !== 'plan') return null;
+    if (this.phase !== 'plan' || this.intros.length) return null;
+    /* only while there is a spring to use - an empty bag has nothing to Use,
+       and the need-a-spring strip is the way on there instead */
+    if (this.springCoach && (this.armedSpring || this.itemCount('spring').left > 0))
+      return this.armedSpring ? 'springRamp' : 'springBag';
+    if (this.levels.levelIndex !== 0) return null;
     if (this.tutRetry) return 'retry';
     if (this.rewards.tutorialSeen) return null;
     if (!this.tutIntroDone) return 'intro';
@@ -942,6 +1032,8 @@ export class GameController {
     switch (this.tutorialStep()) {
       case 'intro': this.tutIntroDone = true; break;
       case 'retry': this.tutRetry = false; break;
+      // the spring coach's button is its Skip
+      case 'springBag': case 'springRamp': this.endSpringCoach(); return;
       default: return;
     }
     this.changed();

@@ -14,7 +14,7 @@
    It lists every row of ITEMS the player has UNLOCKED, so a new
    kind of item appears here by being added there and given a
    count and a placement in the controller. The spring is simply
-   absent before level 21 - see GameController.itemUnlocked -
+   absent before level 10 - see GameController.itemUnlocked -
    which today means the tray can be empty, and an empty tray has
    to say so rather than look broken.
 

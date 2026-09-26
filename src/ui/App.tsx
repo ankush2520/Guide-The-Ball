@@ -25,6 +25,9 @@ import { WinOverlay } from './WinOverlay';
 import { GiftPanel } from './GiftPanel';
 import { LevelSelect } from './LevelSelect';
 import { OutOfBallsPanel } from './OutOfBallsPanel';
+import { IntroCard } from './IntroCard';
+import { OfferStrip } from './OfferStrip';
+import { flyReward } from './CoinFlight';
 import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -58,6 +61,11 @@ function Game() {
   /* The out-of-balls screen is opened by the GAME, not by a button: the last
      ball of a level missing, or Drop pressed with none left, leads here. */
   useEffect(() => bus.on('balls:empty', () => open('noballs')), [bus]);
+  useEffect(() => bus.on('panel:open', ({ panel }) => open(panel)), [bus]);
+  /* The level-10 spring gift: two springs fly from the middle of the screen
+     into the bag, which bounces, with a "+2". */
+  useEffect(() => bus.on('springs:gifted', ({ n }) =>
+    flyReward('springs', { x: window.innerWidth / 2, y: window.innerHeight * 0.45 }, `+${n}`)), [bus]);
 
   /* ============================================================
      THE WHEEL LETS ITSELF IN
@@ -164,12 +172,15 @@ function Game() {
              onOpenLevels={() => open('levels')} />
         <GameCanvas>
           <Status />
+          <OfferStrip onShop={() => open('shop')} />
         </GameCanvas>
         <Controls />
       </div>
 
       {/* The walkthrough bubble. Over the board, under every panel. */}
       <Coach hidden={stack.length > 0} />
+      {/* "Here is something new" - before the board is playable. */}
+      <IntroCard hidden={stack.length > 0} />
       {/* The gift beat comes BEFORE the win card and never with it: the
           controller holds the card back while a wrapped target is being
           opened, so only one of these two is ever on screen. */}

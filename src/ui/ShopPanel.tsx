@@ -13,7 +13,7 @@
    afford say so by being disabled rather than by failing when
    pressed.
 
-   The SPRING section is not here at all before level 21. It is
+   The SPRING section is not here at all before level 10. It is
    not greyed out and it is not teased: an item the player has
    never seen on a board cannot be shopped for, and a locked row
    in a shop is just an advertisement. The wallet refuses the

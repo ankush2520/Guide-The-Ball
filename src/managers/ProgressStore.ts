@@ -27,7 +27,7 @@ export interface SaveData {
   tutorialSeen?: boolean;
   obstacleTipSeen?: boolean;
   tips?: Record<string, boolean>;
-  /** The one free spring, handed over the first time level 21 is reached.
+  /** The free springs, handed over the first time level 10 is reached.
       A flag rather than a count: it records that the gift HAPPENED, which is
       the only thing that must never happen twice. */
   springGift?: boolean;
@@ -48,6 +48,8 @@ export interface SaveData {
   /** Set once the old ball tank has been cashed in for coins (or found empty)
       - see RewardManager.migrateBalls. Every save written since has it. */
   migratedBalls?: boolean;
+  /** The spring walkthrough has been shown through, or skipped. */
+  springUnlockSeen?: boolean;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */

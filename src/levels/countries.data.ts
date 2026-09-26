@@ -57,11 +57,10 @@ export const COUNTRIES: Country[] = [
      EMBERKEEP - twenty cities, levels 21-40
 
      The second TWENTY-level world, and the first country after
-     Verdholm to be one. It absorbed Solmesa's ten: the spring
-     still unlocks at 21 exactly as it did, but the ten boards
-     that used to teach it are now the easy half of a fire world,
-     and the board that cannot be solved without a spring is the
-     closer at 40 rather than a spike at 30.
+     Verdholm to be one. It absorbed Solmesa's ten, the boards
+     that used to teach the spring; the spring itself now arrives
+     at level 10 (RewardManager.SPRING_UNLOCK_LEVEL), ahead of
+     Verdholm's own spring exam at 17-20.
 
      Rose-coral heat haze. Breakables are orange and fire is
      orange-red, so the sky stays PINK rather than orange to keep

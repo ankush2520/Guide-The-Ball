@@ -37,6 +37,13 @@ const COPY: Record<TutStep, Copy> = {
   retry: { title: 'So close!',
            text: 'Your ramp stays put. Adjust it a little and drop again.',
            button: 'OK' },
+  /* the spring walkthrough, first time at level 10 - its button is Skip */
+  springBag:  { title: 'Tap Use',
+                text: 'Open your bag and tap Use on a spring. (Draw a ramp first if you have none.)',
+                button: 'Skip' },
+  springRamp: { title: 'Now tap your ramp',
+                text: 'Tap your ramp to put the spring on it.',
+                button: 'Skip' },
 };
 
 /** Gap between the arrow's tip and the thing it points at, in CSS px. */
@@ -80,7 +87,21 @@ export function Coach({ hidden }: { hidden: boolean }) {
           const high = !r || (r.y1 + r.y2) / 2 < H / 2;
           return { ...fromBoard((BOARD.x0 + BOARD.x1) / 2, high ? H * 0.62 : H * 0.24), side: 'none' };
         }
+        /* The bag is chrome, not board: point at the button itself. */
+        case 'springBag': {
+          const b = document.getElementById('btn-inventory')?.getBoundingClientRect();
+          return b ? { x: b.left + b.width / 2, y: b.bottom, side: 'below' } : null;
+        }
+        /* Under the player's own ramp - the newest one they drew. */
+        case 'springRamp': {
+          const n = levels.rampsUsed;
+          const r = n ? levels.rampAt(n - 1) : null;
+          if (!r) return null;
+          const lo = Math.max(r.y1, r.y2);
+          return { ...fromBoard((r.x1 + r.x2) / 2, lo + 16), side: 'below' };
+        }
       }
+      return null;
     };
 
     const place = () => {
