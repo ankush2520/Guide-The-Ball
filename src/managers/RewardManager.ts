@@ -410,8 +410,18 @@ export function starNote(
   return `Cleared on ${bits.join(", ")}. Next star: ${want.join(" or ")}.`;
 }
 
-/** The dev unlock: DEV builds only, and only when asked for in storage. */
+/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   TEMPORARY - ALL LEVELS OPEN FOR PLAY-TESTING (on a phone, where there is
+   no console to set 'gtb-unlock-all'). Works in EVERY build, so it MUST be
+   set back to false before release. Only the level picker is affected: real
+   progress, stars and coins are untouched.
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
+export const TEMP_UNLOCK_ALL = true;
+
+/** The dev unlock: DEV builds only, and only when asked for in storage -
+    or everywhere while TEMP_UNLOCK_ALL is on. */
 function unlockAll(): boolean {
+  if (TEMP_UNLOCK_ALL) return true;
   if (!import.meta.env?.DEV) return false;
   try {
     return localStorage.getItem("gtb-unlock-all") === "1";
@@ -967,9 +977,9 @@ export class RewardManager {
 
   /** Pay a first clear's coins - once, from the win card. `doubled` only
       after a WATCHED ad. */
-  payClear(coins: number, doubled: boolean): number {
+  payClear(coins: number, doubled: boolean, reason: CoinChangeReason = "clear"): number {
     const n = doubled ? coins * 2 : coins;
-    this.grantCoins(n, "clear");
+    this.grantCoins(n, reason);
     return n;
   }
 
@@ -987,6 +997,9 @@ export class RewardManager {
   /** A watched ad's spin: one bonus spin token, and today is used up. */
   grantAdSpin(): void {
     this.wheelAdSpinDay = RewardManager.today();
+    /* the last prize's "You won…" would otherwise sit over a wheel that is
+       ready to spin again */
+    this.spinShown = null;
     this.saveProgress();
     this.grantBonusSpin(1);
   }

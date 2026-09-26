@@ -68,12 +68,22 @@ class AdsImpl {
   private ready = false;
   private playing = false;          // gameplayStart has been sent and not yet stopped
   private busy = false;             // an ad is on screen
+  /* The UI's view of available(), so every ad button appears the moment the
+     SDK answers (init is async and nothing else re-renders on it) and
+     disables itself for as long as an ad is on screen. */
+  private listeners = new Set<() => void>();
+  private notify(): void { for (const fn of [...this.listeners]) fn(); }
+  subscribe = (fn: () => void): (() => void) => {
+    this.listeners.add(fn);
+    return () => { this.listeners.delete(fn); };
+  };
 
   /** Find the platform's SDK and start it. Safe to call once at boot; the
       game must not wait on it - an SDK that never answers is no ads, not a
       game that never loads. */
   async init(): Promise<void> {
     await this.detect();
+    this.notify();
     /* The board usually goes live BEFORE the SDK has answered, so the first
        gameplayStart() was recorded here but reached no platform. Now that one
        is known, tell it what is already true. */
@@ -103,8 +113,13 @@ class AdsImpl {
     this.ready = this.platform === 'dev';
   }
 
-  /** Whether an ad can be offered at all. False hides every ad button. */
+  /** Whether an ad can be played right now (none already on screen). */
   available(): boolean { return this.ready && !this.busy; }
+  /** Whether this page has ads at all - what decides if an ad BUTTON is
+      shown. Unlike available() it does not flicker while an ad plays, so a
+      button stays put (showing its own "Loading ad…") instead of vanishing
+      and letting the card behind it rearrange under the player's finger. */
+  enabled(): boolean { return this.ready; }
 
   /** A rewarded ad. Resolves true ONLY if it was watched to the end. */
   async rewarded(placement: AdPlacement): Promise<boolean> {
@@ -122,6 +137,7 @@ class AdsImpl {
   private async play(_placement: AdPlacement): Promise<boolean> {
     if (!this.available()) return false;
     this.busy = true;
+    this.notify();
     const wasPlaying = this.playing;
     this.gameplayStop();
     try {
@@ -147,6 +163,7 @@ class AdsImpl {
       return false;
     } finally {
       this.busy = false;
+      this.notify();
       Sound.nudge();
       if (wasPlaying) this.gameplayStart();
     }
@@ -158,6 +175,7 @@ class AdsImpl {
   async midgame(): Promise<void> {
     if (!this.available()) return;
     this.busy = true;
+    this.notify();
     this.gameplayStop();
     try {
       if (this.platform === 'crazygames') {
@@ -174,6 +192,7 @@ class AdsImpl {
     } catch { /* no ad is fine */ }
     finally {
       this.busy = false;
+      this.notify();
       Sound.nudge();
     }
   }

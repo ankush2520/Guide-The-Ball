@@ -25,7 +25,7 @@ import { useGame, useGameVersion } from '../core/GameContext';
 import { LevelPill } from './LevelPill';
 import { useCoinsHeld } from './coinsInFlight';
 import { Ads } from '../ads/Ads';
-import { useAdOffer } from '../ads/useAdOffer';
+import { useAdOffer, useAdsReady } from '../ads/useAdOffer';
 
 interface Props {
   onOpenSettings: () => void;
@@ -36,6 +36,7 @@ interface Props {
 export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
   const { levels, rewards, controller } = useGame();
   useGameVersion();
+  const adsReady = useAdsReady();
   const [, setTick] = useState(0);
   /* What the wallet HAS, minus what is still flying towards this chip. The
      ledger is credited the instant a payout is recorded; the number here
@@ -65,7 +66,7 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
      one after that is a watched ad. With no ad to show, only the free one. */
   const [hintBusy, setHintBusy] = useState(false);
   const hintFree = !rewards.freeHintUsed;
-  const hintShown = planning && controller.hintAvailable && (hintFree || Ads.available());
+  const hintShown = planning && controller.hintAvailable && (hintFree || adsReady);
   useAdOffer('hint', hintShown && !hintFree);
   const takeHint = async () => {
     if (hintFree) {

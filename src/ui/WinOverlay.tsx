@@ -23,21 +23,29 @@
    different things and a win card is the worst place to confuse
    them: one is what you just did, the other is what it cost.
    ============================================================ */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
-import { useAdOffer } from '../ads/useAdOffer';
+import { useAdOffer, useAdsReady } from '../ads/useAdOffer';
 import { ChestBar } from './ChestPanel';
 import { MIDGAME_FROM_LEVEL } from '../managers/RewardManager';
 
 export function WinOverlay() {
   const { controller } = useGame();
   useGameVersion();
+  const adsReady = useAdsReady();
 
   const [waiting, setWaiting] = useState(false);
   const card = controller.winCard;
+  /* With no ad to choose, there is no choice to make: the clear is collected
+     the moment the card is up, so its coins fly off the card into the counter
+     like any other payout - instead of being paid silently on the way out. */
+  useEffect(() => {
+    if (!adsReady && card && !card.collected && card.coins > 0 && controller.phase === 'over')
+      controller.collectWin(false);
+  }, [adsReady, card, controller, controller.phase]);
   useAdOffer('double', controller.phase === 'over' && !!card && !card.collected && card.coins > 0
-                       && Ads.available());
+                       && adsReady);
   if (controller.phase !== 'over' || !card) return null;
   /* A first clear pays on a CHOICE: collect it, or watch an ad for double -
      two equal buttons. Replays pay nothing, so they go straight to the usual
@@ -45,7 +53,7 @@ export function WinOverlay() {
   /* With no ad to offer (own site, adblock, unfilled), "Collect" would be a
      lone extra tap on every first clear - so the card goes straight to
      Replay / Next, and leaving it pays the plain amount (see setLevel). */
-  const owed = !card.collected && card.coins > 0 && Ads.available();
+  const owed = !card.collected && card.coins > 0 && adsReady;
   /* NEXT: the one natural break an interstitial may use (Ads.midgame stops
      gameplay around it; the phase change after it starts gameplay again). */
   const next = async () => {
@@ -56,12 +64,20 @@ export function WinOverlay() {
     }
     controller.nextLevel();
   };
+  const settle = () => {
+    setWaiting(true);
+    window.setTimeout(() => setWaiting(false), 400);
+  };
   const double = async () => {
     setWaiting(true);
     const ok = await Ads.rewarded('double');
     setWaiting(false);
-    if (ok) controller.collectWin(true);
+    if (ok) { controller.collectWin(true); settle(); }
   };
+  /* Collect swaps the pair for Replay / Next IN THE SAME PLACE, so the second
+     tap of a double-tap would land on Replay and drop a ball. The new pair
+     ignores taps for a moment after the swap. */
+  const collect = () => { controller.collectWin(false); settle(); };
 
   return (
     <div className="overlay" id="overlay">
@@ -127,10 +143,10 @@ export function WinOverlay() {
         <ChestBar small />
         {owed ? (
           <div className="row pair">
-            <button id="btn-collect" disabled={waiting} onClick={() => controller.collectWin(false)}>
+            <button id="btn-collect" disabled={waiting} onClick={collect}>
               Collect {card.coins}
             </button>
-            {Ads.available() && (
+            {adsReady && (
               <button id="btn-collect-ad" disabled={waiting} onClick={double}>
                 {waiting ? 'Loading ad…' : `Watch ad: collect ${card.coins * 2}`}
               </button>
@@ -138,7 +154,7 @@ export function WinOverlay() {
           </div>
         ) : (
         <div className="row">
-          <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>
+          <button id="btn-retry" disabled={waiting} onClick={() => controller.retry()}>Replay</button>
           {!card.isLast && (
             <button id="btn-next" className="primary" disabled={waiting} onClick={next}>Next</button>
           )}

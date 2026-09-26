@@ -222,6 +222,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
        no gesture is even armed and the release cannot turn it into a drop. */
     if ((e.target as Element).closest?.('button, a, input, select, textarea, [data-ui]')) return;
     if (controller.phase !== 'plan') return;
+    /* the tail of a tap on a card or panel that just closed - see holdBoardInput */
+    if (controller.boardInputHeld) return;
     rect.current = null;                // a fresh measure for this gesture
     armTouchGuard();
     const p = toBoard(e);

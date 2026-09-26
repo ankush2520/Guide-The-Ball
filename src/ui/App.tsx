@@ -42,6 +42,9 @@ import { Ads } from '../ads/Ads';
 import { track, sessionMs } from '../analytics/track';
 
 type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items' | 'chest';
+/** The bottom of the panel layers: above the win card (55), the gift (57) and
+    the intro card (54), below the confetti (90) and the coin flight (95). */
+const PANEL_Z = 60;
 
 function Game() {
   const { bus, levels, controller, rewards } = useGame();
@@ -50,15 +53,23 @@ function Game() {
      the wheel has to hand that screen back rather than dismissing both. The
      settings panel needs the same thing twice over: both the wheel and the
      info panel open FROM it, and closing either has to land back on it. The
-     z-index order the stylesheet states is what keeps them layered. */
+     panels are layered by their place in this stack (see the render below),
+     so the newest is always on top. */
   const [stack, setStack] = useState<Panel[]>([]);
   /* The offer timer reads the stack without wanting to be restarted every
      time a panel opens, so it reads it through a ref. */
   const stackRef = useRef(stack);
   stackRef.current = stack;
-  const open = (p: Panel) => setStack(s => (s.includes(p) ? s : [...s, p]));
-  const close = () => setStack(s => s.slice(0, -1));
-  const has = (p: Panel) => stack.includes(p);
+  /* Opening a panel that is already open brings it to the TOP rather than
+     leaving it buried: the newest thing the player has to deal with is the
+     one on top. */
+  const open = (p: Panel) => setStack(s => [...s.filter(x => x !== p), p]);
+  /* Closing names the panel. It used to pop whatever was on top of the
+     stack, which is only the caller when nothing opened in between - and
+     things do open on their own (out of balls when the last ball lands, the
+     wheel, a bus request). Then Close on the Settings card removed the
+     out-of-balls screen hidden under it and left Settings up. */
+  const close = (p: Panel) => { controller.holdBoardInput(); setStack(s => s.filter(x => x !== p)); };
 
   /* The out-of-balls screen is opened by the GAME, not by a button: the last
      ball of a level missing, or Drop pressed with none left, leads here. */
@@ -152,6 +163,23 @@ function Game() {
     };
   }, []);
 
+  const panel = (p: Panel) => {
+    const done = () => close(p);
+    switch (p) {
+      case 'noballs':  return <OutOfBallsPanel onClose={done} />;
+      case 'levels':   return <LevelSelect onClose={done} onChest={() => open('chest')} />;
+      case 'chest':    return <ChestPanel onClose={done} />;
+      case 'settings': return <SettingsPanel onClose={done}
+                                             onOpenInfo={() => open('info')}
+                                             onOpenShop={() => open('shop')}
+                                             onOpenSpin={() => open('spin')} />;
+      case 'items':    return <InventoryPanel onClose={done} onShop={() => open('shop')} />;
+      case 'shop':     return <ShopPanel onClose={done} />;
+      case 'spin':     return <SpinPanel onClose={done} />;
+      case 'info':     return <InfoPanel onClose={done} />;
+    }
+  };
+
   /* Deliberately NO keyboard handling beyond this. CrazyGames requires that
      Escape and the browser's own shortcuts always reach the browser, and the
      surest way to pass that gate is to have almost nothing listening. */
@@ -171,7 +199,7 @@ function Game() {
           the press cannot turn into anything else and there is no reason to
           wait. */}
       <div className="app"
-           onPointerDown={e => { if (e.target === e.currentTarget) controller.drop(); }}>
+           onPointerDown={e => { if (e.target === e.currentTarget && !controller.boardInputHeld) controller.drop(); }}>
         <Hud onOpenSettings={() => open('settings')}
              onOpenItems={() => open('items')}
              onOpenLevels={() => open('levels')} />
@@ -198,17 +226,14 @@ function Game() {
       {/* Above every panel: it flies from the win card to the HUD, so it has
           to paint over both of them. */}
       <CoinFlight />
-      {has('noballs') && <OutOfBallsPanel onClose={close} />}
-      {has('levels')  && <LevelSelect  onClose={close} onChest={() => open('chest')} />}
-      {has('chest')   && <ChestPanel   onClose={close} />}
-      {has('settings') && <SettingsPanel onClose={close}
-                                         onOpenInfo={() => open('info')}
-                                         onOpenShop={() => open('shop')}
-                                         onOpenSpin={() => open('spin')} />}
-      {has('items')   && <InventoryPanel onClose={close} onShop={() => open('shop')} />}
-      {has('shop')    && <ShopPanel    onClose={close} />}
-      {has('spin')    && <SpinPanel    onClose={close} />}
-      {has('info')    && <InfoPanel    onClose={close} />}
+      {/* The panels, painted in the order they were opened: each one's slot
+          sits above the one before it, so the newest panel is always the one
+          on top - whatever fixed z-index its own card was given. */}
+      {stack.map((p, i) => (
+        <div key={p} className="panelslot" style={{ zIndex: PANEL_Z + i }}>
+          {panel(p)}
+        </div>
+      ))}
     </>
   );
 }

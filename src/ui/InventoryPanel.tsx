@@ -44,8 +44,13 @@ export function InventoryPanel({ onClose, onShop }: Props) {
   const planning = controller.phase === 'plan';
   const shown = ITEMS.filter(it => controller.itemUnlocked(it.kind));
 
+  /* The tray closes either way. When the item cannot be placed (no ramp
+     drawn yet to fit a spring to), the controller says why in the board's
+     flash - which is UNDER this panel, so a tray that stayed open looked
+     like a tap that did nothing. */
   const take = (kind: ItemKind) => {
-    if (controller.placeItem(kind)) onClose();
+    controller.placeItem(kind);
+    onClose();
   };
 
   return (

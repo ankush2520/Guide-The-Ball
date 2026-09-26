@@ -1328,3 +1328,9 @@
 .chrow .badge{margin-left:6px;font-style:normal;font-size:11px;font-weight:800;color:#fff;
               background:#2fc95a;border-radius:8px;padding:1px 6px}
 .counter.balls.challenge{gap:5px}
+
+/* One slot per open panel (App.tsx): a fixed, click-through layer whose
+   z-index is the panel's place in the open-order, so the newest panel is
+   always on top. The panel's own overlay fills it as before. */
+.panelslot{position:fixed;inset:0;pointer-events:none}
+.panelslot > *{pointer-events:auto}

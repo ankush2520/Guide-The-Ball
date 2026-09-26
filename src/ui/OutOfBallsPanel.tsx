@@ -15,13 +15,14 @@
 import { useState } from 'react';
 import { useGame } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
-import { useAdOffer } from '../ads/useAdOffer';
+import { useAdOffer, useAdsReady } from '../ads/useAdOffer';
 import { CONTINUE_BALLS } from '../managers/RewardManager';
 
 export function OutOfBallsPanel({ onClose }: { onClose: () => void }) {
   const { controller } = useGame();
+  const adsReady = useAdsReady();
   const [waiting, setWaiting] = useState(false);
-  useAdOffer('continue', Ads.available());
+  useAdOffer('continue', adsReady);
 
   const watch = async () => {
     setWaiting(true);
@@ -42,7 +43,7 @@ export function OutOfBallsPanel({ onClose }: { onClose: () => void }) {
           ramps and carry on.
         </div>
         <div className="row pair">
-          {Ads.available() && (
+          {adsReady && (
             <button id="btn-continue-ad" disabled={waiting} onClick={watch}>
               {waiting ? 'Loading ad…' : `Watch ad: +${CONTINUE_BALLS} balls (keep your ramps)`}
             </button>

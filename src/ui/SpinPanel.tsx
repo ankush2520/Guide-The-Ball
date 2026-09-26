@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
-import { useAdOffer } from '../ads/useAdOffer';
+import { useAdOffer, useAdsReady } from '../ads/useAdOffer';
 import { flyReward } from './CoinFlight';
 import { SPIN_PRIZES, SPIN_MS, JACKPOT_COINS,
          prizeValue, prizeLabel, type WheelKind } from '../managers/RewardManager';
@@ -88,6 +88,7 @@ function drawUnit(g: CanvasRenderingContext2D, kind: WheelKind,
 
 export function SpinPanel({ onClose }: { onClose: () => void }) {
   const { rewards } = useGame();
+  const adsReady = useAdsReady();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /* The wheel's angle, whether a spin is in flight, and the prize just won
      all live on RewardManager - see the note there. This component only
@@ -186,7 +187,7 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
 
   const ready = rewards.spinReady() && !spinning;
   const [adWaiting, setAdWaiting] = useState(false);
-  const adSpin = rewards.canAdSpin() && Ads.available();
+  const adSpin = rewards.canAdSpin() && adsReady;
   useAdOffer('wheel', adSpin);
   const watchSpin = async () => {
     setAdWaiting(true);

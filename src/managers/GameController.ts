@@ -719,6 +719,26 @@ export class GameController {
                                 kind: h.kind as never, speed: h.speed });
   }
 
+  /* ============================================================
+     THE BOARD IGNORES A TAP THAT WAS MEANT FOR A BUTTON
+
+     A card or panel that closes on a tap leaves the board under
+     the finger. The second tap of a double-tap - or a quick
+     follow-up tap on a button that has just gone - then lands on
+     the board and draws or DROPS, spending a ball the player
+     never meant to. So for a moment after anything that swaps
+     the screen (a level change, a restart, a card or panel
+     closing) the board's own pointer input is ignored.
+
+     Only the board's input: drop() itself is not held, so the
+     debug hook and the tests can still drop straight away.
+     ============================================================ */
+  private boardHoldUntil = 0;
+  holdBoardInput(ms = 350): void {
+    this.boardHoldUntil = Math.max(this.boardHoldUntil, performance.now() + ms);
+  }
+  get boardInputHeld(): boolean { return performance.now() < this.boardHoldUntil; }
+
   /* ---------------- the drop ---------------- */
 
   drop(): void {
@@ -855,6 +875,7 @@ export class GameController {
      Never followed by an ad.
      ============================================================ */
   continueLevel(): void {
+    this.holdBoardInput();
     if (this.phase !== 'plan') return;
     this.ballsLeft += CONTINUE_BALLS;
     this.ballsMax = Math.max(this.ballsMax, this.ballsLeft);
@@ -863,6 +884,7 @@ export class GameController {
   }
 
   restartLevel(): void {
+    this.holdBoardInput();
     this.releaseBall();
     this.capture = null;
     this.winCard = null; this.pendingCard = null; this.gift = null;
@@ -969,6 +991,7 @@ export class GameController {
      knows where that is. See GiftPanel.
      ============================================================ */
   collectGift(): void {
+    this.holdBoardInput();
     const g = this.gift;
     if (!g) return;
     this.gift = null;
@@ -992,11 +1015,16 @@ export class GameController {
      Next, Replay, the level picker - collects the plain amount,
      so a clear can never go unpaid.
      ============================================================ */
-  collectWin(doubled = false): void {
+  collectWin(doubled = false, onCard = true): void {
     const card = this.winCard ?? this.pendingCard;
     if (!card || card.collected) return;
     card.collected = true;
-    card.paid = this.rewards.payClear(card.coins, doubled);
+    /* Paid off the card, the coins fly from it and the counter waits for
+       them. Paid on the way OUT (Next, Replay, the picker) there is no card
+       left to fly from - so it is paid as a plain grant and the counter shows
+       it at once, rather than sitting 8 seconds behind waiting for a flight
+       that is never coming. */
+    card.paid = this.rewards.payClear(card.coins, doubled, onCard ? 'clear' : 'grant');
     this.changed();
   }
 
@@ -1010,8 +1038,9 @@ export class GameController {
   /** Enter level index `i`. `inChallenge` is the run moving itself on; any
       other call (the picker, a test) ends a Challenge Run. */
   setLevel(i: number, inChallenge = false): void {
+    this.holdBoardInput();
     if (!inChallenge) this.challenge = null;
-    this.collectWin();                  // an uncollected clear is paid, never lost
+    this.collectWin(false, false);      // an uncollected clear is paid, never lost
     this.levels.setLevel(i);
     this.tutRetry = false; this.tutDropping = false;
     this.releaseBall();
@@ -1093,7 +1122,7 @@ export class GameController {
       the same drop, not a new roll. A replay of a cleared board follows the
       same few-balls rule as any visit, so it starts a fresh supply. */
   retry(): void {
-    this.collectWin();
+    this.collectWin(false, false);
     this.patrolClock = this.lastT0;
     if (!this.challenge) {
       this.ballsMax = ballsFor(this.levels.level.id);
@@ -1135,6 +1164,7 @@ export class GameController {
 
   /** "Got it" on the card on screen. */
   dismissIntro(): void {
+    this.holdBoardInput();
     const card = this.intros.shift();
     if (!this.intros.length) this.introTotal = 0;
     card?.onDone?.();

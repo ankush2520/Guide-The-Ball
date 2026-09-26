@@ -18,16 +18,17 @@
 import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
-import { useAdOffer } from '../ads/useAdOffer';
+import { useAdOffer, useAdsReady } from '../ads/useAdOffer';
 
 export function OfferStrip({ onShop }: { onShop: () => void }) {
   const { controller, levels, rewards } = useGame();
   useGameVersion();
+  const adsReady = useAdsReady();
   const [waiting, setWaiting] = useState(false);
 
   const needsSpring = !!levels.level.needsSpring && rewards.springsUnlocked
     && rewards.springs - levels.springsReserved <= 0;
-  const live = controller.phase === 'plan' && !controller.intro && Ads.available();
+  const live = controller.phase === 'plan' && !controller.intro && adsReady;
   const stuck = live && !needsSpring && controller.stuckOffer;
   useAdOffer('spring', live && needsSpring);
   useAdOffer('hint', stuck && controller.hintAvailable);
@@ -43,7 +44,7 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
   };
 
   if (!needsSpring) {
-    if (!controller.stuckOffer || !Ads.available()) return null;
+    if (!controller.stuckOffer || !adsReady) return null;
     const hint = controller.hintAvailable, spare = controller.sparesAllowed;
     if (!hint && !spare) return null;
     return (
@@ -73,7 +74,7 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
       <span className="offertext">This one needs a spring.</span>
       <div className="row pair">
         <button id="btn-offer-shop" onClick={onShop}>Shop</button>
-        {Ads.available() && (
+        {adsReady && (
           <button id="btn-offer-spring-ad" disabled={waiting} onClick={watch}>
             {waiting ? 'Loading ad…' : 'Watch ad: get 1 spring'}
           </button>
