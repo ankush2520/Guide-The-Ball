@@ -34,6 +34,7 @@ import { CoinFlight } from './CoinFlight';
 import { Confetti } from './Confetti';
 import { Coach } from './Coach';
 import { Sound } from '../audio/Sound';
+import { Ads } from '../ads/Ads';
 
 type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items';
 
@@ -91,6 +92,23 @@ function Game() {
     offer();
     return () => clearInterval(id);
   }, [controller, rewards]);
+
+  /* ============================================================
+     THE PLATFORM'S GAMEPLAY EVENTS
+
+     Live play is the board with nothing over it, in planning or
+     mid-drop. Any panel, or the win card ('over'), is a stop. The
+     wrapper deduplicates, so this only has to state what is true
+     whenever either input changes.
+     ============================================================ */
+  useEffect(() => {
+    const sync = () => {
+      const live = stackRef.current.length === 0 && controller.phase !== 'over';
+      if (live) Ads.gameplayStart(); else Ads.gameplayStop();
+    };
+    sync();
+    return bus.on('phase:changed', sync);
+  }, [bus, controller, stack]);
 
   /* A country recolours the chrome accent. The entity palette never changes. */
   useEffect(() => {

@@ -329,6 +329,16 @@ export function starNote(
   return `Cleared on ${bits.join(", ")}. Next star: ${want.join(" or ")}.`;
 }
 
+/** The dev unlock: DEV builds only, and only when asked for in storage. */
+function unlockAll(): boolean {
+  if (!import.meta.env.DEV) return false;
+  try {
+    return localStorage.getItem("gtb-unlock-all") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export class RewardManager {
   balls = STARTING_BALLS;
   coins = STARTING_COINS;
@@ -350,9 +360,12 @@ export class RewardManager {
   /* ============================================================
      UNLOCK EVERYTHING - the dev switch
 
-     Uncomment the one `return` below and every level in the game
-     is open in the picker, immediately, with no save editing and
-     no rebuild of anything else.
+     In a DEV build only, set localStorage 'gtb-unlock-all' to '1'
+     and every level in the game is open in the picker. It used to
+     be a commented-out `return` - which shipped switched ON once,
+     because the one line that turns it on looks exactly like the
+     line that turns it off. Behind import.meta.env.DEV a production
+     build cannot reach it at all, whatever is in storage.
 
      It is a VIEW over progress, not a change to it. The real
      high-water mark lives in `_highest` and is what gets written
@@ -365,8 +378,7 @@ export class RewardManager {
      time the game autosaves, and there is no way back.
      ============================================================ */
   get highest(): number {
-    return this.levelCount - 1; // <-- UNCOMMENT TO UNLOCK ALL LEVELs
-    // return this._highest;
+    return unlockAll() ? this.levelCount - 1 : this._highest;
   }
   set highest(n: number) {
     this._highest = n;

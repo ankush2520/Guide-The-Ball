@@ -1,6 +1,7 @@
 /* Running out is a real stop, so unlike a miss this one does get the
    full-screen treatment. */
 import { useGame, useGameVersion } from '../core/GameContext';
+import { Ads } from '../ads/Ads';
 import { AD_REWARD, BALL_PRICE, BALL_BUNDLES, bestBuy } from '../managers/RewardManager';
 
 interface Props { onClose: () => void; onSpin: () => void; onShop: () => void; }
@@ -23,16 +24,16 @@ export function NoBallsPanel({ onClose, onSpin, onShop }: Props) {
           Every drop costs one ball. Spend coins on more, clear a level to earn
           coins, or spin the daily wheel.
         </div>
-        {/* TODO: replace with the real rewarded-ad call before submission -
-            CrazyGames is window.CrazyGames.SDK.ad.requestAd('rewarded') and
-            Poki is PokiSDK.rewardedBreak(); both report whether the player
-            actually watched it, and the balls must only be granted if they did. */}
-        <div className="row">
-          <button id="btn-ad" className="primary"
-                  onClick={() => { rewards.grant(AD_REWARD, 'ad'); onClose(); }}>
-            Watch Ad for +{AD_REWARD} Balls
-          </button>
-        </div>
+        {/* Through the Ads wrapper: the balls are granted ONLY if the ad
+            was watched to the end. Hidden where no ad can be shown. */}
+        {Ads.available() && (
+          <div className="row">
+            <button id="btn-ad" className="primary"
+                    onClick={async () => { if (await Ads.rewarded('continue')) { rewards.grant(AD_REWARD, 'ad'); onClose(); } }}>
+              Watch Ad for +{AD_REWARD} Balls
+            </button>
+          </div>
+        )}
         {rewards.spinReady() && (
           <div className="row"><button id="btn-nb-spin" onClick={onSpin}>Spin the daily wheel</button></div>
         )}
