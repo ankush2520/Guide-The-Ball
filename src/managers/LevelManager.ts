@@ -129,6 +129,16 @@ export class LevelManager {
 
   next(): void { if (!this.isLast) this.setLevel(this.index + 1); }
 
+  /** Hand back a reserved spare once it is no longer needed: the board is
+      within its own budget again. */
+  releaseSpareIfUnused(): boolean {
+    if (this.extraBudget > 0 && this.ramps.length <= this.levelBudget) {
+      this.extraBudget = 0;
+      return true;
+    }
+    return false;
+  }
+
   /** A fresh board on the SAME level - the free "Restart level": the drawn
       ramps go (a spring on one goes back to the bag, since it was never
       charged), broken blocks come back. Not a level change, so nothing that

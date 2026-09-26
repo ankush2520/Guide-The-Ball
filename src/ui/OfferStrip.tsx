@@ -5,8 +5,12 @@
    makes sense on THIS board right now - and that needs buttons,
    so it cannot be the flash (which is text, and goes away).
 
-   Today: a board that needs a spring, with none in the bag -
-   [Shop] [Watch ad: get 1 spring], side by side and the same
+   Two offers, the first that applies:
+   - a board that needs a spring, with none in the bag:
+     [Shop] [Watch ad: get 1 spring];
+   - "Stuck?" after restarting the same level entry twice:
+     [Hint (ad)] [Spare ramp (ad)], dismissible, once per entry.
+   Buttons side by side and the same
    size (CrazyGames: an ad button must never be bigger than the
    non-ad one beside it). The ad button hides where no ad can be
    shown; the reward is granted only on a watched ad.
@@ -22,14 +26,41 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
 
   const needsSpring = !!levels.level.needsSpring && rewards.springsUnlocked
     && rewards.springs - levels.springsReserved <= 0;
-  if (!needsSpring || controller.phase !== 'plan' || controller.intro) return null;
+  if (controller.phase !== 'plan' || controller.intro) return null;
 
-  const watch = async () => {
+  /* an ad, then the reward - granted ONLY on a watched ad */
+  const ad = (placement: string, reward: () => void) => async () => {
     setWaiting(true);
-    const ok = await Ads.rewarded('spring');
+    const ok = await Ads.rewarded(placement);
     setWaiting(false);
-    if (ok) rewards.grantSprings(1, 'grant');
+    if (ok) reward();
   };
+
+  if (!needsSpring) {
+    if (!controller.stuckOffer || !Ads.available()) return null;
+    const hint = controller.hintAvailable, spare = controller.sparesAllowed;
+    if (!hint && !spare) return null;
+    return (
+      <div className="offerstrip" id="stuck-offer">
+        <button className="offerclose" id="btn-stuck-close" aria-label="Dismiss"
+                onClick={() => controller.dismissStuck()}>&times;</button>
+        <span className="offertext">Stuck?</span>
+        <div className="row pair">
+          {hint && (
+            <button id="btn-stuck-hint" disabled={waiting}
+                    onClick={ad('hint', () => controller.showHint())}>Hint (ad)</button>
+          )}
+          {spare && (
+            <button id="btn-stuck-spare" disabled={waiting}
+                    onClick={ad('spare', () => { rewards.grantRamps(1, 'grant'); controller.dismissStuck(); })}>
+              Spare ramp (ad)
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  const watch = ad('spring', () => rewards.grantSprings(1, 'grant'));
 
   return (
     <div className="offerstrip" id="spring-offer">

@@ -3,6 +3,7 @@
 import { useGame, useGameVersion } from '../core/GameContext';
 import { GLOSSARY } from './glossary';
 import { BALLS_PER_LEVEL, BALLS_EXAM, CONTINUE_BALLS, STARTING_COINS,
+         SPARE_FROM, HELPED_MAX_STARS,
          RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
          COIN_CLEAR } from '../managers/RewardManager';
 
@@ -64,16 +65,15 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              other way.</p>
 
           <h4>Spare ramps</h4>
-          <p>Every level hands you its own ramp budget, and that never changes. A
-             <b>spare</b> is one extra ramp you own outright, and it is spent
-             automatically: once a board's own ramps are gone, the next one you
-             draw comes out of the drawer. The <b>+N</b> on the ramps counter is
-             what is in there.</p>
-          <p>A spare is spent by a ramp you actually keep - a drag too short to
-             become one costs nothing - and it does not follow you to the next
-             level. Spares never count toward the star for coming in under the
-             budget &mdash; that is always measured against the ramps the level
-             itself gave you, so a spare can buy you a solution but never a star.</p>
+          <p>Every level hands you its own ramp budget. A <b>spare</b> is one extra
+             ramp you own, for a level you are stuck on: at most <b>one</b> per level,
+             and not on the first {SPARE_FROM - 1} levels. Once a board's own ramps are
+             gone, the next ramp you draw uses it. The <b>+N</b> on the ramps counter
+             is how many you have.</p>
+          <p>It is only used up if you <b>win</b> with it - restart, leave the level
+             or take the ramp off again and it goes back in your bag. A clear that
+             needed one earns at most <b>{HELPED_MAX_STARS} stars</b>: solve it without
+             help for three.</p>
 
           <h4>Springs</h4>
           <p>From level <b>{SPRING_UNLOCK_LEVEL}</b> you can carry your own

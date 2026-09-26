@@ -53,7 +53,8 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
      is a free spin nobody takes. */
   const ready = rewards.spinReady();
   const planning = controller.phase === 'plan';
-  const left = levels.rampsLeft, spare = rewards.extraRamps;
+  /* spares are not offered at all on the first levels - see sparesAllowed */
+  const left = levels.rampsLeft, spare = controller.sparesAllowed ? rewards.extraRamps : 0;
   /* The walkthrough is asking for a ramp to be drawn: the counter is what
      says how many the board will take, so it is what leans in. */
   const coached = controller.tutorialStep() === 'draw';

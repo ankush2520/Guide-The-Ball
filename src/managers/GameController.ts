@@ -14,7 +14,8 @@
    ============================================================ */
 import type { FlightKind, GameBus, Phase } from '../core/events';
 import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
-import { RewardManager, prizeLabel, ballsFor, CONTINUE_BALLS, SPRING_UNLOCK_LEVEL } from './RewardManager';
+import { RewardManager, prizeLabel, ballsFor, CONTINUE_BALLS, SPRING_UNLOCK_LEVEL,
+         SPARE_PER_LEVEL, SPARE_FROM, STUCK_AFTER_RESTARTS } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
@@ -296,7 +297,41 @@ export class GameController {
       a draft begins and by the caption that offers the gesture. */
   get canDraw(): boolean {
     return this.phase === 'plan' && !this.intros.length &&
-           (this.levels.canPlaceRamp || this.rewards.extraRamps > 0);
+           (this.levels.canPlaceRamp || this.spareAvailable);
+  }
+
+  /** Whether a spare ramp may be taken on THIS board right now: not on the
+      first levels, at most SPARE_PER_LEVEL, and only if one is in the bag. */
+  get spareAvailable(): boolean {
+    return this.sparesAllowed && this.levels.extraBudget < SPARE_PER_LEVEL
+      && this.rewards.extraRamps > 0;
+  }
+  /** Spares are not a thing at all on the first few levels - the HUD hides
+      them there. */
+  get sparesAllowed(): boolean { return this.levels.level.id >= SPARE_FROM; }
+
+  /** Whether the "Stuck?" offer is up: after STUCK_AFTER_RESTARTS restarts in
+      this entry, once, until dismissed. */
+  stuckDismissed = false;
+  get stuckOffer(): boolean {
+    return this.restarts >= STUCK_AFTER_RESTARTS && !this.stuckDismissed
+      && this.phase === 'plan' && !this.intros.length;
+  }
+  dismissStuck(): void { this.stuckDismissed = true; this.changed(); }
+
+  /** Whether this board has a proven hint to show - Part E. */
+  get hintAvailable(): boolean { return false; }
+  /** Show this board's hint - Part E. */
+  showHint(): void { /* Part E */ }
+
+  /** Take a ramp off the board (its × button). If that brings the board back
+      within its own budget, a reserved spare goes back to the bag. */
+  removeRamp(i: number): void {
+    this.levels.removeRamp(i);
+    this.selected = -1;
+    if (this.levels.releaseSpareIfUnused())
+      this.showFlash('Spare ramp returned to your bag.');
+    this.notifyRampsChanged();
   }
 
   /** Begin a ramp at `p`. Returns false when there is nothing left to draw
@@ -349,16 +384,13 @@ export class GameController {
     this.changed();
   }
 
-  /** Take one spare ramp from the drawer and add it to THIS level's budget.
-      The two halves belong to different managers - the drawer is the player's
-      and the budget is the board's - so joining them is the controller's job,
-      as it is for every other spend. */
+  /** RESERVE a spare ramp for this board: its budget grows by one, but the
+      bag is only charged if the level is WON with it (finish). Restarting,
+      leaving, or removing it hands it back. */
   useExtraRamp(): boolean {
-    if (this.phase !== 'plan') return false;
-    if (!this.rewards.spendExtraRamp()) return false;
+    if (this.phase !== 'plan' || !this.spareAvailable) return false;
     this.levels.extraBudget++;
-    const left = this.rewards.extraRamps;
-    this.showFlash(`Extra ramp added - ${left} left in your drawer.`);
+    this.showFlash('Spare ramp in use - only spent if you win. Max 2 stars.');
     this.changed();
     return true;
   }
@@ -815,11 +847,15 @@ export class GameController {
        win card and the bag are already telling the same story by the time
        either is looked at. */
     const springsUsed = this.commitSprings();
+    /* THE ONE PLACE A SPARE RAMP IS SPENT: a win that actually needed it. */
+    const usedSpare = this.levels.extraBudget > 0 && this.levels.rampsUsed > this.levels.levelBudget;
+    if (usedSpare) this.rewards.spendExtraRamp();
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
     const { stars, coins, note, firstClear } = this.rewards.recordClear(
       this.levels.levelIndex, lv.id, this.levels.isLast,
-      this.tries, this.levels.rampsUsed, this.levels.levelBudget);
+      this.tries, this.levels.rampsUsed, this.levels.levelBudget,
+      usedSpare ? 'spare' : null);
 
     const card: WinCard = {
       stars, note, coins, isLast: this.levels.isLast,
@@ -902,6 +938,7 @@ export class GameController {
     this.renderer.invalidateBackdrop();
     this.tries = 0;
     this.restarts = 0;
+    this.stuckDismissed = false;
     this.ballsMax = ballsFor(this.levels.level.id);
     this.ballsLeft = this.ballsMax;
     // every visit starts the patrol (and the storm) from the same phase
@@ -1212,7 +1249,7 @@ export class GameController {
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
     if (this.armedSpring) return 'Tap one of your ramps to fit the spring.';
     if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
-    if (this.levels.rampsLeft <= 0 && this.rewards.extraRamps <= 0)
+    if (this.levels.rampsLeft <= 0 && !this.spareAvailable)
       return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';
     return 'Drag to draw a ramp. Tap a ramp to adjust it, or empty board to drop.';
   }

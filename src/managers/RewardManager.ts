@@ -94,6 +94,27 @@ export const SPRING_UNLOCK_INDEX = SPRING_UNLOCK_LEVEL - 1;
     an item nobody buys. */
 export const SPRING_GIFT = 2;
 
+/* ============================================================
+   SPARE RAMPS: A SCARCE RESCUE
+
+   One spare at most on any level, and none at all on the first
+   few (the lessons are about the level's own ramps). Placing one
+   only RESERVES it - it is taken from the bag on a win, and a
+   restart, leaving, or removing it hands it back. A clear that
+   used one is capped below the top rating, and so is a clear
+   with a hint: help can buy a solve, never a perfect one.
+   ============================================================ */
+export const SPARE_PER_LEVEL = 1;
+/** Spares cannot be used on levels 1..SPARE_FROM-1. */
+export const SPARE_FROM = 6;
+/** The best rating a helped clear (spare ramp or hint) can earn. */
+export const HELPED_MAX_STARS = 2;
+/** Restarts in one level entry before the "Stuck?" offer appears. */
+export const STUCK_AFTER_RESTARTS = 2;
+
+/** What helped a clear, if anything. */
+export type Help = 'spare' | 'hint' | null;
+
 /* ---- what the shop sells ---- */
 
 /* BUNDLES, not straight multiples. A bulk row priced at exactly ten times the
@@ -746,10 +767,8 @@ export class RewardManager {
     return true;
   }
 
-  /** Take one spare ramp out of the drawer for the level on screen. Spent the
-      moment it is taken: the budget it joins is this level's, and handing it
-      back on a level change would make "how many do I have" depend on where
-      the player happened to navigate next. */
+  /** Take the spare ramp a WINNING clear used out of the bag - see the
+      SPARE RAMPS note: placing one only reserved it. */
   spendExtraRamp(): boolean {
     if (this.extraRamps <= 0) return false;
     this.setRamps(this.extraRamps - 1, -1, "use");
@@ -799,6 +818,7 @@ export class RewardManager {
     tries: number,
     rampsUsed: number,
     budget: number,
+    help: Help = null,
   ): {
     stars: number;
     coins: number;
@@ -813,7 +833,10 @@ export class RewardManager {
     const firstClear = !this.clearedLevels[levelIndex];
     if (firstClear) this.clearedLevels[levelIndex] = true;
 
-    const stars = starsFor(tries, rampsUsed, budget);
+    /* A spare ramp or a hint caps the rating: help buys a solve, and the
+       note says what the third star wants instead. */
+    const raw = starsFor(tries, rampsUsed, budget);
+    const stars = help ? Math.min(raw, HELPED_MAX_STARS) : raw;
     if (stars > (this.bestStars[levelIndex] | 0))
       this.bestStars[levelIndex] = stars;
 
@@ -829,7 +852,11 @@ export class RewardManager {
     return {
       stars,
       coins,
-      note: starNote(tries, rampsUsed, budget, stars),
+      note: help === 'spare'
+        ? "Cleared with a spare ramp. Solve it without help for 3 stars."
+        : help === 'hint'
+          ? "Cleared with a hint. Solve it without help for 3 stars."
+          : starNote(tries, rampsUsed, budget, stars),
       firstClear,
     };
   }
