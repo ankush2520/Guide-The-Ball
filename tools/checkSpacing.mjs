@@ -1,7 +1,7 @@
 /**
  * The passable-gap check.
  *
- *   node tools/checkSpacing.mjs          # levels 1-80
+ *   node tools/checkSpacing.mjs          # levels 1-100
  *   node tools/checkSpacing.mjs 15-15
  *
  * Between any two hazards - obstacles, fires and breakables, same kind or
@@ -9,7 +9,8 @@
  *
  *     distance(c1, c2) >= r1 + r2 + 2 * BALL_R
  *
- * so every gap on the board is one the ball can be routed through. The same
+ * so every gap on the board is one the ball can be routed through. An eater
+ * fish's whole wavy lane is held to the same gap from every hazard. The same
  * gap is held between every hazard and the rim of a solid OVAL - measured to
  * its collidable surface, the rim grown by the wall half-thickness. Every
  * pair on every level is measured; a level FAILS if any one pair is short,
@@ -23,14 +24,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const [A, B] = (process.argv[2] || '1-80').split('-').map(Number);
+const [A, B] = (process.argv[2] || '1-100').split('-').map(Number);
 const out = await esbuild.build({
   stdin: { contents: `export { LEVELS } from './src/levels/index';
                       export { BALL_R, WALL_HT } from './src/physics/constants';
-                      export { ovalPoint } from './src/levels/ovals';`, resolveDir: root, loader: 'ts' },
+                      export { ovalPoint } from './src/levels/ovals';
+                      export { fishPathAt } from './src/levels/fish';`, resolveDir: root, loader: 'ts' },
   bundle: true, write: false, format: 'esm', platform: 'node',
 });
-const { LEVELS, BALL_R, WALL_HT, ovalPoint } = await import('data:text/javascript;base64,' +
+const { LEVELS, BALL_R, WALL_HT, ovalPoint, fishPathAt } = await import('data:text/javascript;base64,' +
   Buffer.from(out.outputFiles[0].text).toString('base64'));
 const MIN_GAP = 2 * BALL_R;
 
@@ -67,6 +69,19 @@ for (const L of LEVELS.filter(l => l.id >= A && l.id <= B)){
       if (gap < MIN_GAP)
         bad.push(`${h.k}(${h.x},${h.y},r${h.r}) - oval ${k} ${inside ? 'INSIDE the oval' : `gap ${gap.toFixed(1)}px`}`);
     }
+  }
+  /* an eater fish's WHOLE wavy lane keeps the same gap from every hazard */
+  for (const [k, f] of (L.fish || []).entries()){
+    let fmin = Infinity, worst = null;
+    for (let i = 0; i <= 40; i++){
+      const p = fishPathAt(f, i / 40);
+      for (const h of hz){
+        const gap = Math.hypot(p.x - h.x, p.y - h.y) - f.r - h.r;
+        if (gap < fmin){ fmin = gap; worst = h; }
+      }
+    }
+    min = Math.min(min, fmin);
+    if (fmin < MIN_GAP) bad.push(`fish ${k} path - ${worst.k}(${worst.x},${worst.y},r${worst.r}) gap ${fmin.toFixed(1)}px`);
   }
   if (bad.length) failed++;
   console.log(`  ${String(L.id).padStart(5)}  ${String(hz.length).padStart(7)}  ${String(pairs).padStart(5)}  ` +

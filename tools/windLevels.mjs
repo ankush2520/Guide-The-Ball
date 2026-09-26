@@ -136,6 +136,42 @@ export function stormFor(r, n, spawn, lane, ok = () => true){
   return { points, gaps: points.map(() => (rint(r, 60, 108), STRIKE_GAP)) };
 }
 
+/** EATER FISH: `n` fish, each on a wavy lane (levels/fish.ts) whose WHOLE
+    path stays MIN_GAP clear of every hazard and box in `blockers`, 40px clear
+    of the target anywhere on its patrol, clear of the drop point, and of
+    every other fish's path. `ok` can veto a point of a path (the oval). */
+export function fishPath(f){
+  const waves = Math.max(1, Math.round(Math.abs(f.x1 - f.x0) / 110)), out = [];
+  for (let i = 0; i <= 40; i++){
+    const u = i / 40;
+    out.push({ x: f.x0 + (f.x1 - f.x0) * u, y: f.y + f.amp * Math.sin(u * waves * Math.PI * 2), r: f.r });
+  }
+  return out;
+}
+export function fishFor(rr, n, spawn, lane, blockers, ok = () => true){
+  const fish = [];
+  for (let k = 0; k < n; k++){
+    let got = null;
+    for (let c = 0; c < 500 && !got; c++){
+      const fr = rint(rr, 16, 20), len = rint(rr, 130, 260), amp = rint(rr, 14, 30);
+      const x0 = rint(rr, fr + 10, W - fr - 10 - len), y = rint(rr, 170, H - 90);
+      const f = { x0, x1: x0 + len, y, amp, period: rint(rr, 160, 260), r: fr };
+      if (rr() < 0.5) [f.x0, f.x1] = [f.x1, f.x0];
+      const pts = fishPath(f);
+      if (!pts.every(p => p.y - p.r > 120 && p.y + p.r < H - 20)) continue;
+      if (!pts.every(p => Math.hypot(p.x - spawn.x, p.y - spawn.y) >= p.r + 70)) continue;
+      if (!pts.every(p => lane.every(t => Math.hypot(p.x - t.x, p.y - t.y) >= p.r + t.r + 40))) continue;
+      if (!pts.every(p => blockers.every(q => Math.hypot(p.x - q.x, p.y - q.y) >= p.r + q.r + MIN_GAP))) continue;
+      if (!fish.every(g => fishPath(g).every(q => pts.every(p => Math.hypot(p.x - q.x, p.y - q.y) >= p.r + q.r + MIN_GAP)))) continue;
+      if (!pts.every(ok)) continue;
+      got = f;
+    }
+    if (!got) return null;
+    fish.push(got);
+  }
+  return fish;
+}
+
 /** Re-rolls a city until the spread audit (tools/spread-metrics.mjs) has
     nothing to flag: no clustering, no glow overlap. */
 async function buildSpread(id, tpl, oldGift, world){
@@ -204,18 +240,21 @@ function build(id, tpl, oldGift, attempt, world){
 
   /* the world's own mechanic, on top of the twin's layout */
   const pos = id - world.from + 1;                      // 1..16
-  let wind, storm;
+  let wind, storm, fish;
   if (world.addOn === 'wind'){
     const lo = targetMove ? { ...target, x: (x0 + x1) / 2 } : target;
     wind = windFor(r, pos <= 8 ? 1 : 2, pos >= 13, spawn.x, lo, lo);
   } else if (world.addOn === 'storm'){
     storm = stormFor(r, pos <= 8 ? 4 : pos <= 12 ? 5 : 6, spawn, lane);
     if (!storm) throw new Error('no room for the storm');
+  } else if (world.addOn === 'fish'){
+    fish = fishFor(r, pos <= 8 ? 1 : pos <= 12 ? 2 : 3, spawn, lane, [...placed, ...(box ? [box] : [])]);
+    if (!fish) throw new Error('no room for the fish');
   }
 
   const pick = k => placed.filter(o => o.kind === k).map(({ x, y, r }) => ({ x, y, r }));
   return { id, name: world.names[id], maxBlocks: tpl.maxBlocks, targetType: tpl.targetType, wallSide,
-           spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm,
+           spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm, fish,
            box: box && { x: box.x, y: box.y }, target, targetMove, gift: oldGift };
 }
 
@@ -226,7 +265,7 @@ function toRaw(L){
            spawn: L.spawn, obstacles: L.obstacles,
            breakables: L.breakables.length ? L.breakables : undefined,
            fires: L.fires.length ? L.fires : undefined,
-           wind: L.wind, storm: L.storm,
+           wind: L.wind, storm: L.storm, fish: L.fish,
            boxes: L.box ? [L.box] : undefined,
            target: L.target, targetMove: L.targetMove || undefined,
            targetGift: L.gift || undefined };
@@ -247,7 +286,8 @@ export async function runWorld(world){
     out.push(toRaw(L));
     const n = L.fires.length + L.breakables.length + L.obstacles.length;
     const extra = L.wind ? 'wind ' + L.wind.map(z => (z.ax > 0 ? '+' : '') + z.ax).join(' ')
-                : L.storm ? `storm ${L.storm.points.length} points` : '';
+                : L.storm ? `storm ${L.storm.points.length} points`
+                : L.fish ? `${L.fish.length} eater fish` : '';
     console.log(`${id} ${L.name.padEnd(15)} ${String(n).padStart(2)} hazards (f${L.fires.length} b${L.breakables.length} o${L.obstacles.length})` +
                 `  ${extra}  ${L.targetType}${L.targetMove ? ' moving' : ''}  blocks ${L.maxBlocks}${L.gift ? '  gift' : ''}`);
   }

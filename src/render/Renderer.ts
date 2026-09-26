@@ -185,7 +185,10 @@ export class Renderer {
     ctx.drawImage(this.backdrop.image, BOARD.x0, 0, BOARD.w, H);
     /* the ambient layer follows the sky: clouds on a daytime board, the old
        drifting stars on the countries that are still night */
-    if (isLightSky(s.country.sky[1])) drawClouds(ctx, s.clock);
+    /* ...and nothing at all under water: the sea (entities/Sea) is the sky there */
+    const underwater = !!(s.level.fish && s.level.fish.length);
+    if (underwater) { /* no clouds, no stars */ }
+    else if (isLightSky(s.country.sky[1])) drawClouds(ctx, s.clock);
     else drawStarfield(ctx, s.clock);
 
     /* everything from here down is the SCENE, and it is drawn at the view

@@ -23,6 +23,8 @@ const THUNDER_VOLUME = 0.3; // the rumble of every lightning strike
 const CRACK_VOLUME = 0.3; // the crack when a strike hits the ball
 const FIRE_VOLUME = 0.2; // the fire crackle on fire levels (21-60)
 const BURN_VOLUME = 0.4; // the whoosh when the ball touches fire
+const WATER_VOLUME = 0.3; // the underwater bubbling on levels 81-100
+const CHOMP_VOLUME = 0.5; // the bite when an eater fish gets the ball
 
 const BPM = 112;
 const STEP = 60 / BPM / 2; // one eighth note, in seconds
@@ -42,7 +44,7 @@ const ARP = [0, 2, 3, 5, 6];
 export type BounceKind = "obstacle" | "ramp";
 /** The level's background weather: rain on a storm board, a crackle on a
     fire board, or nothing. */
-export type Ambience = "none" | "rain" | "fire";
+export type Ambience = "none" | "rain" | "fire" | "water";
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -481,6 +483,21 @@ class SoundEngine {
       depth.connect(hiss.g.gain);
       lfo.start();
       this.amb = { kind: "rain", srcs: [hiss.src, body.src, lfo], timer: null };
+    } else if (this.wantAmb === "water") {
+      /* UNDERWATER: a deep, muffled hum, and every so often a bubble - a
+         small sine that bends upward, which is what the ear reads as "blip" */
+      const hum = loop(40, 260, 0.012 * WATER_VOLUME);
+      const timer = setInterval(() => {
+        if (!this.ctx || this.ctx.state !== "running" || this.isMuted || WATER_VOLUME <= 0)
+          return;
+        if (Math.random() < 0.18) {
+          const t = this.ctx.currentTime + Math.random() * 0.05;
+          const f = 300 + Math.random() * 500;
+          this.sweep(this.ambBus!, f, f * 1.8, f * 2.4, t, 0.07 + Math.random() * 0.05,
+                     (0.01 + Math.random() * 0.015) * WATER_VOLUME, "sine");
+        }
+      }, 90);
+      this.amb = { kind: "water", srcs: [hum.src], timer };
     } else {
       /* CRACKLE, not roar: no continuous noise at all (a filtered hiss is
          wind), only tiny sharp clicks in quick clusters - the snap of wood -
@@ -548,6 +565,19 @@ class SoundEngine {
     const t = this.ctx.currentTime;
     this.noise(this.sfx!, t, 0.18, 0.14 * CRACK_VOLUME, 1400);
     this.noise(this.sfx!, t + 0.04, 0.12, 0.08 * CRACK_VOLUME, 2600);
+  }
+
+  /** An eater fish got the ball: a quick snap of jaws, then a gulp. */
+  chomp(): void {
+    if (this.isMuted || CHOMP_VOLUME <= 0) return;
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
+    const t = this.ctx.currentTime;
+    this.noise(this.sfx!, t, 0.05, 0.22 * CHOMP_VOLUME, 900);            // the snap
+    this.sweep(this.sfx!, 520, 300, 140, t + 0.03, 0.16, 0.18 * CHOMP_VOLUME, "square");
+    this.sweep(this.sfx!, 260, 180, 70, t + 0.12, 0.22, 0.2 * CHOMP_VOLUME, "sine"); // the gulp
   }
 
   /** The ball touched fire: a whoosh up and a sizzle as it goes out. */

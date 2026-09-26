@@ -61,6 +61,11 @@ export interface OvalDef extends Vec { rx: number; ry: number; angle?: number; }
     See levels/storm.ts for the clock and what a strike does. */
 export interface StormDef { points: Vec[]; gaps: number[]; }
 
+/** An EATER FISH: swims x0 -> x1 -> x0 at a steady pace over `period`
+    steps, bobbing `amp` px on a wave around `y`, and eats the ball on
+    contact. See levels/fish.ts. */
+export interface FishDef { x0: number; x1: number; y: number; amp: number; period: number; r: number; }
+
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
     the same shape of data - what differs is entirely what contact means. The
     red obstacle deflects; this ends the drop. */
@@ -116,6 +121,7 @@ export interface RawLevel {
   fires?: FireDef[];
   ovals?: OvalDef[];
   storm?: StormDef;
+  fish?: FishDef[];
   /** Optional bonus pickups. Scenery to the physics, like stars: a box can
       never change where the ball goes, which is what makes it safe to add to
       a level whose solution is already proved. */

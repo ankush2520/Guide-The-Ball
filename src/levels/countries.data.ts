@@ -1,10 +1,10 @@
 /* ============================================================
    COUNTRIES
 
-   Eleven countries spanning levels 1-150. Each owns a run of
+   Ten countries spanning levels 1-150. Each owns a run of
    levels ("cities"), one mechanic, and one backdrop palette.
-   Verdholm, Emberkeep, Windemere and Stormhold hold twenty cities
-   each; the rest ten.
+   Verdholm, Emberkeep, Windemere, Stormhold and Coralis Deep hold
+   twenty cities each; the rest ten.
 
    The names are invented, inspired by real regions rather than
    naming any actual place.
@@ -22,7 +22,7 @@
    grid, used at low alpha. `accent` recolours the UI chrome.
 
    Every country is now a day sky. Verdholm was the prototype;
-   the other ten follow it, each keeping its old hue as a
+   the other nine follow it, each keeping its old hue as a
    pastel. Every stop is pale enough that the wall grey and the
    target's dark green still clear 3:1 on it (the test suite
    checks every day sky), which is why none of them go deeper.
@@ -38,11 +38,11 @@ import type { Country } from './types';
    came apart the moment the third country shipped was number six.
 
    So the list below is ordered by from/to - the order the game is actually
-   played in - and the ids run out of sequence down it. The four built
-   countries hold 1-80; the seven still to be authored queue up behind them in
-   plan order, and each drops into the next free block as it lands. Countries
-   10 (Needlecrest) and 5 (Zunmara Ruins) no longer exist: Windemere and
-   Stormhold absorbed their blocks. */
+   played in - and the ids run out of sequence down it. The five built
+   countries hold 1-100; the five still to be authored queue up behind them,
+   and each drops into the next free block as it lands. Countries 10
+   (Needlecrest), 5 (Zunmara Ruins) and 8 (Neonaka) no longer exist:
+   Windemere, Stormhold and Coralis Deep absorbed their blocks. */
 export const COUNTRIES: Country[] = [
   /* Verdholm's levels are frozen and hand-designed. Its palette was the
      night navy the game's contrast was first tuned against; it is now the
@@ -110,20 +110,29 @@ export const COUNTRIES: Country[] = [
   { id: 4, name: 'Stormhold', from: 61,  to: 80,  mechanic: 'thunderstorm',
     sky: ['#d2f1f7', '#e3f7fa', '#f4fcfd'], wash: '90,180,215', accent: '#27b0e0' },
 
+  /* ============================================================
+     CORALIS DEEP - twenty cities, levels 81-100
+
+     The fifth TWENTY-level world, and it is under water. It
+     follows Emberkeep city for city - the same hazard counts
+     (its fire turned to red obstacles: nothing burns down
+     here), the same targets, the same oval-and-spring exam at
+     97-100 - with EATER FISH on top: they swim the same wavy
+     lane back and forth, forever, and swallow the ball on
+     contact (levels/fish.ts). Background fish and bubbles are
+     scenery. It absorbed Neonaka, and Nocturne Sands moved on
+     to 101-110.
+
+     Shallow-water turquoise, pushed bluer than Cascadia so the
+     two never read alike.
+     ============================================================ */
+  { id: 9, name: 'Coralis Deep', from: 81, to: 100, mechanic: 'underwater - eater fish',
+    sky: ['#cff3f3', '#dff8f6', '#effcfa'], wash: '40,175,185', accent: '#16aebf' },
+
   /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,
      strongest thing on screen. */
-  { id: 7, name: 'Nocturne Sands', from: 81,  to: 90,  mechanic: 'collectible stars',
+  { id: 7, name: 'Nocturne Sands', from: 101, to: 110,  mechanic: 'collectible stars',
     sky: ['#e8e8fb', '#ece8f7', '#fbf0dc'], wash: '120,110,215', accent: '#7c6cf0' },
-
-  /* Pink into lilac into aqua: the most saturated sky in the set, for the
-     moment two mechanics start combining. */
-  { id: 8, name: 'Neonaka', from: 91,  to: 100,  mechanic: 'two mechanics combined',
-    sky: ['#fbe2f7', '#eee7fb', '#d7f6fb'], wash: '225,70,195', accent: '#12bcd6' },
-
-  /* Shallow-water turquoise, pushed bluer than Cascadia so the two never read
-     alike. */
-  { id: 9, name: 'Coralis Deep', from: 101, to: 110, mechanic: 'three mechanics combined',
-    sky: ['#cff3f3', '#dff8f6', '#effcfa'], wash: '40,175,185', accent: '#16aebf' },
 
   /* Fresh leaf-green mist, kept greener than Coralis Deep. */
   { id: 11, name: 'Cascadia Falls', from: 111, to: 120, mechanic: 'long chained boards',

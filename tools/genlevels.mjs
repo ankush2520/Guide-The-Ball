@@ -302,21 +302,10 @@ const SPECS = {
     }
   },
 
-  8: {
-    name: 'Neonaka',
-    /* Two mechanics at once, and the pair rotates through the country so it
-       never becomes one gimmick repeated ten times. */
-    gate: i => ({ minTol: 2.5, maxTol: 22 - i * 1.0, maxBlind: 0.05,
-                  minMechanics: 2, maxObHits: 1.2 }),
-    make(r, i, n, taken){ return combo(r, i, n, taken, 2, COMBO_NAMES, 'Overload'); }
-  },
-
-  9: {
-    name: 'Coralis Deep',
-    gate: i => ({ minTol: 2.5, maxTol: 20 - i * 0.9, maxBlind: 0.045,
-                  minMechanics: 3, maxObHits: 1.2 }),
-    make(r, i, n, taken){ return combo(r, i, n, taken, 3, DEEP_NAMES, 'The Trench'); }
-  },
+  /* 8 - Neonaka is gone, and 9 - Coralis Deep (81-100) is NOT generated
+     here: tools/fishLevels.mjs places 81-96 (Emberkeep's layouts, underwater,
+     with eater fish) and tools/ovalLevels.mjs --only=97-100 the oval exam.
+     No spec, so `genlevels 9 --write` refuses instead of overwriting. */
 
   11: {
     name: 'Cascadia Falls',

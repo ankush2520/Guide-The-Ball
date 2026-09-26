@@ -1060,6 +1060,11 @@
   .sw.fr{border-radius:50% 50% 50% 50% / 60% 60% 40% 40%;
          background:linear-gradient(180deg,#fff0c0 0%,#ffc451 22%,#ff6a1e 52%,#e0281f 78%,#8e1219 100%);
          box-shadow:0 0 0 2px var(--edge)}
+  /* Eater fish: its own violet, and an eye - never the obstacle's red. */
+  .sw.fs{border-radius:55% 45% 45% 55% / 60% 50% 50% 60%;
+         background:radial-gradient(circle at 70% 38%,#ffd23f 0 12%,transparent 13%),
+                    linear-gradient(180deg,#5b2a86,#8d5cc0);
+         box-shadow:0 0 0 2px var(--edge)}
   /* Moving target: the target's own green, with the travel stated as arrows
      either side rather than as a second colour. */
   .sw.mt{border-radius:50%;background:radial-gradient(circle,var(--target) 0 30%,#fff 31% 55%,#5fd67c 56%);

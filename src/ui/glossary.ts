@@ -32,6 +32,10 @@ export const GLOSSARY: GlossaryEntry[] = [
           'obstacle does - there is no recovering from it, so the route has to miss it ' +
           'completely. It is the flickering one with flames; the plain red circle only ' +
           'knocks you off course.' },
+  { cls: 'fs', has: lv => !!(lv.fish && lv.fish.length), name: 'Eater fish',
+    long: 'The purple fish with teeth. It EATS THE BALL - touching it ends your drop, like fire. ' +
+          'It swims back and forth along the same wavy path every time, shown faintly under it, ' +
+          'so time your drop for when it is out of the way.' },
   { cls: 'mt', has: lv => !!lv.targetMove, name: 'Moving target',
     long: 'This target slides side to side at a steady rate, and it is already moving when ' +
           'the level opens - watch where it is and time your drop, the way you plan around ' +

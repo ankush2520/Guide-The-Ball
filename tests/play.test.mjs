@@ -260,8 +260,8 @@ const lvinfo = await page.evaluate(() => {
 const PLAN_ID_GAPS = '';
 /* Every oval exam patrols up and down (17-20, 37-40, 57-60). Emberkeep's
    middle cities patrol side to side (28, 31, 34, 36), and Windemere mirrors
-   them in each later world (48, 51, 54, 56 and 68, 71, 74, 76). */
-const PLAN_MOVING  = '17,18,19,20,28,31,34,36,37,38,39,40,48,51,54,56,57,58,59,60,68,71,74,76,77,78,79,80';
+   them in each later world (48, 51, 54, 56 / 68, 71, 74, 76 / 88, 91, 94, 96). */
+const PLAN_MOVING  = '17,18,19,20,28,31,34,36,37,38,39,40,48,51,54,56,57,58,59,60,68,71,74,76,77,78,79,80,88,91,94,96,97,98,99,100';
 /* Verdholm is generated (tools/genlevels.mjs, VERD_DENSITY): level N carries
    about N obstacles, levelling off at 14-18 hazards in the exam (a patrol
    counts as one); one ramp for the three lessons, three from city 10 on. */

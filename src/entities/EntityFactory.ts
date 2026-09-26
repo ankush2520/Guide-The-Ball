@@ -30,6 +30,8 @@ import { Wall } from './Wall';
 import { Oval } from './Oval';
 import { Rain } from './Rain';
 import { Storm } from './Storm';
+import { Fish } from './Fish';
+import { Sea } from './Sea';
 import { OVAL_SEGS } from '../levels/ovals';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
@@ -52,6 +54,7 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   slippery:  { ctor: SlipperyZone, pick: lv => lv.slippery },
   wind:      { ctor: WindZone,     pick: lv => lv.wind },
   rain:      { ctor: Rain,         pick: lv => (lv.storm ? [lv.storm] : []) },
+  sea:       { ctor: Sea,          pick: lv => (lv.fish && lv.fish.length ? [lv.fish] : []) },
   /* One target per level; a patrolling one is the same kind with its lane
      drawn under it - see MovingTarget. */
   target:    { ctor: Target,       pick: lv => [lv.target],
@@ -62,6 +65,7 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   oval:      { ctor: Oval,         pick: lv => lv.ovals ?? [] },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },
   fire:      { ctor: FireObstacle, pick: lv => lv.fires },
+  fish:      { ctor: Fish,         pick: lv => lv.fish ?? [] },
   breakable: { ctor: Breakable,    pick: lv => lv.breakables },
   booster:   { ctor: Booster,      pick: lv => lv.boosters },
   star:      { ctor: StarPickup,   pick: lv => lv.stars },
