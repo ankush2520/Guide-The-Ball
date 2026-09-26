@@ -71,12 +71,12 @@ export function ballsFor(levelId: number): number {
    what keeps the wallet easy to reason about - a coin is always worth exactly
    what the shop says, and there is no arbitrage loop to balance. */
 export const STARTING_COINS = 100;
-export const RAMP_PRICE = 15;
+export const RAMP_PRICE = 40;
 /* Twice a spare ramp, and the factor is the point: a spring is worth two of
    them, which is a price a player can hold in their head. It is also the one
    item that is only CHARGED FOR WHEN IT WORKS - see spendSpring - so what it
    really prices is a solved board, not an attempt at one. */
-export const SPRING_PRICE = 30;
+export const SPRING_PRICE = 60;
 
 /* ---- springs unlock at level 10 ---- */
 
@@ -128,22 +128,24 @@ export type Help = 'spare' | 'hint' | null;
    they must keep meaning "a ramp costs this", not "a ramp costs this if you
    buy one at a time and nothing else".
 
-   Each bundle's price is a multiple of the one below it (45 = 3x15,
-   150 = 10x15) and each is better value than the one below. Those two facts together are what make `bestBuy` exactly optimal
-   with a plain greedy walk; break either and it becomes a knapsack that
-   greedy can quietly get wrong. */
+   The shape is fixed - one, four for the price of three, fourteen for the
+   price of ten - and the prices are derived from the list price, so retuning
+   is one number. bestBuy() is an exact search rather than a greedy walk: the
+   4-for-3 and 14-for-10 rows are not multiples of each other, and a greedy
+   walk over them quietly under-counts (480 coins is 15 ramps greedily, but
+   16 as four bundles of four). */
 export interface Bundle {
   n: number;
   coins: number;
 }
 
 export const RAMP_BUNDLES: readonly Bundle[] = [
-  { n: 1, coins: 15 },
-  { n: 4, coins: 45 },
-  { n: 14, coins: 150 },
+  { n: 1, coins: RAMP_PRICE },
+  { n: 4, coins: RAMP_PRICE * 3 },
+  { n: 14, coins: RAMP_PRICE * 10 },
 ];
-/* The ramp table at twice the price, quantity for quantity, so the two shop
-   sections state the same offer and a player only has to learn it once: four
+/* The ramp table's shape at the spring's price, quantity for quantity, so the
+   two shop sections state the same offer and a player only has to learn it once: four
    for the price of three, fourteen for the price of ten. */
 export const SPRING_BUNDLES: readonly Bundle[] = [
   { n: 1, coins: SPRING_PRICE },
@@ -164,25 +166,33 @@ function priced(bundles: readonly Bundle[], n: number, unit: number): number {
     it takes. Exact rather than approximate - see the divisibility note above -
     so the panels can promise a number the shop will really hand over. */
 export function bestBuy(bundles: readonly Bundle[], coins: number): number {
-  let left = Math.max(0, Math.floor(coins));
-  let got = 0;
-  for (let i = bundles.length - 1; i >= 0; i--) {
-    const take = Math.floor(left / bundles[i].coins);
-    got += take * bundles[i].n;
-    left -= take * bundles[i].coins;
+  const budget = Math.max(0, Math.floor(coins));
+  /* unbounded knapsack over the coin amount: best[c] = most units c coins can
+     buy. A wallet is a few thousand coins at most, so this is instant. */
+  const best = new Int32Array(budget + 1);
+  for (let c = 1; c <= budget; c++) {
+    let top = best[c - 1];
+    for (const b of bundles)
+      if (b.coins <= c && best[c - b.coins] + b.n > top) top = best[c - b.coins] + b.n;
+    best[c] = top;
   }
-  return got;
+  return best[budget];
 }
 
-/* What a clear pays, by Act (the same floor((id-1)/5) bands the ball bonus
-   uses) and by stars earned. Playing well is worth roughly double a scrape,
-   and the later Acts pay more because they cost more to reach. */
+/* What a FIRST clear pays, by WORLD (floor((id-1)/20) - the twenty-city
+   worlds, not the old five-level acts) and by stars earned. Playing well is
+   worth about double a scrape, and each world pays more than the last because
+   it costs more to get through. Every world from the fifth on pays the last
+   row. Starting values: tools/econsim.mjs is how they get tuned. */
 export const COIN_CLEAR = [
-  [10, 14, 20], // Act 1: 1, 2, 3 stars
-  [14, 18, 24],
-  [18, 22, 28],
-  [22, 26, 32],
+  [10, 14, 20], // world 1 (1-20): 1, 2, 3 stars
+  [14, 19, 26], // world 2 (21-40)
+  [18, 24, 32], // world 3 (41-60)
+  [22, 29, 38], // world 4 (61-80)
+  [26, 34, 45], // world 5+ (81-)
 ];
+/** Which row of COIN_CLEAR a level is paid from. */
+export const worldOf = (levelId: number): number => Math.floor((levelId - 1) / 20);
 
 /* ============================================================
    A BOARD PAYS ONCE
@@ -215,8 +225,8 @@ export function coinsFor(
   stars: number,
   firstClear: boolean,
 ): number {
-  const act = clamp(Math.floor((levelId - 1) / 5), 0, COIN_CLEAR.length - 1);
-  const full = COIN_CLEAR[act][clamp(stars, 1, 3) - 1];
+  const world = clamp(worldOf(levelId), 0, COIN_CLEAR.length - 1);
+  const full = COIN_CLEAR[world][clamp(stars, 1, 3) - 1];
   return firstClear ? full : Math.round(full * REPLAY_SHARE);
 }
 
@@ -252,10 +262,10 @@ export const SPIN_PRIZES: SpinPrize[] = [
   { kind: "ramps", n: 3, w: 2 },
 ];
 
-/* What the wheel gilds. Two of the eight wedges - the 200 and the 100 - so
-   that landing on gold means something; 3 ramps is the next best prize and
-   deliberately does NOT get it, or half the wheel would be a jackpot. */
-export const JACKPOT_COINS = 60;
+/* What the wheel gilds: any wedge worth this many coins or more - the 100,
+   the 200 and 3 ramps (120 at list price). Three of eight, so landing on gold
+   still means something. */
+export const JACKPOT_COINS = 100;
 
 /** What a payout is worth in coins, which is the only way to compare kinds.
     The shop's list prices are the exchange rate, so this is the one place
@@ -293,8 +303,9 @@ export function prizeLabel(kind: FlightKind, n: number): string {
    numbers and nothing else - rollBoxPrize() reads the table and
    knows nothing about what is in it.
 
-   Worth roughly 14 coins an open at these weights, about what a
-   level clear pays - and a box is claimed once per level, for
+   Worth roughly 35 coins an open at these weights (items at list
+   price, a free spin at the wheel's average), about a good late
+   clear - and a box is claimed once per level, for
    good, so the whole game's boxes are a fixed purse rather than
    an income.
    ============================================================ */
@@ -305,12 +316,17 @@ export interface BoxPrize {
 }
 
 export const BOX_PRIZES: readonly BoxPrize[] = [
-  { kind: "coins", n: 10, w: 30 },
-  { kind: "coins", n: 25, w: 16 },
-  { kind: "ramps", n: 1, w: 14 },
-  { kind: "springs", n: 1, w: 6 },
-  { kind: "spin", n: 1, w: 4 },
+  { kind: "coins", n: 15, w: 35 },
+  { kind: "coins", n: 35, w: 22 },
+  { kind: "ramps", n: 1, w: 18 },
+  /* only once springs exist (level 10) - before that this row pays
+     SPRING_STANDIN instead, so the weights keep meaning what they say */
+  { kind: "springs", n: 1, w: 12 },
+  { kind: "spin", n: 1, w: 8 },
+  { kind: "coins", n: 80, w: 5 },
 ];
+/** What the spring row pays where springs do not exist yet. */
+export const SPRING_STANDIN: { kind: FlightKind; n: number } = { kind: "coins", n: 15 };
 
 /** Two things are worth rewarding, and they pull against each other: solving
     it in few attempts, and solving it with fewer ramps than the level hands
@@ -1012,7 +1028,8 @@ export class RewardManager {
       at all, or the weights stop meaning what BOX_PRIZES says they mean. */
   boxTableFor(levelId: number): readonly BoxPrize[] {
     const ok = this.springsUnlocked && levelId >= SPRING_UNLOCK_LEVEL;
-    return ok ? BOX_PRIZES : BOX_PRIZES.filter((p) => p.kind !== "springs");
+    return ok ? BOX_PRIZES
+      : BOX_PRIZES.map((p) => (p.kind === "springs" ? { ...SPRING_STANDIN, w: p.w } : p));
   }
 
   /** Weighted pick over that table - the same walk the wheel uses. */
