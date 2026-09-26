@@ -16,8 +16,10 @@
        midgame                      PokiSDK.commercialBreak(beforeAd) -> Promise<void>
        gameplay events              PokiSDK.gameplayStart() / gameplayStop()
 
-   Each platform injects its own SDK script into the page it
-   hosts us on, so nothing here loads one - we only look for it.
+   Neither platform injects its SDK for us. The build puts the
+   right one's <script> in the page head (VITE_PLATFORM - see
+   vite.config.ts and `npm run build:crazygames` / `build:poki`),
+   and this file only looks for it.
 
    With NO SDK (our own site, local dev): in a dev build a
    rewarded ad "plays" for a second and succeeds, so every ad
@@ -45,6 +47,7 @@ interface CrazySDK {
 }
 interface PokiSDK {
   init(): Promise<void>;
+  gameLoadingFinished?(): void;
   gameplayStart(): void;
   gameplayStop(): void;
   commercialBreak(before?: () => void): Promise<void>;
@@ -70,6 +73,14 @@ class AdsImpl {
       game must not wait on it - an SDK that never answers is no ads, not a
       game that never loads. */
   async init(): Promise<void> {
+    await this.detect();
+    /* The board usually goes live BEFORE the SDK has answered, so the first
+       gameplayStart() was recorded here but reached no platform. Now that one
+       is known, tell it what is already true. */
+    if (this.playing) { this.playing = false; this.gameplayStart(); }
+  }
+
+  private async detect(): Promise<void> {
     try {
       const cg = window.CrazyGames?.SDK;
       if (cg) {
@@ -82,6 +93,9 @@ class AdsImpl {
       if (poki) {
         this.platform = 'poki';
         try { await poki.init(); this.ready = true; } catch { this.ready = false; }
+        /* Poki wants to be told when loading is over; the game is playable
+           as soon as it has rendered, which it has by the time this runs. */
+        try { poki.gameLoadingFinished?.(); } catch { /* ignore */ }
         return;
       }
     } catch { /* an SDK that throws is an SDK that is not there */ }

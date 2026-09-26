@@ -991,7 +991,7 @@ const BOOST_NAMES = ['Kickoff','Slingshot','Updraft','Ricochet','Launch Pad',
 const FIRE_NAMES = ['Firebreak','Cinder Run','The Forge','Ashfall','Emberline',
                     'Hot Gate','Flashpoint','Smoulder','Kiln','Backdraft',
                     'Slow Burn','The Flue','Scorchline','Tinderbox','Bellows',
-                    'Char','Updraft','The Gauntlet','Blast Furnace','Pyre',
+                    'Char','Updraft','Fire Gauntlet','Blast Furnace','Pyre',
                     'Wickline','Coalface','Firewall','Searing'];
 const MOVE_NAMES = ['Metronome','Pendulum','Crosswalk','The Shuttle','Tempo',
                     'Sidestep','Drift','Interception','Windowpane'];

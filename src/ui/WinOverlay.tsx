@@ -42,7 +42,10 @@ export function WinOverlay() {
   /* A first clear pays on a CHOICE: collect it, or watch an ad for double -
      two equal buttons. Replays pay nothing, so they go straight to the usual
      Replay / Next. */
-  const owed = !card.collected && card.coins > 0;
+  /* With no ad to offer (own site, adblock, unfilled), "Collect" would be a
+     lone extra tap on every first clear - so the card goes straight to
+     Replay / Next, and leaving it pays the plain amount (see setLevel). */
+  const owed = !card.collected && card.coins > 0 && Ads.available();
   /* NEXT: the one natural break an interstitial may use (Ads.midgame stops
      gameplay around it; the phase change after it starts gameplay again). */
   const next = async () => {

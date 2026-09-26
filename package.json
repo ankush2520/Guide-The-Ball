@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:crazygames": "VITE_PLATFORM=crazygames npm run build",
+    "build:poki": "VITE_PLATFORM=poki npm run build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-all.mjs",

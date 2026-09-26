@@ -788,7 +788,7 @@ export const RAW_LEVELS: RawLevel[] = [
   },
   {
     id: 38,
-    name: "The Gauntlet",
+    name: "Fire Gauntlet",
     maxBlocks: 3,
     targetType: "OPEN",
     needsSpring: true,
