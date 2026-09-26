@@ -35,6 +35,8 @@ import {
 } from "./ProgressStore";
 import { clamp } from "../physics/math";
 import { countryOf } from "../levels";
+import { CHEST_COSMETICS, DEFAULT_STYLE, cosmeticById, applyStyle,
+         type CosmeticKind } from "../cosmetics/cosmetics";
 
 /* ============================================================
    BALLS: A FEW PER LEVEL, NOT A TANK
@@ -400,8 +402,11 @@ function unlockAll(): boolean {
   }
 }
 
-/** The chest-only cosmetic for chest `n` - filled in by Part I. */
-function chestCosmetic(_n: number): string | null { return null; }
+/** The chest-only cosmetic chest `n` hands out: every COSMETIC_EVERY-th
+    chest, in CHEST_COSMETICS order, until they have all been given. */
+function chestCosmetic(n: number): string | null {
+  return CHEST_COSMETICS[n / COSMETIC_EVERY - 1] ?? null;
+}
 
 export class RewardManager {
   coins = STARTING_COINS;
@@ -598,6 +603,14 @@ export class RewardManager {
     this.freeHintUsed = !!s.freeHintUsed;
     this.wheelAdSpinDay = typeof s.wheelAdSpinDay === "string" ? s.wheelAdSpinDay : "";
     this.chestsClaimed = Math.max(0, (s.chestsClaimed as number) | 0);
+    const cos = s.cosmetics && typeof s.cosmetics === "object" ? s.cosmetics : {};
+    this.cosmeticsOwned = new Set([...Object.values(DEFAULT_STYLE),
+      ...(Array.isArray(cos.owned) ? cos.owned.filter((id) => !!cosmeticById(id)) : [])]);
+    for (const k of Object.keys(DEFAULT_STYLE) as CosmeticKind[]) {
+      const id = cos.selected?.[k];
+      this.cosmeticsSelected[k] = id && this.cosmeticsOwned.has(id) ? id : DEFAULT_STYLE[k];
+    }
+    applyStyle(this.cosmeticsSelected);
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -696,6 +709,9 @@ export class RewardManager {
     this.freeHintUsed = false;
     this.wheelAdSpinDay = "";
     this.chestsClaimed = 0;
+    this.cosmeticsOwned = new Set(Object.values(DEFAULT_STYLE));
+    this.cosmeticsSelected = { ...DEFAULT_STYLE };
+    applyStyle(this.cosmeticsSelected);
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -744,6 +760,7 @@ export class RewardManager {
       freeHintUsed: this.freeHintUsed,
       wheelAdSpinDay: this.wheelAdSpinDay,
       chestsClaimed: this.chestsClaimed,
+      cosmetics: { owned: [...this.cosmeticsOwned], selected: { ...this.cosmeticsSelected } },
     });
   }
 
@@ -951,8 +968,45 @@ export class RewardManager {
     this.grantBonusSpin(1);
   }
 
-  /** Part I: add a cosmetic to what the player owns. */
-  unlockCosmetic(_id: string): void { /* Part I */ }
+  /* ---------------- cosmetics ---------------- */
+
+  /** Cosmetic ids the player owns (the classic look of each kind always). */
+  cosmeticsOwned = new Set<string>(Object.values(DEFAULT_STYLE));
+  /** What is worn, one per kind. */
+  cosmeticsSelected: Record<CosmeticKind, string> = { ...DEFAULT_STYLE };
+
+  ownsCosmetic(id: string): boolean { return this.cosmeticsOwned.has(id); }
+
+  /** Add a cosmetic to what the player owns - a chest's, or a purchase's. */
+  unlockCosmetic(id: string): void {
+    if (!cosmeticById(id) || this.cosmeticsOwned.has(id)) return;
+    this.cosmeticsOwned.add(id);
+    this.saveProgress();
+    this.bus.emit("cosmetics:changed", { id });
+  }
+
+  /** Buy one from the shop. Refuses chest-only items, owned items, and an
+      order the wallet cannot cover. */
+  buyCosmetic(id: string): boolean {
+    const c = cosmeticById(id);
+    if (!c || c.price === null || this.cosmeticsOwned.has(id)) return false;
+    if (!this.canAfford(c.price)) return false;
+    this.setCoins(this.coins - c.price, -c.price, "style");
+    this.unlockCosmetic(id);
+    this.selectCosmetic(id);
+    return true;
+  }
+
+  /** Wear an owned cosmetic. */
+  selectCosmetic(id: string): boolean {
+    const c = cosmeticById(id);
+    if (!c || !this.cosmeticsOwned.has(id)) return false;
+    this.cosmeticsSelected[c.kind] = id;
+    applyStyle(this.cosmeticsSelected);
+    this.saveProgress();
+    this.bus.emit("cosmetics:changed", { id });
+    return true;
+  }
 
   /* ---------------- star chests ---------------- */
 

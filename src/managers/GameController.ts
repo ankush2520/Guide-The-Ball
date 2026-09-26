@@ -295,7 +295,7 @@ export class GameController {
        number, so anything that moves a balance has to bump it, or the HUD
        and the shop go stale until something else happens to redraw them. */
     for (const e of ['coins:changed', 'ramps:changed',
-                     'springs:changed', 'spin:granted'] as const)
+                     'springs:changed', 'spin:granted', 'cosmetics:changed'] as const)
       bus.on(e, () => this.changed());
   }
 

@@ -26,7 +26,9 @@
    - and the discount is the whole point of the bulk rows, so the
    two must come from one table.
    ============================================================ */
+import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
+import { COSMETICS, type Cosmetic, type CosmeticKind } from '../cosmetics/cosmetics';
 import { RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
          RAMP_BUNDLES, SPRING_BUNDLES,
          type Bundle } from '../managers/RewardManager';
@@ -41,6 +43,9 @@ function saving(b: Bundle, unit: number): number {
 export function ShopPanel({ onClose }: { onClose: () => void }) {
   const { rewards } = useGame();
   useGameVersion();
+  /* Two tabs: the items that help you solve boards, and STYLE - looks only,
+     the coin sink with nothing to do with winning. */
+  const [tab, setTab] = useState<'items' | 'style'>('items');
 
   return (
     <div className="overlay" id="shoppanel">
@@ -49,7 +54,14 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
         <div className="sub" id="shop-coins">
           You have <b className="coinamt"><i className="coin" />{rewards.coins}</b> coins.
         </div>
+        <div className="tabs" role="tablist">
+          <button role="tab" id="tab-items" className={tab === 'items' ? 'on' : ''}
+                  aria-selected={tab === 'items'} onClick={() => setTab('items')}>Items</button>
+          <button role="tab" id="tab-style" className={tab === 'style' ? 'on' : ''}
+                  aria-selected={tab === 'style'} onClick={() => setTab('style')}>Style</button>
+        </div>
 
+        {tab === 'style' ? <StyleTab /> : (
         <div className="scroll">
           <h4>Spare ramps</h4>
           <p className="shopnote">
@@ -114,11 +126,71 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
             </p>
           )}
         </div>
+        )}
 
         <div className="row">
           <button id="btn-shop-close" className="primary" onClick={onClose}>Close</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   THE STYLE TAB
+
+   Ball skins, trail colours and ramp colours - looks only. Each
+   tile shows its swatch and what tapping it does: buy (coins),
+   wear (owned), wearing, or "chest only" for the ones only star
+   chests hand out.
+   ============================================================ */
+const KINDS: { kind: CosmeticKind; title: string }[] = [
+  { kind: 'ball', title: 'Ball skins' },
+  { kind: 'trail', title: 'Trails' },
+  { kind: 'ramp', title: 'Ramp colours' },
+];
+
+function Swatch({ c }: { c: Cosmetic }) {
+  if (c.kind === 'ball')
+    return <i className="swatch ball" style={{ background:
+      `radial-gradient(circle at 35% 30%, ${c.colors[0]}, ${c.colors[1]} 45%, ${c.colors[2]})` }} />;
+  if (c.kind === 'trail')
+    return <i className="swatch trail" style={{ background: c.colors[0] === 'rainbow'
+      ? 'linear-gradient(90deg,#ff5f6d,#ffc371,#47e891,#4aa3ff,#b57cff)'
+      : `linear-gradient(90deg, transparent, ${c.colors[0]})` }} />;
+  return <i className="swatch ramp" style={{ background: c.colors[0] }} />;
+}
+
+function StyleTab() {
+  const { rewards } = useGame();
+  return (
+    <div className="scroll" id="shop-style">
+      {KINDS.map(({ kind, title }) => (
+        <div key={kind}>
+          <h4>{title}</h4>
+          <div className="stylegrid">
+            {COSMETICS.filter(c => c.kind === kind).map(c => {
+              const owned = rewards.ownsCosmetic(c.id);
+              const worn = rewards.cosmeticsSelected[kind] === c.id;
+              const label = worn ? 'Wearing' : owned ? 'Wear'
+                : c.price === null ? 'Chest only' : `${c.price}`;
+              const can = worn ? false : owned ? true : c.price !== null && rewards.canAfford(c.price);
+              return (
+                <button key={c.id} id={`style-${c.id}`} className={'styletile' + (worn ? ' worn' : '')}
+                        disabled={!can && !worn} aria-pressed={worn}
+                        onClick={() => { if (worn) return;
+                                         if (owned) rewards.selectCosmetic(c.id); else rewards.buyCosmetic(c.id); }}>
+                  <Swatch c={c} />
+                  <b>{c.name}</b>
+                  <span className="price">
+                    {!owned && c.price !== null && <i className="coin" />}{label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

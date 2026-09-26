@@ -6,6 +6,7 @@
    velocity, which is what made the fall read as floaty.
    ============================================================ */
 import { BALL_R } from '../physics/constants';
+import { activeStyle } from '../cosmetics/cosmetics';
 
 const TRAIL_MAX = 16;
 
@@ -25,9 +26,12 @@ export class Trail {
     if (this.pts.length < 2) return;
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#ffb400';
+    /* the worn trail colour (cosmetics); 'rainbow' walks the hue along it */
+    const rainbow = activeStyle.trail[0] === 'rainbow';
+    if (!rainbow) ctx.strokeStyle = activeStyle.trail[0];
     for (let i = 1; i < this.pts.length; i++) {
       const k = i / this.pts.length;         // 0 at the tail, 1 at the ball
+      if (rainbow) ctx.strokeStyle = `hsl(${Math.round(k * 300)},90%,60%)`;
       ctx.globalAlpha = k * k * 0.5;
       ctx.lineWidth = BALL_R * 1.5 * k;
       ctx.beginPath();

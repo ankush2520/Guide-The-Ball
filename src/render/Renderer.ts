@@ -16,12 +16,13 @@ import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
 import { RAMP_STYLE } from '../entities/Ramp';
+import { activeStyle } from '../cosmetics/cosmetics';
 import { rampAllowed } from '../levels/patrol';
 import { drawSpring } from './Spring';
 import { Backdrop } from './Backdrop';
 import { drawStarfield } from './Starfield';
 import { drawClouds } from './Clouds';
-import { BALL, INK, OBSTACLE, isLightSky } from './palette';
+import { INK, OBSTACLE, isLightSky } from './palette';
 import { Trail } from './Trail';
 import { ParticleSystem } from './Particles';
 import { drawSeg } from './primitives';
@@ -36,6 +37,15 @@ export const MAX_SCALE = 2;
 export interface Squash { amt: number; nx: number; ny: number; }
 
 export interface CaptureState { t: number; bx: number; by: number; cx: number; cy: number; }
+
+/** The player's ramps in the worn ramp colour (cosmetics); the rest of the
+    style is the ramp's own. One object, rebuilt only when the colour moves. */
+let rampCache: { fill: string; style: typeof RAMP_STYLE } | null = null;
+function playerRamp(): typeof RAMP_STYLE {
+  if (!rampCache || rampCache.fill !== activeStyle.ramp)
+    rampCache = { fill: activeStyle.ramp, style: { ...RAMP_STYLE, fill: activeStyle.ramp } as typeof RAMP_STYLE };
+  return rampCache.style;
+}
 
 export interface RenderState {
   level: Level;
@@ -220,7 +230,7 @@ export class Renderer {
     if (s.hint) this.drawHint(s.hint, s.clock);
 
     /* ramps - the player's own entities, drawn above the board furniture */
-    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
+    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, playerRamp());
 
     /* THE RAMP BEING DRAWN, in the same pen as a placed one so what you see
        under your finger is what you are about to get. Translucent while it is
@@ -232,7 +242,7 @@ export class Renderer {
       /* ...and across a moving target's track, which is the same promise:
          nothing is placed there. */
       if (len < s.minRamp || !rampAllowed(s.level, s.draft)) ctx.globalAlpha = 0.45;
-      drawSeg(ctx, s.draft, RAMP_HT, RAMP_STYLE);
+      drawSeg(ctx, s.draft, RAMP_HT, playerRamp());
       ctx.restore();
     }
 
@@ -313,7 +323,7 @@ export class Renderer {
     for (const r of s.ramps) {
       ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke();
     }
-    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
+    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, playerRamp());
     ctx.restore();
   }
 
@@ -332,7 +342,7 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(255,210,63,.75)';
     ctx.lineWidth = RAMP_HT * 2 + 16;
     ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
-    drawSeg(ctx, seg, RAMP_HT, RAMP_STYLE);
+    drawSeg(ctx, seg, RAMP_HT, playerRamp());
     // dashed line down the bar, so selection survives on top of a same-coloured ramp
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.8;
@@ -431,24 +441,37 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** The warm halo, built about the origin. */
+  /** The worn ball skin changed: the cached gradients are stale. */
+  private styleSeen = -1;
+  private checkStyle(): void {
+    if (this.styleSeen === activeStyle.version) return;
+    this.styleSeen = activeStyle.version;
+    this.bloomGrad = null; this.coreGrad = null;
+  }
+
+  /** The halo in the skin's edge colour, built about the origin. */
   private bloomFor(rad: number): CanvasGradient {
+    this.checkStyle();
     if (this.bloomGrad && this.bloomRad === rad) return this.bloomGrad;
     const g = this.ctx.createRadialGradient(0, 0, rad * 0.8, 0, 0, rad * 2.2);
-    g.addColorStop(0, 'rgba(255,180,0,.30)');
-    g.addColorStop(1, 'rgba(255,180,0,0)');
+    const edge = activeStyle.ball[2];
+    g.addColorStop(0, edge + '4d');     // ~30%
+    g.addColorStop(1, edge + '00');
     this.bloomGrad = g; this.bloomRad = rad;
     return g;
   }
 
   /** White at the highlight falling off to gold - already origin-relative. */
   private coreFor(rad: number): CanvasGradient {
+    this.checkStyle();
     if (this.coreGrad && this.coreRad === rad) return this.coreGrad;
     const g = this.ctx.createRadialGradient(-rad * 0.30, -rad * 0.34, rad * 0.05,
                                             0, 0, rad);
-    g.addColorStop(0,    BALL.hi);
-    g.addColorStop(0.45, BALL.mid);
-    g.addColorStop(1,    BALL.edge);
+    /* the worn ball skin (cosmetics) - the classic one is BALL's own colours */
+    const [hi, mid, edge] = activeStyle.ball;
+    g.addColorStop(0,    hi);
+    g.addColorStop(0.45, mid);
+    g.addColorStop(1,    edge);
     this.coreGrad = g; this.coreRad = rad;
     return g;
   }

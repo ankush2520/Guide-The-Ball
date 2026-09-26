@@ -60,6 +60,8 @@ export interface GameEvents extends Record<string, unknown> {
   /* Something outside a panel asks the shell to open one (the need-a-spring
      strip's Shop button). */
   'panel:open':      { panel: 'shop' };
+  /* A cosmetic was bought, unlocked or worn - the shop and the board re-read. */
+  'cosmetics:changed': { id: string };
   'spin:granted':    { bonus: number };
   'spin:won':        { prizeIndex: number; kind: PrizeKind; n: number };
 
@@ -71,7 +73,7 @@ export interface GameEvents extends Record<string, unknown> {
   'tip:shown':       { key: string; text: string };
 }
 
-export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box' | 'chest';
+export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box' | 'chest' | 'style';
 export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box' | 'chest';
 
 /** What the player can OWN, and therefore what a payout can land in. The

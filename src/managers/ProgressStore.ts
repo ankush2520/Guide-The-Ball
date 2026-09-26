@@ -57,6 +57,8 @@ export interface SaveData {
   wheelAdSpinDay?: string;
   /** How many star chests have been opened. */
   chestsClaimed?: number;
+  /** Cosmetics owned, and which one of each kind is worn. */
+  cosmetics?: { owned?: string[]; selected?: Record<string, string> };
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */
