@@ -50,6 +50,8 @@ export interface SaveData {
   migratedBalls?: boolean;
   /** The spring walkthrough has been shown through, or skipped. */
   springUnlockSeen?: boolean;
+  /** The first hint in the game is free - this records it has been had. */
+  freeHintUsed?: boolean;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */

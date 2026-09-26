@@ -11,7 +11,7 @@
    needs no game running, so a headless sweep never has to boot
    React. The GAME half is attached once the managers exist.
    ============================================================ */
-import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
+import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls, levelSeed } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
 import { RAMP_LEN } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
@@ -130,6 +130,8 @@ const physics = {
   /* The patrol solved directly, so a test can check the curve itself rather
      than inferring it from where a ball happened to land. */
   targetAt,
+  /** The seed the game drops every level with - what hints are proved on. */
+  levelSeed,
 
   /* The legacy argument order, kept exactly: (ramps, seed, levelIdx, broken).
      levelIdx is optional, as it was - the tuning rig calls simulate(ramps,

@@ -26,6 +26,9 @@ import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import { strikeAt } from '../levels/storm';
+import { levelSeed } from '../levels';
+import { HINTS } from '../levels/hints.data';
+import { boardCycles } from '../levels/fish';
 import type { Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
@@ -319,10 +322,35 @@ export class GameController {
   }
   dismissStuck(): void { this.stuckDismissed = true; this.changed(); }
 
-  /** Whether this board has a proven hint to show - Part E. */
-  get hintAvailable(): boolean { return false; }
-  /** Show this board's hint - Part E. */
-  showHint(): void { /* Part E */ }
+  /* ============================================================
+     THE HINT
+
+     One proven winning plan per level (levels/hints.data.ts, made
+     by tools/genhints.mjs on the level's own seed). Showing it
+     draws its ramps as a dashed ghost for the rest of this level
+     ENTRY, and on a timed board pulses the drop point at the
+     proven moment. It counts as help: the clear is capped at
+     HELPED_MAX_STARS, like a spare ramp.
+
+     Paying for it (the first one free, then an ad) is the UI's
+     job; this only shows it.
+     ============================================================ */
+  hintShown = false;
+  /** Whether this board has a hint, not yet shown this entry. */
+  get hintAvailable(): boolean {
+    return !!HINTS[this.levels.level.id] && !this.hintShown;
+  }
+  showHint(): void {
+    const h = HINTS[this.levels.level.id];
+    if (!h || this.hintShown) return;
+    this.hintShown = true;
+    this.stuckDismissed = true;
+    // short: the caption is one line on a phone
+    this.showFlash('Trace the dashed ramp' + (h.ramps.length > 1 ? 's' : '')
+      + (h.ramps.some(r => r.spring) ? ' + spring' : '')
+      + (h.t0 !== undefined ? ', drop on the pulse' : '') + '. Max 2★');
+    this.changed();
+  }
 
   /** Take a ramp off the board (its × button). If that brings the board back
       within its own budget, a reserved spare goes back to the bag. */
@@ -706,7 +734,7 @@ export class GameController {
        miss means the ramps need changing, never that the dice were bad.
        Each level has its own seed, so the pattern differs board to board. */
     const seed = this.seedOverride !== null
-      ? this.seedOverride : (Math.imul(this.levels.level.id, 2654435761) >>> 1);
+      ? this.seedOverride : levelSeed(this.levels.level.id);
     this.releaseBall();
     const t0 = Math.floor(this.patrolClock);
     this.lastT0 = t0;
@@ -855,7 +883,7 @@ export class GameController {
     const { stars, coins, note, firstClear } = this.rewards.recordClear(
       this.levels.levelIndex, lv.id, this.levels.isLast,
       this.tries, this.levels.rampsUsed, this.levels.levelBudget,
-      usedSpare ? 'spare' : null);
+      usedSpare ? 'spare' : this.hintShown ? 'hint' : null);
 
     const card: WinCard = {
       stars, note, coins, isLast: this.levels.isLast,
@@ -939,6 +967,7 @@ export class GameController {
     this.tries = 0;
     this.restarts = 0;
     this.stuckDismissed = false;
+    this.hintShown = false;
     this.ballsMax = ballsFor(this.levels.level.id);
     this.ballsLeft = this.ballsMax;
     // every visit starts the patrol (and the storm) from the same phase
@@ -1207,7 +1236,24 @@ export class GameController {
       handleR: HANDLE_R,
       delR: DEL_R,
       tutorial: this.fillTutorial(),
+      /* the hint's ghost ramps, while it is shown, and whether the drop point
+         should pulse right now (a timed board at the proven moment) */
+      hint: this.hintShown ? HINTS[lv.id]?.ramps ?? null : null,
+      hintPulse: this.hintShown && this.phase === 'plan' && this.atHintMoment(),
     };
+  }
+
+  /** On a timed board: is the board back at the moment the hint was proven
+      at? Only if EVERY clock on it is - within a few steps, since the drop
+      itself is floored to a step. */
+  private atHintMoment(): boolean {
+    const h = HINTS[this.levels.level.id];
+    if (!h || h.t0 === undefined) return false;
+    const t = this.patrolClock;
+    return boardCycles(this.levels.playLevel).every(P => {
+      const d = (((t - h.t0!) % P) + P) % P;
+      return Math.min(d, P - d) <= 3;
+    });
   }
 
   /* OR-ed rather than taken from the ball: a box claimed on an earlier visit

@@ -55,6 +55,13 @@ export function initLevel(raw: RawLevel): Level {
 
 export const LEVELS: Level[] = RAW_LEVELS.map(initLevel);
 
+/** The obstacle-scatter seed a level's drops use. DETERMINISTIC: the same
+    ramps always give the same run, so a miss is the ramps, never the dice -
+    and the hint tool proves its hints on exactly this seed. */
+export function levelSeed(id: number): number {
+  return Math.imul(id, 2654435761) >>> 1;
+}
+
 /* Which country a level belongs to. Every level id in the game falls inside
    exactly one country's range; the fallback is defensive only. */
 export function countryOf(id: number): Country {

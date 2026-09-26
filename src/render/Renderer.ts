@@ -72,6 +72,10 @@ export interface RenderState {
   delR: number;
   /** Whether a spring is out of the bag waiting for a ramp to be tapped. */
   armedSpring: boolean;
+  /** The hint's ramps while it is shown (a dashed ghost), else null. */
+  hint: readonly Segment[] | null;
+  /** A timed board's hint: the board is at the proven drop moment now. */
+  hintPulse: boolean;
   /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
       the board adds only what has to sit ON the board - see drawCoach. */
   tutorial: { step: string | null };
@@ -211,6 +215,10 @@ export class Renderer {
         e.drawCapture(ctx, s.capture.t / s.captureMs, s.capture.cx, s.capture.cy);
     }
 
+    /* THE HINT: its ramps as a dashed ghost under the player's own, so a
+       ramp drawn over one sits right on top of it. */
+    if (s.hint) this.drawHint(s.hint, s.clock);
+
     /* ramps - the player's own entities, drawn above the board furniture */
     for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
 
@@ -243,6 +251,8 @@ export class Renderer {
     for (const r of s.ramps) if (r.spring) drawSpring(ctx, r, s.clock);
 
     if (s.phase === 'plan') this.drawSpawnMarker(s.level);
+    // a timed board's hint: the drop point pulses at the proven moment
+    if (s.hintPulse) this.drawHintPulse(s.level, s.clock);
     if (s.tutorial.step) this.drawCoach(s);
 
     /* the comet behind the ball, then the impact sparks over it */
@@ -250,6 +260,37 @@ export class Renderer {
     this.particles.draw(ctx);
 
     this.drawBall(s);
+    ctx.restore();
+  }
+
+  /** A hint ramp: the ramp's own width, dashed and faint - a ghost to trace,
+      never mistaken for a real one. A spring on it shows as a faint coil. */
+  private drawHint(ramps: readonly Segment[], clock: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.setLineDash([10, 8]);
+    for (const r of ramps) {
+      ctx.strokeStyle = 'rgba(40,110,230,0.22)';
+      ctx.lineWidth = RAMP_HT * 2 + 6;
+      ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(40,110,230,0.75)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.45;
+    for (const r of ramps) if (r.spring) drawSpring(ctx, r, clock);
+    ctx.restore();
+  }
+
+  /** "Drop now": a ring swelling out of the spawn point. */
+  private drawHintPulse(lv: Level, clock: number): void {
+    const ctx = this.ctx, k = (clock * 2.5) % 1;
+    ctx.save();
+    ctx.strokeStyle = `rgba(40,110,230,${0.9 * (1 - k)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(lv.spawn.x, lv.spawn.y, 12 + k * 26, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 

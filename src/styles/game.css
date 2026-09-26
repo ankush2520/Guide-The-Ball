@@ -1268,3 +1268,10 @@
 @keyframes flylabel{from{opacity:0;margin-top:0}20%{opacity:1}to{opacity:0;margin-top:-36px}}
 .offerclose{position:absolute;right:6px;top:4px;width:26px;height:26px;padding:0;border:0;
             background:none;box-shadow:none;font-size:20px;line-height:26px;color:var(--ink);opacity:.6}
+/* the hint lightbulb - sized like its neighbours, with the gear's dot while
+   the first (free) hint is still to be had */
+.iconbtn.hintbtn{position:relative;width:29px;height:29px;display:inline-flex;
+                 align-items:center;justify-content:center;padding:0}
+.iconbtn.hintbtn .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;
+                      border-radius:50%;background:#ff4d6d;box-shadow:0 0 0 2px #fff}
+@media (max-width:420px){ .iconbtn.hintbtn{width:26px;height:26px} }

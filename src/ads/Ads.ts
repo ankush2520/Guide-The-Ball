@@ -84,7 +84,7 @@ class AdsImpl {
         return;
       }
     } catch { /* an SDK that throws is an SDK that is not there */ }
-    this.platform = import.meta.env.DEV ? 'dev' : 'none';
+    this.platform = import.meta.env?.DEV ? 'dev' : 'none';
     this.ready = this.platform === 'dev';
   }
 

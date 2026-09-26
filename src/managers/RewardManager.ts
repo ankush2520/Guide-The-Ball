@@ -347,7 +347,7 @@ export function starNote(
 
 /** The dev unlock: DEV builds only, and only when asked for in storage. */
 function unlockAll(): boolean {
-  if (!import.meta.env.DEV) return false;
+  if (!import.meta.env?.DEV) return false;
   try {
     return localStorage.getItem("gtb-unlock-all") === "1";
   } catch {
@@ -454,6 +454,8 @@ export class RewardManager {
   /** Whether the spring walkthrough (bag -> Use -> ramp) has been shown
       through to the end, or skipped. Once, ever. */
   springUnlockSeen = false;
+  /** The first hint in the game is free; after that, one ad each. */
+  freeHintUsed = false;
 
   /** Has this level's mystery box already been taken? */
   boxClaimed(levelIndex: number): boolean {
@@ -541,6 +543,7 @@ export class RewardManager {
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
     this.springGift = !!s.springGift;
     this.springUnlockSeen = !!s.springUnlockSeen;
+    this.freeHintUsed = !!s.freeHintUsed;
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -636,6 +639,7 @@ export class RewardManager {
     this.tipsSeen = {};
     this.springGift = false;
     this.springUnlockSeen = false;
+    this.freeHintUsed = false;
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -681,6 +685,7 @@ export class RewardManager {
       gifts: this.claimedGifts,
       migratedBalls: true,
       springUnlockSeen: this.springUnlockSeen,
+      freeHintUsed: this.freeHintUsed,
     });
   }
 
