@@ -29,6 +29,7 @@ import { starsFor, BALLS_PER_LEVEL, BALLS_EXAM, CONTINUE_BALLS, ballsFor,
          COIN_CLEAR, coinsFor,
          SPIN_PRIZES, SPIN_COOLDOWN_MS, SPIN_MS } from '../managers/RewardManager';
 import { SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
+import { readEvents } from '../analytics/track';
 import { STAR_N } from '../render/Starfield';
 import { Ease } from '../render/Tweens';
 import { Sound } from '../audio/Sound';
@@ -268,6 +269,8 @@ export function installGameHook(s: GameServices): void {
     audioMix: () => Sound.debugMix(),
 
     /* this LEVEL's balls - there is no tank any more */
+    /** The tracking ring buffer (Part K), oldest first. */
+    events: () => readEvents(),
     balls: () => c.ballsLeft,
     setBalls: (n: number) => { c.ballsLeft = Math.max(0, n | 0); },
     ballsFor: (id: number) => ballsFor(id),

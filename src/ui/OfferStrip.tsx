@@ -18,6 +18,7 @@
 import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
+import { useAdOffer } from '../ads/useAdOffer';
 
 export function OfferStrip({ onShop }: { onShop: () => void }) {
   const { controller, levels, rewards } = useGame();
@@ -26,6 +27,11 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
 
   const needsSpring = !!levels.level.needsSpring && rewards.springsUnlocked
     && rewards.springs - levels.springsReserved <= 0;
+  const live = controller.phase === 'plan' && !controller.intro && Ads.available();
+  const stuck = live && !needsSpring && controller.stuckOffer;
+  useAdOffer('spring', live && needsSpring);
+  useAdOffer('hint', stuck && controller.hintAvailable);
+  useAdOffer('spare', stuck && controller.sparesAllowed);
   if (controller.phase !== 'plan' || controller.intro) return null;
 
   /* an ad, then the reward - granted ONLY on a watched ad */

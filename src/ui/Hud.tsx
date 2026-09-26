@@ -25,6 +25,7 @@ import { useGame, useGameVersion } from '../core/GameContext';
 import { LevelPill } from './LevelPill';
 import { useCoinsHeld } from './coinsInFlight';
 import { Ads } from '../ads/Ads';
+import { useAdOffer } from '../ads/useAdOffer';
 
 interface Props {
   onOpenSettings: () => void;
@@ -65,6 +66,7 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
   const [hintBusy, setHintBusy] = useState(false);
   const hintFree = !rewards.freeHintUsed;
   const hintShown = planning && controller.hintAvailable && (hintFree || Ads.available());
+  useAdOffer('hint', hintShown && !hintFree);
   const takeHint = async () => {
     if (hintFree) {
       rewards.freeHintUsed = true;

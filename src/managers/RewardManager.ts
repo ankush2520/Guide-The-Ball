@@ -34,6 +34,7 @@ import {
   WALLET_KEY,
 } from "./ProgressStore";
 import { clamp } from "../physics/math";
+import { track } from "../analytics/track";
 import { countryOf } from "../levels";
 import { CHEST_COSMETICS, DEFAULT_STYLE, cosmeticById, applyStyle,
          type CosmeticKind } from "../cosmetics/cosmetics";
@@ -1000,6 +1001,7 @@ export class RewardManager {
     if (!c || c.price === null || this.cosmeticsOwned.has(id)) return false;
     if (!this.canAfford(c.price)) return false;
     this.setCoins(this.coins - c.price, -c.price, "style");
+    track("cosmetic_bought", { id, price: c.price });
     this.unlockCosmetic(id);
     this.selectCosmetic(id);
     return true;
@@ -1047,6 +1049,7 @@ export class RewardManager {
     const c = this.chestContents(this.chestsClaimed + 1);
     this.chestsClaimed++;
     this.saveProgress();
+    track("chest_opened", { n: c.n, coins: c.coins, springs: c.springs, ramps: c.ramps, cosmetic: c.cosmetic });
     this.grantCoins(c.coins, "chest");
     if (c.springs) this.grantSprings(c.springs, "chest");
     if (c.ramps) this.grantRamps(c.ramps, "chest");

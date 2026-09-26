@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
+import { useAdOffer } from '../ads/useAdOffer';
 import { flyReward } from './CoinFlight';
 import { SPIN_PRIZES, SPIN_MS, JACKPOT_COINS,
          prizeValue, prizeLabel, type WheelKind } from '../managers/RewardManager';
@@ -186,6 +187,7 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
   const ready = rewards.spinReady() && !spinning;
   const [adWaiting, setAdWaiting] = useState(false);
   const adSpin = rewards.canAdSpin() && Ads.available();
+  useAdOffer('wheel', adSpin);
   const watchSpin = async () => {
     setAdWaiting(true);
     const ok = await Ads.rewarded('wheel');

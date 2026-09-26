@@ -27,6 +27,7 @@ import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import { strikeAt } from '../levels/storm';
 import { levelSeed } from '../levels';
+import { track } from '../analytics/track';
 import { HINTS } from '../levels/hints.data';
 import { boardCycles } from '../levels/fish';
 import type { Level, Segment, Vec } from '../levels/types';
@@ -349,6 +350,7 @@ export class GameController {
     if (!h || this.hintShown) return;
     this.hintShown = true;
     this.stuckDismissed = true;
+    track('hint_used', { level: this.levels.level.id });
     // short: the caption is one line on a phone
     this.showFlash('Trace the dashed ramp' + (h.ramps.length > 1 ? 's' : '')
       + (h.ramps.some(r => r.spring) ? ' + spring' : '')
@@ -825,6 +827,7 @@ export class GameController {
       : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);
+    track('ball_lost', { level: this.levels.level.id, result, ballsLeft: this.ballsLeft, tries: this.tries });
     /* That was the last ball: offer the way on straight away, rather than
        waiting for a Drop press that can only lead there. */
     if (this.ballsLeft <= 0) this.bus.emit('balls:empty', {});
@@ -865,6 +868,7 @@ export class GameController {
     this.ballsMax = ballsFor(this.levels.level.id);
     this.ballsLeft = this.ballsMax;
     this.restarts++;
+    track('level_restart', { level: this.levels.level.id, restarts: this.restarts, tries: this.tries });
     this.lastResult = null;
     this.hideFlash();
     this.setPhase('plan');
@@ -881,7 +885,11 @@ export class GameController {
     const springsUsed = this.commitSprings();
     /* THE ONE PLACE A SPARE RAMP IS SPENT: a win that actually needed it. */
     const usedSpare = this.levels.extraBudget > 0 && this.levels.rampsUsed > this.levels.levelBudget;
-    if (usedSpare) this.rewards.spendExtraRamp();
+    if (usedSpare) {
+      this.rewards.spendExtraRamp();
+      track('spare_ramp_used', { level: lv.id });
+    }
+    if (springsUsed > 0) track('spring_used', { level: lv.id, n: springsUsed });
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
     const { stars, coins, note, firstClear } = this.rewards.recordClear(
@@ -889,6 +897,8 @@ export class GameController {
       this.tries, this.levels.rampsUsed, this.levels.levelBudget,
       usedSpare ? 'spare' : this.hintShown ? 'hint' : null);
 
+    track('level_win', { level: lv.id, stars, tries: this.tries, usedSpareRamp: usedSpare,
+                         usedHint: this.hintShown, usedSpring: springsUsed > 0, firstClear });
     const card: WinCard = {
       stars, note, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
@@ -987,6 +997,7 @@ export class GameController {
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.renderer.invalidateBackdrop();
+    track('level_start', { level: this.levels.level.id });
     this.tries = 0;
     this.restarts = 0;
     this.stuckDismissed = false;

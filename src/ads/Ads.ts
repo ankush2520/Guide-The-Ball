@@ -32,6 +32,7 @@
    Audio is muted for the length of every ad, on both SDKs.
    ============================================================ */
 import { Sound } from '../audio/Sound';
+import { track } from '../analytics/track';
 
 type Platform = 'crazygames' | 'poki' | 'dev' | 'none';
 
@@ -92,7 +93,19 @@ class AdsImpl {
   available(): boolean { return this.ready && !this.busy; }
 
   /** A rewarded ad. Resolves true ONLY if it was watched to the end. */
-  async rewarded(_placement: AdPlacement): Promise<boolean> {
+  async rewarded(placement: AdPlacement): Promise<boolean> {
+    const ok = await this.play(placement);
+    track(ok ? 'ad_watched' : 'ad_failed', { placement });
+    return ok;
+  }
+
+  /** Record that an ad button for `placement` was put in front of the player
+      (once per showing - the UI calls it when the button appears). */
+  offerShown(placement: AdPlacement): void {
+    if (this.available()) track('ad_offer_shown', { placement });
+  }
+
+  private async play(_placement: AdPlacement): Promise<boolean> {
     if (!this.available()) return false;
     this.busy = true;
     const wasPlaying = this.playing;

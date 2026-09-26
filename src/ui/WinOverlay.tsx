@@ -26,6 +26,7 @@
 import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
+import { useAdOffer } from '../ads/useAdOffer';
 import { ChestBar } from './ChestPanel';
 import { MIDGAME_FROM_LEVEL } from '../managers/RewardManager';
 
@@ -35,6 +36,8 @@ export function WinOverlay() {
 
   const [waiting, setWaiting] = useState(false);
   const card = controller.winCard;
+  useAdOffer('double', controller.phase === 'over' && !!card && !card.collected && card.coins > 0
+                       && Ads.available());
   if (controller.phase !== 'over' || !card) return null;
   /* A first clear pays on a CHOICE: collect it, or watch an ad for double -
      two equal buttons. Replays pay nothing, so they go straight to the usual

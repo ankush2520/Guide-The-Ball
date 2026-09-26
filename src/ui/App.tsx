@@ -39,6 +39,7 @@ import { Confetti } from './Confetti';
 import { Coach } from './Coach';
 import { Sound } from '../audio/Sound';
 import { Ads } from '../ads/Ads';
+import { track, sessionMs } from '../analytics/track';
 
 type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items' | 'chest';
 
@@ -138,7 +139,10 @@ function Game() {
     const names = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
     const unlock = () => Sound.unlock();
     names.forEach(n => window.addEventListener(n, unlock, true));
-    const onVis = () => (document.hidden ? Sound.pause() : Sound.nudge());
+    const onVis = () => {
+      if (document.hidden) { Sound.pause(); track('session_end', { ms: sessionMs() }); }
+      else Sound.nudge();
+    };
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('pageshow', Sound.nudge);
     return () => {
