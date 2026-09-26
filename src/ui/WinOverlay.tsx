@@ -23,14 +23,27 @@
    different things and a win card is the worst place to confuse
    them: one is what you just did, the other is what it cost.
    ============================================================ */
+import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
+import { Ads } from '../ads/Ads';
 
 export function WinOverlay() {
   const { controller } = useGame();
   useGameVersion();
 
+  const [waiting, setWaiting] = useState(false);
   const card = controller.winCard;
   if (controller.phase !== 'over' || !card) return null;
+  /* A first clear pays on a CHOICE: collect it, or watch an ad for double -
+     two equal buttons. Replays pay nothing, so they go straight to the usual
+     Replay / Next. */
+  const owed = !card.collected && card.coins > 0;
+  const double = async () => {
+    setWaiting(true);
+    const ok = await Ads.rewarded('double');
+    setWaiting(false);
+    if (ok) controller.collectWin(true);
+  };
 
   return (
     <div className="overlay" id="overlay">
@@ -65,7 +78,7 @@ export function WinOverlay() {
               replaces it says which it is, once, where the number was. */}
           {card.coins > 0 ? (
             <span className="reward" id="ov-coins">
-              <i className="coin" /><b>+{card.coins}</b>
+              <i className="coin" /><b>+{card.collected ? card.paid : card.coins}</b>
             </span>
           ) : (
             <span className="nopay" id="ov-nopay">Already earned &mdash; replays are practice</span>
@@ -83,12 +96,25 @@ export function WinOverlay() {
             level" and the difference between them - one re-drops for you, the
             other hands the board back to edit first - was too fine to be
             worth a third button on a card this short. */}
+        {owed ? (
+          <div className="row pair">
+            <button id="btn-collect" disabled={waiting} onClick={() => controller.collectWin(false)}>
+              Collect {card.coins}
+            </button>
+            {Ads.available() && (
+              <button id="btn-collect-ad" disabled={waiting} onClick={double}>
+                {waiting ? 'Loading ad…' : `Watch ad: collect ${card.coins * 2}`}
+              </button>
+            )}
+          </div>
+        ) : (
         <div className="row">
           <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>
           {!card.isLast && (
             <button id="btn-next" className="primary" onClick={() => controller.nextLevel()}>Next</button>
           )}
         </div>
+        )}
       </div>
     </div>
   );

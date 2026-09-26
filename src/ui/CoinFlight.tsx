@@ -153,7 +153,8 @@ export function CoinFlight() {
   const flown = useRef<WinCard | null>(null);
 
   const card = controller.winCard;
-  const showing = controller.phase === 'over' && !!card && card.coins > 0;
+  // the coins fly when they are COLLECTED - see GameController.collectWin
+  const showing = controller.phase === 'over' && !!card && card.collected && card.paid > 0;
 
   /* The layer has to be in the document before anything can launch into it,
      and the wheel reaches it through the module rather than through props. */

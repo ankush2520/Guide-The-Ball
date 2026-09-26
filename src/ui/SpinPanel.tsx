@@ -11,6 +11,7 @@
    ============================================================ */
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '../core/GameContext';
+import { Ads } from '../ads/Ads';
 import { flyReward } from './CoinFlight';
 import { SPIN_PRIZES, SPIN_MS, JACKPOT_COINS,
          prizeValue, prizeLabel, type WheelKind } from '../managers/RewardManager';
@@ -183,6 +184,14 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
   }, []);
 
   const ready = rewards.spinReady() && !spinning;
+  const [adWaiting, setAdWaiting] = useState(false);
+  const adSpin = rewards.canAdSpin() && Ads.available();
+  const watchSpin = async () => {
+    setAdWaiting(true);
+    const ok = await Ads.rewarded('wheel');
+    setAdWaiting(false);
+    if (ok) { rewards.grantAdSpin(); setTick(t => t + 1); }
+  };
 
   const doSpin = () => {
     if (!ready) return;
@@ -218,10 +227,21 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
           <div className="wheelptr" />
           <div className="wheelhub" />
         </div>
-        <div className="row">
-          <button id="btn-spin-go" className="primary" disabled={!ready} onClick={doSpin}>Spin</button>
-          <button id="btn-spin-close" disabled={spinning} onClick={onClose}>Close</button>
-        </div>
+        {/* After the daily spin, once a day: a watched ad earns one more.
+            It takes the Spin button's place, and is the same size as Close. */}
+        {adSpin ? (
+          <div className="row pair">
+            <button id="btn-spin-ad" disabled={adWaiting} onClick={watchSpin}>
+              {adWaiting ? 'Loading ad…' : 'Watch ad: spin again'}
+            </button>
+            <button id="btn-spin-close" onClick={onClose}>Close</button>
+          </div>
+        ) : (
+          <div className="row">
+            <button id="btn-spin-go" className="primary" disabled={!ready} onClick={doSpin}>Spin</button>
+            <button id="btn-spin-close" disabled={spinning} onClick={onClose}>Close</button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -131,6 +131,10 @@ export interface WinCard {
   isLast: boolean; nextId: number | null;
   /** Springs this win actually spent. Zero on all but a handful of boards. */
   springs: number;
+  /** Whether the coins have been paid yet - the card offers "Collect" or the
+      doubled ad first. `paid` is what actually landed. */
+  collected: boolean;
+  paid: number;
 }
 
 export class GameController {
@@ -889,6 +893,7 @@ export class GameController {
       stars, note, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
       springs: springsUsed,
+      collected: coins <= 0, paid: 0,
     };
     this.capture = null;
 
@@ -945,6 +950,23 @@ export class GameController {
     this.changed();
   }
 
+  /* ============================================================
+     COLLECTING A CLEAR
+
+     The win card pays on the player's choice: "Collect N" or
+     "Watch ad: collect 2N" (the UI calls this with doubled=true
+     ONLY after a watched ad). Leaving the card any other way -
+     Next, Replay, the level picker - collects the plain amount,
+     so a clear can never go unpaid.
+     ============================================================ */
+  collectWin(doubled = false): void {
+    const card = this.winCard ?? this.pendingCard;
+    if (!card || card.collected) return;
+    card.collected = true;
+    card.paid = this.rewards.payClear(card.coins, doubled);
+    this.changed();
+  }
+
   private emitEnded(result: DropResult): void {
     this.bus.emit('drop:ended', { result, level: this.levels.level,
                                   tries: this.tries, rampsUsed: this.levels.rampsUsed });
@@ -953,6 +975,7 @@ export class GameController {
   /* ---------------- level flow ---------------- */
 
   setLevel(i: number): void {
+    this.collectWin();                  // an uncollected clear is paid, never lost
     this.levels.setLevel(i);
     this.tutRetry = false; this.tutDropping = false;
     this.releaseBall();
@@ -1013,6 +1036,7 @@ export class GameController {
       the same drop, not a new roll. A replay of a cleared board follows the
       same few-balls rule as any visit, so it starts a fresh supply. */
   retry(): void {
+    this.collectWin();
     this.patrolClock = this.lastT0;
     this.ballsMax = ballsFor(this.levels.level.id);
     this.ballsLeft = this.ballsMax;

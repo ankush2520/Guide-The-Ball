@@ -52,6 +52,9 @@ export interface SaveData {
   springUnlockSeen?: boolean;
   /** The first hint in the game is free - this records it has been had. */
   freeHintUsed?: boolean;
+  /** The local day (YYYY-MM-DD) the wheel's "Watch ad: spin again" was last
+      used - once a day. */
+  wheelAdSpinDay?: string;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */

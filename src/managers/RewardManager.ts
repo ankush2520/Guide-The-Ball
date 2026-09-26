@@ -472,6 +472,8 @@ export class RewardManager {
   springUnlockSeen = false;
   /** The first hint in the game is free; after that, one ad each. */
   freeHintUsed = false;
+  /** See SaveData.wheelAdSpinDay. */
+  wheelAdSpinDay = "";
 
   /** Has this level's mystery box already been taken? */
   boxClaimed(levelIndex: number): boolean {
@@ -560,6 +562,7 @@ export class RewardManager {
     this.springGift = !!s.springGift;
     this.springUnlockSeen = !!s.springUnlockSeen;
     this.freeHintUsed = !!s.freeHintUsed;
+    this.wheelAdSpinDay = typeof s.wheelAdSpinDay === "string" ? s.wheelAdSpinDay : "";
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -656,6 +659,7 @@ export class RewardManager {
     this.springGift = false;
     this.springUnlockSeen = false;
     this.freeHintUsed = false;
+    this.wheelAdSpinDay = "";
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -702,6 +706,7 @@ export class RewardManager {
       migratedBalls: true,
       springUnlockSeen: this.springUnlockSeen,
       freeHintUsed: this.freeHintUsed,
+      wheelAdSpinDay: this.wheelAdSpinDay,
     });
   }
 
@@ -866,9 +871,10 @@ export class RewardManager {
        pays nothing: replays are free, so any repeat payout is a farm. */
     const coins = coinsFor(levelId, stars, firstClear);
 
+    /* NOT granted here: the win card offers "Collect" or "Watch ad: collect
+       double", and payClear() pays whichever the player picks (or the plain
+       amount, if they leave the card any other way). */
     this.saveProgress();
-    // granted after saveProgress() so the ledger and the wallet commit together
-    this.grantCoins(coins, "clear");
 
     return {
       stars,
@@ -880,6 +886,32 @@ export class RewardManager {
           : starNote(tries, rampsUsed, budget, stars),
       firstClear,
     };
+  }
+
+  /** Pay a first clear's coins - once, from the win card. `doubled` only
+      after a WATCHED ad. */
+  payClear(coins: number, doubled: boolean): number {
+    const n = doubled ? coins * 2 : coins;
+    this.grantCoins(n, "clear");
+    return n;
+  }
+
+  /* ---- the wheel's once-a-day ad spin ---- */
+
+  /** Today, local time, as the save stores it. */
+  private static today(now = new Date()): string {
+    return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  }
+  /** "Watch ad: spin again": after the daily spin is used, once a day, and
+      only when there is no other spin waiting. */
+  canAdSpin(): boolean {
+    return !this.spinning && !this.spinReady() && this.wheelAdSpinDay !== RewardManager.today();
+  }
+  /** A watched ad's spin: one bonus spin token, and today is used up. */
+  grantAdSpin(): void {
+    this.wheelAdSpinDay = RewardManager.today();
+    this.saveProgress();
+    this.grantBonusSpin(1);
   }
 
   recordPickups(levelIndex: number, stars: number): void {
