@@ -82,7 +82,17 @@ export function WinOverlay() {
             <i className="mouth" />
           </i>
         </div>
-        <div className="big" id="ov-title">Target hit!</div>
+        <div className="big" id="ov-title">
+          {card.challenge?.done ? 'Challenge cleared!' : 'Target hit!'}
+        </div>
+        {card.challenge && (
+          <div className="sub" id="ov-challenge">
+            {card.challenge.done
+              ? (card.challenge.skin ? 'A new ball skin is yours - wear it from the shop\'s Style tab.'
+                                     : 'Every level in a row. Well played!')
+              : `Challenge Run: level ${card.challenge.at} of ${card.challenge.of} · ${card.challenge.balls} balls left`}
+          </div>
+        )}
         <div className="stars" id="ov-stars">
           {[0, 1, 2].map(i => <i key={i} className={i < card.stars ? 'on' : ''}>&#9733;</i>)}
         </div>

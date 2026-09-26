@@ -59,6 +59,8 @@ export interface SaveData {
   chestsClaimed?: number;
   /** Cosmetics owned, and which one of each kind is worn. */
   cosmetics?: { owned?: string[]; selected?: Record<string, string> };
+  /** Which worlds' Challenge Runs have been cleared, by country id. */
+  challenges?: Record<number, boolean>;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */

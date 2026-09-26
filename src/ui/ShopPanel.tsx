@@ -173,7 +173,7 @@ function StyleTab() {
               const owned = rewards.ownsCosmetic(c.id);
               const worn = rewards.cosmeticsSelected[kind] === c.id;
               const label = worn ? 'Wearing' : owned ? 'Wear'
-                : c.price === null ? 'Chest only' : `${c.price}`;
+                : c.price === null ? (typeof c.from === 'object' ? 'Challenge Run' : 'Chest only') : `${c.price}`;
               const can = worn ? false : owned ? true : c.price !== null && rewards.canAfford(c.price);
               return (
                 <button key={c.id} id={`style-${c.id}`} className={'styletile' + (worn ? ' worn' : '')}

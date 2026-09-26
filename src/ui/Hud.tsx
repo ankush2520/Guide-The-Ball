@@ -88,11 +88,16 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
         </div>
         {/* THIS LEVEL'S balls, as pips: a full one per ball left, a hollow
             one per ball used. A count, not a currency - see ballsFor. */}
-        <div className={'counter balls' + (controller.ballsLeft <= 0 ? ' empty' : '')}
-             title={`Balls left on this level: ${controller.ballsLeft}`} id="ball-count">
-          {Array.from({ length: controller.ballsMax }, (_, i) => (
-            <i key={i} className={'pip' + (i < controller.ballsLeft ? '' : ' used')} />
-          ))}
+        <div className={'counter balls' + (controller.ballsLeft <= 0 ? ' empty' : '')
+                        + (controller.challenge ? ' challenge' : '')}
+             title={controller.challenge ? `Challenge Run: ${controller.ballsLeft} balls left`
+                                         : `Balls left on this level: ${controller.ballsLeft}`} id="ball-count">
+          {/* a Challenge Run's pool is too big for pips: a count instead */}
+          {controller.challenge
+            ? <><i className="pip" /><b>{controller.ballsLeft}</b></>
+            : Array.from({ length: controller.ballsMax }, (_, i) => (
+                <i key={i} className={'pip' + (i < controller.ballsLeft ? '' : ' used')} />
+              ))}
         </div>
         {/* Ramps LEFT ON THIS BOARD, plus the spares in the drawer, which are
             spent automatically once the board's own run out. Dimmed at zero
