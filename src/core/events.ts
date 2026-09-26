@@ -47,13 +47,21 @@ export interface GameEvents extends Record<string, unknown> {
   'booster:used':    { index: number };
 
   /* ---- economy ---- */
-  'balls:changed':   { balls: number; delta: number; reason: BallChangeReason };
+  /* This level's balls are all used - the out-of-balls choice opens. */
   'balls:empty':     Record<string, never>;
   'coins:changed':   { coins: number; delta: number; reason: CoinChangeReason };
   'ramps:changed':   { ramps: number; delta: number; reason: RampChangeReason };
   'springs:changed':{ springs: number; delta: number; reason: RampChangeReason };
   /* A spin owed outside the daily cadence. The wheel's own cooldown is
      untouched by it - see RewardManager.grantBonusSpin(). */
+  /* The free springs just went into the bag, after their intro card - the
+     UI flies them in. */
+  'springs:gifted':  { n: number };
+  /* Something outside a panel asks the shell to open one (the need-a-spring
+     strip's Shop button). */
+  'panel:open':      { panel: 'shop' };
+  /* A cosmetic was bought, unlocked or worn - the shop and the board re-read. */
+  'cosmetics:changed': { id: string };
   'spin:granted':    { bonus: number };
   'spin:won':        { prizeIndex: number; kind: PrizeKind; n: number };
 
@@ -65,13 +73,12 @@ export interface GameEvents extends Record<string, unknown> {
   'tip:shown':       { key: string; text: string };
 }
 
-export type BallChangeReason = 'drop' | 'clear-bonus' | 'ad' | 'spin' | 'grant' | 'load' | 'buy' | 'box';
-export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box';
-export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box';
+export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box' | 'chest' | 'style';
+export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box' | 'chest';
 
 /** What the player can OWN, and therefore what a payout can land in. The
-    wheel pays the first three; a mystery box can also pay a booster. */
-export type PrizeKind = 'coins' | 'balls' | 'ramps' | 'springs';
+    wheel pays the first two; a mystery box can also pay a spring. */
+export type PrizeKind = 'coins' | 'ramps' | 'springs';
 
 /** What can FLY to somewhere on the HUD. A bonus spin is not a currency and
     has no counter of its own - it lands on the gear, which is where the

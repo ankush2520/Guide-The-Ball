@@ -39,7 +39,7 @@ const REVEAL_AT = SHAKE_MS + OPEN_MS;
 /* Which mark each prize wears, and where its name comes from. The marks are
    the HUD's own, so a coin in here is the coin in the counter it flies to. */
 const MARK: Record<string, string> = {
-  coins: 'flycoin', balls: 'flyball', ramps: 'flyramp',
+  coins: 'flycoin', ramps: 'flyramp',
   springs: 'flyspring', spin: 'flyspin',
 };
 

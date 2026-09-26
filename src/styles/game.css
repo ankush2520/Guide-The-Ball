@@ -295,6 +295,9 @@
                    border:1.5px solid var(--edge);border-bottom:none;
                    border-radius:4px 4px 0 0}
 
+  /* a used ball: the same pip, hollow */
+  .counter.balls .pip.used{background:transparent;box-shadow:inset 0 0 0 2px #b9b6cc}
+  .counter.balls{gap:3px}
   .counter.balls.empty{background:#ffe3e7}
   .counter.balls.empty .pip{background:#c9c6d8}
   .counter.balls.empty b{color:#c4122d}
@@ -1237,3 +1240,91 @@
     .board-slot{margin-top:7px}
     .iconbtn,.iconbtn.gear{width:26px;height:26px}
   }
+
+/* Two peers side by side - the out-of-balls choice. Equal flex, so neither
+   button can be made to look like the "real" one. */
+.row.pair{display:flex;gap:10px}
+.row.pair > button{flex:1 1 0;min-width:0}
+
+/* ---- intro cards ---- */
+#introcard{z-index:54}
+.card.intro{text-align:center}
+.introicon{display:block;width:180px;height:110px;margin:0 auto 6px}
+.introdots{display:flex;gap:6px;justify-content:center;margin:8px 0 2px}
+.introdots i{width:7px;height:7px;border-radius:50%;background:#d6d3e6}
+.introdots i.on{background:var(--ink)}
+
+/* ---- the offer strip: help for this board, with buttons ---- */
+.offerstrip{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);
+            width:min(92%,380px);padding:8px 10px;border-radius:14px;
+            background:rgba(255,255,255,.94);box-shadow:0 0 0 2px var(--edge),0 4px 0 var(--edge);
+            pointer-events:auto;z-index:5;text-align:center}
+.offerstrip .offertext{display:block;font-weight:700;font-size:13px;margin-bottom:6px;color:var(--ink)}
+.offerstrip .row.pair > button{font-size:13px;padding:8px 6px}
+
+/* a "+2" rising off a HUD counter */
+.flylabel{position:absolute;left:0;top:0;font-weight:800;font-size:18px;color:var(--ink);
+          pointer-events:none;animation:flylabel 1.25s ease-out forwards}
+@keyframes flylabel{from{opacity:0;margin-top:0}20%{opacity:1}to{opacity:0;margin-top:-36px}}
+.offerclose{position:absolute;right:6px;top:4px;width:26px;height:26px;padding:0;border:0;
+            background:none;box-shadow:none;font-size:20px;line-height:26px;color:var(--ink);opacity:.6}
+/* the hint lightbulb - sized like its neighbours, with the gear's dot while
+   the first (free) hint is still to be had */
+.iconbtn.hintbtn{position:relative;width:29px;height:29px;display:inline-flex;
+                 align-items:center;justify-content:center;padding:0}
+.iconbtn.hintbtn .dot{position:absolute;top:-1px;right:-1px;width:8px;height:8px;
+                      border-radius:50%;background:#ff4d6d;box-shadow:0 0 0 2px #fff}
+@media (max-width:420px){ .iconbtn.hintbtn{width:26px;height:26px} }
+
+/* ---- star chests ---- */
+#chestpanel{z-index:62}
+.chestrow{display:flex;gap:10px;align-items:center;justify-content:center;margin:4px 0 8px}
+.chestbar{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink)}
+.chestbar .track{width:120px;height:9px;border-radius:5px;background:#e6e3f1;overflow:hidden;
+                 box-shadow:inset 0 0 0 1.5px rgba(42,35,80,.25)}
+.chestbar .track i{display:block;height:100%;background:linear-gradient(90deg,#ffd76b,#f0a80e)}
+.chestbar.small{font-size:11.5px;justify-content:center;width:100%;margin:2px 0 6px}
+.chestbar.small .track{width:90px;height:7px}
+.chesticon{width:16px;height:13px;border-radius:3px;background:#c9772b;
+           box-shadow:inset 0 4px 0 #e39a45,0 0 0 1.5px var(--ink)}
+#btn-open-chest{padding:6px 12px;font-size:13px}
+.chestbar b{white-space:nowrap}
+
+/* ---- shop tabs and the Style tab ---- */
+.tabs{display:flex;gap:6px;justify-content:center;margin:6px 0 4px}
+.tabs button{padding:6px 16px;font-size:13px;opacity:.6}
+.tabs button.on{opacity:1;background:var(--ink);color:#fff}
+.stylegrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:6px}
+.styletile{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;font-size:12px}
+.styletile.worn{box-shadow:0 0 0 3px #2fc95a,0 4px 0 var(--edge)}
+.styletile .price{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;opacity:.85}
+.swatch{display:block;flex:none}
+.swatch.ball{width:26px;height:26px;border-radius:50%;box-shadow:0 0 0 2px var(--ink)}
+.swatch.trail{width:44px;height:10px;border-radius:5px}
+.swatch.ramp{width:44px;height:10px;border-radius:5px;box-shadow:0 0 0 2px var(--ink);transform:rotate(-12deg)}
+
+/* thunder: a bolt on storm-grey; the giant rock: the wall's stone, oval */
+.sw.th{border-radius:50%;background:radial-gradient(circle,#fff6b0 0 28%,#8a96b8 30%);
+       box-shadow:0 0 0 2px var(--edge)}
+.sw.ov{border-radius:50%/40%;width:22px;background:linear-gradient(#b4b9d4,#5b6188);
+       box-shadow:0 0 0 2px var(--edge)}
+
+/* a mechanic intro card: the board stays sharp (its subject is pulsing on
+   it), and the card sits low, clear of the board's upper half */
+#introcard.introlay:not(.world){background:rgba(60,70,130,.12);backdrop-filter:none;
+  align-items:flex-end;padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+#introcard.introlay:not(.world) .card.intro{max-width:360px}
+/* a world card: bigger, in the world's own sky */
+.card.intro.worldcard{padding-top:26px;padding-bottom:22px}
+.card.intro.worldcard .big{font-size:30px;color:var(--ink)}
+.card.intro.worldcard .sub{font-size:16px;font-weight:700;color:var(--ink)}
+#introcard.introlay:not(.world) .introicon{width:150px;height:84px;margin-bottom:0}
+#introcard.introlay:not(.world) .card.intro{padding-top:14px;padding-bottom:14px}
+
+/* ---- Challenge Runs ---- */
+.challenges{display:flex;flex-direction:column;gap:6px;margin:0 0 8px}
+.chrow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--ink)}
+.chrow button{padding:5px 10px;font-size:12px;flex:none}
+.chrow .badge{margin-left:6px;font-style:normal;font-size:11px;font-weight:800;color:#fff;
+              background:#2fc95a;border-radius:8px;padding:1px 6px}
+.counter.balls.challenge{gap:5px}

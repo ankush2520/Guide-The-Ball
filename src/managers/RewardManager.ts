@@ -2,12 +2,16 @@
    REWARD MANAGER
 
    Everything the player EARNS and everything they SPEND:
-   stars for a clear, balls for the tank, coins for the wallet,
-   spare ramps for the drawer, and the daily wheel.
+   stars for a clear, coins for the wallet, spare ramps and
+   springs for the bag, and the daily wheel.
 
    Coins are the hub. Clearing a level pays them, the wheel pays
-   them, and they buy the other two at a fixed price. Nothing
+   them, and they buy the items at a fixed price. Nothing
    converts back, so there is no loop to balance.
+
+   BALLS ARE NOT MONEY ANY MORE. Every level hands out its own
+   few balls (ballsFor) and the controller counts them down;
+   there is no tank to fill, buy or win. See the note there.
 
    It listens on the bus rather than being called by the game
    loop - 'level:cleared' is a fact the game announces, and
@@ -16,7 +20,6 @@
    ============================================================ */
 import type {
   GameBus,
-  BallChangeReason,
   CoinChangeReason,
   RampChangeReason,
   PrizeKind,
@@ -27,91 +30,171 @@ import {
   type SaveData,
   type PendingPrize,
   SAVE_KEY,
-  BALLS_KEY,
   SPIN_KEY,
   WALLET_KEY,
 } from "./ProgressStore";
 import { clamp } from "../physics/math";
+import { track } from "../analytics/track";
+import { countryOf } from "../levels";
+import { CHEST_COSMETICS, DEFAULT_STYLE, cosmeticById, applyStyle, challengeSkin,
+         type CosmeticKind } from "../cosmetics/cosmetics";
 
-/* ---- balls ---- */
+/* ============================================================
+   BALLS: A FEW PER LEVEL, NOT A TANK
 
-// Granted once, on the very first open. Generous on purpose: at one ball per
-// drop, a player still learning to read a board burns several per level, and
-// the economy should not be the thing they meet first. 75 carries a new
-// player well past the point where the game has earned the right to ask.
-export const STARTING_BALLS = 75;
-export const AD_REWARD = 3;
+   The old tank (75 balls, bought, won, drained one a drop) is
+   gone. Every level hands out its own balls on entry; a miss
+   uses one, a win ends the level, and running out opens the
+   choice to restart (free) or watch an ad to carry on. So a ball
+   is never money, and nothing in the economy can be spent on
+   one or paid in one.
 
-// First-clear bonus by Act, indexed by floor((levelId - 1) / 5). A level
-// solved first time pays for the drop that solved it; the deeper Acts pay for
-// a couple of failed attempts as well, which is roughly what they cost.
-export const CLEAR_BONUS = [1, 2, 2, 3];
+   The last four cities of a world (positions 17-20 - the oval
+   exams) are the hardest boards in it, and get more. Read off
+   the level's place in its COUNTRY, never its id, so a world
+   that moves keeps the rule.
+   ============================================================ */
+export const BALLS_PER_LEVEL = 3;
+export const BALLS_EXAM = 5;
+/** First city of a world that counts as its exam. */
+export const EXAM_FROM = 17;
+/** What a watched "continue" ad refills. */
+export const CONTINUE_BALLS = 3;
+
+/** How many balls level `levelId` hands out on entry. */
+export function ballsFor(levelId: number): number {
+  const pos = levelId - countryOf(levelId).from + 1;
+  return pos >= EXAM_FROM ? BALLS_EXAM : BALLS_PER_LEVEL;
+}
+
+/* ---- the Challenge Run ----
+
+   A world's twenty levels in a row on one shared pool of balls; running out
+   sends the player back to the world's first level. No hints, no spare ramps,
+   no continue ads. Clearing it awards the world's exclusive ball skin and a
+   badge - and nothing else: normal progress (stars, coins, clears) is never
+   touched by a run. */
+export const CHALLENGE_BALLS = 30;
+
+/* ---- midgame (interstitial) ads ----
+
+   Only at a natural break - the Next tap after a win - and never on the
+   first levels, where a player is still deciding whether to stay. The
+   platform SDK throttles how often one actually plays. Never after a fail or
+   a restart: failing must never cost a forced ad. */
+export const MIDGAME_FROM_LEVEL = 4;
 
 /* ---- coins ---- */
 
-/* The second currency, and the only one the player ever converts FROM: coins
-   buy balls and spare ramps, nothing buys coins back. That one-way flow is
+/* The one currency, and the only thing the player ever converts FROM: coins
+   buy spare ramps and springs, nothing buys coins back. That one-way flow is
    what keeps the wallet easy to reason about - a coin is always worth exactly
    what the shop says, and there is no arbitrage loop to balance. */
 export const STARTING_COINS = 100;
-export const BALL_PRICE = 2;
-export const RAMP_PRICE = 15;
+export const RAMP_PRICE = 40;
 /* Twice a spare ramp, and the factor is the point: a spring is worth two of
    them, which is a price a player can hold in their head. It is also the one
    item that is only CHARGED FOR WHEN IT WORKS - see spendSpring - so what it
    really prices is a solved board, not an attempt at one. */
-export const SPRING_PRICE = 30;
+export const SPRING_PRICE = 60;
 
-/* ---- springs unlock at the start of world two ---- */
+/* ---- springs unlock at level 10 ---- */
 
-/* Level 21 is where the game stops being only about WHERE the ball goes and
-   starts being about how fast. It is the first board of Emberkeep, and the
-   world closes on the one board that cannot be solved without a spring (40).
-   Before 21 the spring does not exist anywhere: not in the shop, not in the
+/* Level 10 is where the game starts being about how FAST as well as where:
+   the first world's exam (17-20) cannot be solved without a spring, so the
+   spring has to be in the player's hands - and explained - well before it.
+   It used to unlock at 21, which left 17-20 impossible for a real player.
+   Before 10 the spring does not exist anywhere: not in the shop, not in the
    bag, and not in a mystery box's prize table. */
-export const SPRING_UNLOCK_LEVEL = 21;
+export const SPRING_UNLOCK_LEVEL = 10;
 /** The same gate as an index into LEVELS, which is what progress is kept in. */
 export const SPRING_UNLOCK_INDEX = SPRING_UNLOCK_LEVEL - 1;
-/** What reaching level 21 for the first time is worth: one, free, on the
-    house. An item nobody has ever held is an item nobody buys. */
-export const SPRING_GIFT = 1;
+/** What reaching level 10 for the first time is worth: two, free, on the
+    house - one to learn on and one to keep. An item nobody has ever held is
+    an item nobody buys. */
+export const SPRING_GIFT = 2;
+
+/* ============================================================
+   SPARE RAMPS: A SCARCE RESCUE
+
+   One spare at most on any level, and none at all on the first
+   few (the lessons are about the level's own ramps). Placing one
+   only RESERVES it - it is taken from the bag on a win, and a
+   restart, leaving, or removing it hands it back. A clear that
+   used one is capped below the top rating, and so is a clear
+   with a hint: help can buy a solve, never a perfect one.
+   ============================================================ */
+export const SPARE_PER_LEVEL = 1;
+/** Spares cannot be used on levels 1..SPARE_FROM-1. */
+export const SPARE_FROM = 6;
+/** The best rating a helped clear (spare ramp or hint) can earn. */
+export const HELPED_MAX_STARS = 2;
+/** Restarts in one level entry before the "Stuck?" offer appears. */
+export const STUCK_AFTER_RESTARTS = 2;
+
+/** What helped a clear, if anything. */
+export type Help = 'spare' | 'hint' | null;
+
+/* ============================================================
+   STAR CHESTS
+
+   Every STARS_PER_CHEST rating stars (the 1-3 per level, summed
+   over the player's BEST on each level) unlocks a chest. Stars
+   are capped at three a level, so this rewards replaying for
+   three stars without being farmable.
+
+   What each chest holds is FIXED by its number, not rolled -
+   the same player opening chest 4 always gets chest 4 - so there
+   is nothing to re-roll: coins growing from CHEST_COINS_BASE to
+   CHEST_COINS_MAX, a spring (odd chests) or spare ramps (even),
+   and every COSMETIC_EVERY-th chest a cosmetic (Part I).
+   ============================================================ */
+export const STARS_PER_CHEST = 30;
+export const CHEST_COINS_BASE = 100;
+export const CHEST_COINS_STEP = 25;
+export const CHEST_COINS_MAX = 300;
+export const COSMETIC_EVERY = 3;
+
+export interface ChestContents {
+  n: number;
+  coins: number;
+  springs: number;
+  ramps: number;
+  /** A chest-only cosmetic's id (Part I), or null. */
+  cosmetic: string | null;
+}
 
 /* ---- what the shop sells ---- */
 
 /* BUNDLES, not straight multiples. A bulk row priced at exactly ten times the
    single is not an offer - there is no reason to ever press it over ten taps
    of the single, and it teaches the player that the shop holds no decision.
-   So the quantity climbs faster than the price: the big ball bundle pays 0.7
-   balls a coin against the single's 0.5, the big ramp bundle 14 for the price
-   of 10.
+   So the quantity climbs faster than the price: the big ramp bundle is 14
+   for the price of 10.
 
-   BALL_PRICE and RAMP_PRICE stay the LIST price - one unit, no discount. They
-   are what the wheel values its wedges at and what the panels quote, so they
-   must keep meaning "a ball costs this", not "a ball costs this if you buy
-   one at a time and nothing else".
+   RAMP_PRICE and SPRING_PRICE stay the LIST price - one unit, no discount.
+   They are what the wheel values its wedges at and what the panels quote, so
+   they must keep meaning "a ramp costs this", not "a ramp costs this if you
+   buy one at a time and nothing else".
 
-   Each bundle's price is a multiple of the one below it (20 = 10x2,
-   100 = 5x20; 45 = 3x15, 150 = 10x15) and each is better value than the one
-   below. Those two facts together are what make `bestBuy` exactly optimal
-   with a plain greedy walk; break either and it becomes a knapsack that
-   greedy can quietly get wrong. */
+   The shape is fixed - one, four for the price of three, fourteen for the
+   price of ten - and the prices are derived from the list price, so retuning
+   is one number. bestBuy() is an exact search rather than a greedy walk: the
+   4-for-3 and 14-for-10 rows are not multiples of each other, and a greedy
+   walk over them quietly under-counts (480 coins is 15 ramps greedily, but
+   16 as four bundles of four). */
 export interface Bundle {
   n: number;
   coins: number;
 }
 
-export const BALL_BUNDLES: readonly Bundle[] = [
-  { n: 1, coins: 2 },
-  { n: 12, coins: 20 },
-  { n: 70, coins: 100 },
-];
 export const RAMP_BUNDLES: readonly Bundle[] = [
-  { n: 1, coins: 15 },
-  { n: 4, coins: 45 },
-  { n: 14, coins: 150 },
+  { n: 1, coins: RAMP_PRICE },
+  { n: 4, coins: RAMP_PRICE * 3 },
+  { n: 14, coins: RAMP_PRICE * 10 },
 ];
-/* The ramp table at twice the price, quantity for quantity, so the two shop
-   sections state the same offer and a player only has to learn it once: four
+/* The ramp table's shape at the spring's price, quantity for quantity, so the
+   two shop sections state the same offer and a player only has to learn it once: four
    for the price of three, fourteen for the price of ten. */
 export const SPRING_BUNDLES: readonly Bundle[] = [
   { n: 1, coins: SPRING_PRICE },
@@ -132,25 +215,33 @@ function priced(bundles: readonly Bundle[], n: number, unit: number): number {
     it takes. Exact rather than approximate - see the divisibility note above -
     so the panels can promise a number the shop will really hand over. */
 export function bestBuy(bundles: readonly Bundle[], coins: number): number {
-  let left = Math.max(0, Math.floor(coins));
-  let got = 0;
-  for (let i = bundles.length - 1; i >= 0; i--) {
-    const take = Math.floor(left / bundles[i].coins);
-    got += take * bundles[i].n;
-    left -= take * bundles[i].coins;
+  const budget = Math.max(0, Math.floor(coins));
+  /* unbounded knapsack over the coin amount: best[c] = most units c coins can
+     buy. A wallet is a few thousand coins at most, so this is instant. */
+  const best = new Int32Array(budget + 1);
+  for (let c = 1; c <= budget; c++) {
+    let top = best[c - 1];
+    for (const b of bundles)
+      if (b.coins <= c && best[c - b.coins] + b.n > top) top = best[c - b.coins] + b.n;
+    best[c] = top;
   }
-  return got;
+  return best[budget];
 }
 
-/* What a clear pays, by Act (the same floor((id-1)/5) bands the ball bonus
-   uses) and by stars earned. Playing well is worth roughly double a scrape,
-   and the later Acts pay more because they cost more to reach. */
+/* What a FIRST clear pays, by WORLD (floor((id-1)/20) - the twenty-city
+   worlds, not the old five-level acts) and by stars earned. Playing well is
+   worth about double a scrape, and each world pays more than the last because
+   it costs more to get through. Every world from the fifth on pays the last
+   row. Starting values: tools/econsim.mjs is how they get tuned. */
 export const COIN_CLEAR = [
-  [10, 14, 20], // Act 1: 1, 2, 3 stars
-  [14, 18, 24],
-  [18, 22, 28],
-  [22, 26, 32],
+  [10, 14, 20], // world 1 (1-20): 1, 2, 3 stars
+  [14, 19, 26], // world 2 (21-40)
+  [18, 24, 32], // world 3 (41-60)
+  [22, 29, 38], // world 4 (61-80)
+  [26, 34, 45], // world 5+ (81-)
 ];
+/** Which row of COIN_CLEAR a level is paid from. */
+export const worldOf = (levelId: number): number => Math.floor((levelId - 1) / 20);
 
 /* ============================================================
    A BOARD PAYS ONCE
@@ -158,14 +249,10 @@ export const COIN_CLEAR = [
    Replaying a cleared level pays NOTHING, and the reason is
    arithmetic rather than taste.
 
-   A replay costs one ball. A ball costs 2 coins at list price
-   and 1.43 in the largest bundle - so ANY replay payout above
-   about one and a half coins turns a cleared board into a
-   machine that prints coins, which print balls, which print
-   more coins. It ran at a quarter (minimum 2) and paid 4-5
-   coins a drop, which is a positive loop: slow, but a farm only
-   has to be positive to be a farm, and the fastest board in the
-   game is the one the player has already solved.
+   Balls are free now, so a replay costs nothing at all - which
+   makes ANY replay payout a machine that prints coins from the
+   board the player has already solved, the fastest board in the
+   game. A farm only has to be positive to be a farm.
 
    There is no rate that is both worth collecting and safe. One
    coin a replay is safe and beneath noticing; anything a player
@@ -175,7 +262,7 @@ export const COIN_CLEAR = [
    improve, which is what a replay is actually for.
 
    Everything else on a level already worked this way - the
-   first-clear ball bonus, the chest, the gift in a target - so
+   chest, the gift in a target - so
    this makes the coins the last thing to stop being repeatable,
    rather than a rule invented for them.
    ============================================================ */
@@ -187,8 +274,8 @@ export function coinsFor(
   stars: number,
   firstClear: boolean,
 ): number {
-  const act = clamp(Math.floor((levelId - 1) / 5), 0, COIN_CLEAR.length - 1);
-  const full = COIN_CLEAR[act][clamp(stars, 1, 3) - 1];
+  const world = clamp(worldOf(levelId), 0, COIN_CLEAR.length - 1);
+  const full = COIN_CLEAR[world][clamp(stars, 1, 3) - 1];
   return firstClear ? full : Math.round(full * REPLAY_SHARE);
 }
 
@@ -199,9 +286,9 @@ export const SPIN_MS = 4200; // length of the spin animation
 
 /** What the WHEEL can pay. A spring is not on it: the wheel is a daily
     fixture from level 1, and it may not hand out an item that does not exist
-    until level 21. Mystery boxes can, because they know what level they are
+    until level 10. Mystery boxes can, because they know what level they are
     on - see BOX_PRIZES. */
-export type WheelKind = "coins" | "balls" | "ramps";
+export type WheelKind = "coins" | "ramps";
 
 export interface SpinPrize {
   kind: WheelKind;
@@ -210,39 +297,30 @@ export interface SpinPrize {
 }
 
 /* Wedge order is the wheel's layout; `w` is the weight, and they are chosen
-   to total 100 so a weight reads as its own percentage.
-
-   The two jackpots - 150 coins and 3 ramps - are deliberately rare. Priced
-   in coins (a ramp is 15, a ball is 2) the wheel is worth about 31 coins a
-   day on average, which is a level's takings or fifteen balls: enough to be
-   worth coming back for, not enough to replace playing. */
+   to total 100 so a weight reads as its own percentage. No balls: a ball is
+   not something the player can own any more. The 200-coin wedge is the rare
+   jackpot, and 3 ramps the next best. */
 export const SPIN_PRIZES: SpinPrize[] = [
-  { kind: "coins", n: 20, w: 22 },
-  { kind: "balls", n: 10, w: 14 },
-  { kind: "ramps", n: 3, w: 6 },
-  { kind: "coins", n: 150, w: 3 },
-  { kind: "balls", n: 5, w: 20 },
-  { kind: "ramps", n: 1, w: 16 },
-  { kind: "coins", n: 100, w: 5 },
-  { kind: "coins", n: 50, w: 14 },
+  { kind: "coins", n: 20, w: 24 },
+  { kind: "ramps", n: 1, w: 18 },
+  { kind: "coins", n: 60, w: 14 },
+  { kind: "coins", n: 200, w: 3 },
+  { kind: "coins", n: 40, w: 22 },
+  { kind: "ramps", n: 2, w: 10 },
+  { kind: "coins", n: 100, w: 7 },
+  { kind: "ramps", n: 3, w: 2 },
 ];
 
-/* What the wheel gilds. Two of the eight wedges - the 150 and the 100 - so
-   that landing on gold means something; 3 ramps is the next best prize and
-   deliberately does NOT get it, or half the wheel would be a jackpot. */
-export const JACKPOT_COINS = 60;
+/* What the wheel gilds: any wedge worth this many coins or more - the 100,
+   the 200 and 3 ramps (120 at list price). Three of eight, so landing on gold
+   still means something. */
+export const JACKPOT_COINS = 100;
 
 /** What a payout is worth in coins, which is the only way to compare kinds.
     The shop's list prices are the exchange rate, so this is the one place
     that has to move when one of them does. */
 export function unitValue(kind: PrizeKind): number {
-  return kind === "coins"
-    ? 1
-    : kind === "balls"
-      ? BALL_PRICE
-      : kind === "ramps"
-        ? RAMP_PRICE
-        : SPRING_PRICE;
+  return kind === "coins" ? 1 : kind === "ramps" ? RAMP_PRICE : SPRING_PRICE;
 }
 
 /** What a wedge is worth in coins, which is the only way to compare them. */
@@ -252,7 +330,6 @@ export function prizeValue(p: SpinPrize): number {
 
 export const PRIZE_UNIT: Record<FlightKind, string> = {
   coins: "coin",
-  balls: "ball",
   ramps: "ramp",
   springs: "spring",
   spin: "free spin",
@@ -275,8 +352,9 @@ export function prizeLabel(kind: FlightKind, n: number): string {
    numbers and nothing else - rollBoxPrize() reads the table and
    knows nothing about what is in it.
 
-   Worth roughly 14 coins an open at these weights, about what a
-   level clear pays - and a box is claimed once per level, for
+   Worth roughly 35 coins an open at these weights (items at list
+   price, a free spin at the wheel's average), about a good late
+   clear - and a box is claimed once per level, for
    good, so the whole game's boxes are a fixed purse rather than
    an income.
    ============================================================ */
@@ -287,14 +365,17 @@ export interface BoxPrize {
 }
 
 export const BOX_PRIZES: readonly BoxPrize[] = [
-  { kind: "coins", n: 10, w: 30 },
-  { kind: "balls", n: 2, w: 20 },
-  { kind: "coins", n: 25, w: 16 },
-  { kind: "ramps", n: 1, w: 14 },
-  { kind: "balls", n: 5, w: 10 },
-  { kind: "springs", n: 1, w: 6 },
-  { kind: "spin", n: 1, w: 4 },
+  { kind: "coins", n: 15, w: 35 },
+  { kind: "coins", n: 35, w: 22 },
+  { kind: "ramps", n: 1, w: 18 },
+  /* only once springs exist (level 10) - before that this row pays
+     SPRING_STANDIN instead, so the weights keep meaning what they say */
+  { kind: "springs", n: 1, w: 12 },
+  { kind: "spin", n: 1, w: 8 },
+  { kind: "coins", n: 80, w: 5 },
 ];
+/** What the spring row pays where springs do not exist yet. */
+export const SPRING_STANDIN: { kind: FlightKind; n: number } = { kind: "coins", n: 15 };
 
 /** Two things are worth rewarding, and they pull against each other: solving
     it in few attempts, and solving it with fewer ramps than the level hands
@@ -329,9 +410,27 @@ export function starNote(
   return `Cleared on ${bits.join(", ")}. Next star: ${want.join(" or ")}.`;
 }
 
+/** The dev unlock: DEV builds only, and only when asked for in storage. */
+function unlockAll(): boolean {
+  if (!import.meta.env?.DEV) return false;
+  try {
+    return localStorage.getItem("gtb-unlock-all") === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** The chest-only cosmetic chest `n` hands out: every COSMETIC_EVERY-th
+    chest, in CHEST_COSMETICS order, until they have all been given. */
+function chestCosmetic(n: number): string | null {
+  return CHEST_COSMETICS[n / COSMETIC_EVERY - 1] ?? null;
+}
+
 export class RewardManager {
-  balls = STARTING_BALLS;
   coins = STARTING_COINS;
+  /** Coins a player's old ball tank was converted into on this load, once -
+      the controller says so and zeroes it. 0 on every later load. */
+  migratedCoins = 0;
   /** Spare ramps, spendable on ANY level on top of its own budget. */
   extraRamps = 0;
   /** Springs in the bag. Unlike a ramp, one is only CHARGED FOR when the drop
@@ -350,9 +449,12 @@ export class RewardManager {
   /* ============================================================
      UNLOCK EVERYTHING - the dev switch
 
-     Uncomment the one `return` below and every level in the game
-     is open in the picker, immediately, with no save editing and
-     no rebuild of anything else.
+     In a DEV build only, set localStorage 'gtb-unlock-all' to '1'
+     and every level in the game is open in the picker. It used to
+     be a commented-out `return` - which shipped switched ON once,
+     because the one line that turns it on looks exactly like the
+     line that turns it off. Behind import.meta.env.DEV a production
+     build cannot reach it at all, whatever is in storage.
 
      It is a VIEW over progress, not a change to it. The real
      high-water mark lives in `_highest` and is what gets written
@@ -365,8 +467,7 @@ export class RewardManager {
      time the game autosaves, and there is no way back.
      ============================================================ */
   get highest(): number {
-    return this.levelCount - 1; // <-- UNCOMMENT TO UNLOCK ALL LEVELs
-    // return this._highest;
+    return unlockAll() ? this.levelCount - 1 : this._highest;
   }
   set highest(n: number) {
     this._highest = n;
@@ -390,7 +491,7 @@ export class RewardManager {
      a brand new save.
 
      Two ways in, and they answer different questions. `_highest`
-     is progression: a player who has worked their way to 21 has
+     is progression: a player who has worked their way to 10 has
      reached it whatever level they are standing on now. The gift
      flag is the record of actually having been there, which is
      what covers arriving by the picker.
@@ -399,16 +500,39 @@ export class RewardManager {
     return this.springGift || this._highest >= SPRING_UNLOCK_INDEX;
   }
 
-  /** Called whenever a level is entered. The first time that level is 21 or
-      deeper, the free spring is handed over - once, ever, and persisted, so
-      every later visit to Emberkeep passes straight through here. */
-  noteLevelReached(levelId: number): boolean {
-    if (this.springGift || levelId < SPRING_UNLOCK_LEVEL) return false;
+  /* ============================================================
+     THE SPRING GIFT, IN TWO HALVES
+
+     springGiftDue() - on entering a level of 10 or deeper with the
+     gift not yet given: the controller shows the "New power:
+     Spring!" card first. claimSpringGift() - when that card is
+     dismissed: THEN the springs are credited (and fly into the
+     bag). Splitting them means a reload with the card still up
+     shows the card again rather than having quietly paid already.
+     ============================================================ */
+  springGiftDue(levelId: number): boolean {
+    return !this.springGift && levelId >= SPRING_UNLOCK_LEVEL;
+  }
+
+  claimSpringGift(): number {
+    if (this.springGift) return 0;
     this.springGift = true;
     this.saveProgress();
     this.grantSprings(SPRING_GIFT, "grant");
-    return true;
+    return SPRING_GIFT;
   }
+
+  /** Whether the spring walkthrough (bag -> Use -> ramp) has been shown
+      through to the end, or skipped. Once, ever. */
+  springUnlockSeen = false;
+  /** The first hint in the game is free; after that, one ad each. */
+  freeHintUsed = false;
+  /** See SaveData.wheelAdSpinDay. */
+  wheelAdSpinDay = "";
+  /** Star chests opened so far. */
+  chestsClaimed = 0;
+  /** Cleared Challenge Runs, by country id. */
+  challengesDone: Record<number, boolean> = {};
 
   /** Has this level's mystery box already been taken? */
   boxClaimed(levelIndex: number): boolean {
@@ -495,6 +619,19 @@ export class RewardManager {
     this.obstacleTipSeen = !!s.obstacleTipSeen;
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
     this.springGift = !!s.springGift;
+    this.springUnlockSeen = !!s.springUnlockSeen;
+    this.freeHintUsed = !!s.freeHintUsed;
+    this.wheelAdSpinDay = typeof s.wheelAdSpinDay === "string" ? s.wheelAdSpinDay : "";
+    this.chestsClaimed = Math.max(0, (s.chestsClaimed as number) | 0);
+    this.challengesDone = s.challenges && typeof s.challenges === "object" ? s.challenges : {};
+    const cos = s.cosmetics && typeof s.cosmetics === "object" ? s.cosmetics : {};
+    this.cosmeticsOwned = new Set([...Object.values(DEFAULT_STYLE),
+      ...(Array.isArray(cos.owned) ? cos.owned.filter((id) => !!cosmeticById(id)) : [])]);
+    for (const k of Object.keys(DEFAULT_STYLE) as CosmeticKind[]) {
+      const id = cos.selected?.[k];
+      this.cosmeticsSelected[k] = id && this.cosmeticsOwned.has(id) ? id : DEFAULT_STYLE[k];
+    }
+    applyStyle(this.cosmeticsSelected);
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -516,12 +653,6 @@ export class RewardManager {
       this.clearedLevels = seeded;
     }
 
-    const stored = progressStore.loadBalls();
-    if (stored === null) {
-      this.balls = STARTING_BALLS;
-      progressStore.saveBalls(this.balls);
-    } else this.balls = stored;
-
     /* Same rule as the ball tank: no stored wallet at all is a first open and
        gets the starting grant; a corrupt one is treated the same way rather
        than as zero, so a storage glitch cannot leave a player broke. */
@@ -538,11 +669,7 @@ export class RewardManager {
     }
 
     this.loadSpin();
-    this.bus.emit("balls:changed", {
-      balls: this.balls,
-      delta: 0,
-      reason: "load",
-    });
+    this.migrateBalls(s);
     this.bus.emit("coins:changed", {
       coins: this.coins,
       delta: 0,
@@ -560,12 +687,32 @@ export class RewardManager {
     });
   }
 
+  /* ============================================================
+     THE OLD BALL TANK, CASHED IN
+
+     A save from before balls became free per level may still hold
+     a tank of them. They are not thrown away: each is turned into
+     one coin, ONCE, and the key is deleted. `migratedBalls` in the
+     save is what makes it once - a player with an empty tank gets
+     the flag too, so the check never runs again.
+     ============================================================ */
+  private migrateBalls(s: SaveData): void {
+    if (s.migratedBalls) return;
+    const old = progressStore.loadBalls();
+    progressStore.clearBalls();
+    if (old !== null && old > 0) {
+      this.coins += old;
+      this.saveWallet();
+      this.migratedCoins = old;
+    }
+    this.saveProgress();
+  }
+
   /** Wipe every persisted record and return to a first-open state. Used by
       the test suite; there is no in-game path to it. */
   resetAll(): void {
     try {
       localStorage.removeItem(SAVE_KEY);
-      localStorage.removeItem(BALLS_KEY);
       localStorage.removeItem(SPIN_KEY);
       localStorage.removeItem(WALLET_KEY);
     } catch {
@@ -579,6 +726,14 @@ export class RewardManager {
     this.obstacleTipSeen = false;
     this.tipsSeen = {};
     this.springGift = false;
+    this.springUnlockSeen = false;
+    this.freeHintUsed = false;
+    this.wheelAdSpinDay = "";
+    this.chestsClaimed = 0;
+    this.challengesDone = {};
+    this.cosmeticsOwned = new Set(Object.values(DEFAULT_STYLE));
+    this.cosmeticsSelected = { ...DEFAULT_STYLE };
+    applyStyle(this.cosmeticsSelected);
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -587,17 +742,11 @@ export class RewardManager {
     this.spinning = false;
     this.spinShown = null;
     progressStore.saveSpin(0, null, 0, 0);
-    this.balls = STARTING_BALLS;
-    progressStore.saveBalls(this.balls);
     this.coins = STARTING_COINS;
     this.extraRamps = 0;
     this.springs = 0;
     this.saveWallet();
-    this.bus.emit("balls:changed", {
-      balls: this.balls,
-      delta: 0,
-      reason: "load",
-    });
+    this.saveProgress();
     this.bus.emit("coins:changed", {
       coins: this.coins,
       delta: 0,
@@ -628,41 +777,14 @@ export class RewardManager {
       springGift: this.springGift,
       boxes: this.claimedBoxes,
       gifts: this.claimedGifts,
+      migratedBalls: true,
+      springUnlockSeen: this.springUnlockSeen,
+      freeHintUsed: this.freeHintUsed,
+      wheelAdSpinDay: this.wheelAdSpinDay,
+      chestsClaimed: this.chestsClaimed,
+      challenges: this.challengesDone,
+      cosmetics: { owned: [...this.cosmeticsOwned], selected: { ...this.cosmeticsSelected } },
     });
-  }
-
-  /* ---------------- balls ---------------- */
-
-  private setBalls(n: number, delta: number, reason: BallChangeReason): void {
-    this.balls = Math.max(0, n);
-    progressStore.saveBalls(this.balls);
-    this.bus.emit("balls:changed", { balls: this.balls, delta, reason });
-  }
-
-  grant(
-    n: number,
-    reason: "clear-bonus" | "ad" | "spin" | "grant" | "box" = "grant",
-  ): void {
-    if (!(n > 0)) return;
-    this.setBalls(this.balls + n, n, reason);
-  }
-
-  /** Set the tank outright. Test-only: the game itself only ever grants or
-      spends, so that the ledger and the balls can never disagree. */
-  setBallsForTest(n: number): void {
-    this.setBalls(Math.max(0, n | 0), Math.max(0, n | 0) - this.balls, "grant");
-  }
-
-  /** One ball per DROP, win or lose - the fiction is a crate of physical
-      balls, and one you threw away is gone either way. Returns false if the
-      tank is empty, which is the caller's cue to open the stop screen. */
-  spendBall(): boolean {
-    if (this.balls <= 0) {
-      this.bus.emit("balls:empty", {});
-      return false;
-    }
-    this.setBalls(this.balls - 1, -1, "drop");
-    return true;
   }
 
   /* ---------------- the wallet ---------------- */
@@ -714,9 +836,6 @@ export class RewardManager {
 
   /* ---------------- the shop ---------------- */
 
-  ballCost(n: number): number {
-    return priced(BALL_BUNDLES, n, BALL_PRICE);
-  }
   rampCost(n: number): number {
     return priced(RAMP_BUNDLES, n, RAMP_PRICE);
   }
@@ -731,14 +850,6 @@ export class RewardManager {
      both refuse outright rather than partially filling an order the player
      cannot afford - a shop that silently sells you four of the five you asked
      for is a shop that has spent your coins without being asked. */
-  buyBalls(n: number): boolean {
-    const cost = this.ballCost(n);
-    if (!this.canAfford(cost)) return false;
-    this.setCoins(this.coins - cost, -cost, "buy");
-    this.setBalls(this.balls + (n | 0), n | 0, "buy");
-    return true;
-  }
-
   buyRamps(n: number): boolean {
     const cost = this.rampCost(n);
     if (!this.canAfford(cost)) return false;
@@ -747,7 +858,7 @@ export class RewardManager {
     return true;
   }
 
-  /** Refuses outright before level 21, the same way it refuses an order the
+  /** Refuses outright before level 10, the same way it refuses an order the
       wallet cannot cover. The shop hides the section as well, but the gate
       belongs HERE: a panel that is merely not rendered is not a rule. */
   buySprings(n: number): boolean {
@@ -759,10 +870,8 @@ export class RewardManager {
     return true;
   }
 
-  /** Take one spare ramp out of the drawer for the level on screen. Spent the
-      moment it is taken: the budget it joins is this level's, and handing it
-      back on a level change would make "how many do I have" depend on where
-      the player happened to navigate next. */
+  /** Take the spare ramp a WINNING clear used out of the bag - see the
+      SPARE RAMPS note: placing one only reserved it. */
   spendExtraRamp(): boolean {
     if (this.extraRamps <= 0) return false;
     this.setRamps(this.extraRamps - 1, -1, "use");
@@ -789,7 +898,7 @@ export class RewardManager {
     return true;
   }
 
-  /** Test-only, like setBallsForTest. */
+  /** Test-only: set the wallet outright. */
   setWalletForTest(coins: number, ramps: number, springs?: number): void {
     const c = Math.max(0, coins | 0),
       r = Math.max(0, ramps | 0);
@@ -801,17 +910,10 @@ export class RewardManager {
     }
   }
 
-  /** What clearing level `id` pays the FIRST time, and only the first time. */
-  clearBonus(id: number): number {
-    return CLEAR_BONUS[
-      clamp(Math.floor((id - 1) / 5), 0, CLEAR_BONUS.length - 1)
-    ];
-  }
-
   /* ---------------- clearing a level ---------------- */
 
   /** Record a win and pay what it is worth. Returns the stars earned and the
-      bonus paid, so the win card can say so. */
+      coins paid, so the win card can say so. */
   recordClear(
     levelIndex: number,
     levelId: number,
@@ -819,9 +921,9 @@ export class RewardManager {
     tries: number,
     rampsUsed: number,
     budget: number,
+    help: Help = null,
   ): {
     stars: number;
-    bonus: number;
     coins: number;
     note: string;
     firstClear: boolean;
@@ -832,34 +934,159 @@ export class RewardManager {
       this._highest = levelIndex + 1;
 
     const firstClear = !this.clearedLevels[levelIndex];
-    let bonus = 0;
-    if (firstClear) {
-      this.clearedLevels[levelIndex] = true;
-      bonus = this.clearBonus(levelId);
-    }
+    if (firstClear) this.clearedLevels[levelIndex] = true;
 
-    const stars = starsFor(tries, rampsUsed, budget);
+    /* A spare ramp or a hint caps the rating: help buys a solve, and the
+       note says what the third star wants instead. */
+    const raw = starsFor(tries, rampsUsed, budget);
+    const stars = help ? Math.min(raw, HELPED_MAX_STARS) : raw;
     if (stars > (this.bestStars[levelIndex] | 0))
       this.bestStars[levelIndex] = stars;
 
     /* Coins are the running income the shop is priced against, and they are
        paid by the clear that FIRST beats a board - see coinsFor. A replay
-       pays nothing, because a drop costs a ball and a ball costs coins: any
-       repeat payout at all is a loop that prints both. */
+       pays nothing: replays are free, so any repeat payout is a farm. */
     const coins = coinsFor(levelId, stars, firstClear);
 
+    /* NOT granted here: the win card offers "Collect" or "Watch ad: collect
+       double", and payClear() pays whichever the player picks (or the plain
+       amount, if they leave the card any other way). */
     this.saveProgress();
-    // granted after saveProgress() so the ledger and the wallet commit together
-    if (bonus > 0) this.grant(bonus, "clear-bonus");
-    this.grantCoins(coins, "clear");
 
     return {
       stars,
-      bonus,
       coins,
-      note: starNote(tries, rampsUsed, budget, stars),
+      note: help === 'spare'
+        ? "Cleared with a spare ramp. Solve it without help for 3 stars."
+        : help === 'hint'
+          ? "Cleared with a hint. Solve it without help for 3 stars."
+          : starNote(tries, rampsUsed, budget, stars),
       firstClear,
     };
+  }
+
+  /** Pay a first clear's coins - once, from the win card. `doubled` only
+      after a WATCHED ad. */
+  payClear(coins: number, doubled: boolean): number {
+    const n = doubled ? coins * 2 : coins;
+    this.grantCoins(n, "clear");
+    return n;
+  }
+
+  /* ---- the wheel's once-a-day ad spin ---- */
+
+  /** Today, local time, as the save stores it. */
+  private static today(now = new Date()): string {
+    return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  }
+  /** "Watch ad: spin again": after the daily spin is used, once a day, and
+      only when there is no other spin waiting. */
+  canAdSpin(): boolean {
+    return !this.spinning && !this.spinReady() && this.wheelAdSpinDay !== RewardManager.today();
+  }
+  /** A watched ad's spin: one bonus spin token, and today is used up. */
+  grantAdSpin(): void {
+    this.wheelAdSpinDay = RewardManager.today();
+    this.saveProgress();
+    this.grantBonusSpin(1);
+  }
+
+  /* ---------------- cosmetics ---------------- */
+
+  /** Cosmetic ids the player owns (the classic look of each kind always). */
+  cosmeticsOwned = new Set<string>(Object.values(DEFAULT_STYLE));
+  /** What is worn, one per kind. */
+  cosmeticsSelected: Record<CosmeticKind, string> = { ...DEFAULT_STYLE };
+
+  ownsCosmetic(id: string): boolean { return this.cosmeticsOwned.has(id); }
+
+  /** Add a cosmetic to what the player owns - a chest's, or a purchase's. */
+  unlockCosmetic(id: string): void {
+    if (!cosmeticById(id) || this.cosmeticsOwned.has(id)) return;
+    this.cosmeticsOwned.add(id);
+    this.saveProgress();
+    this.bus.emit("cosmetics:changed", { id });
+  }
+
+  /** Buy one from the shop. Refuses chest-only items, owned items, and an
+      order the wallet cannot cover. */
+  buyCosmetic(id: string): boolean {
+    const c = cosmeticById(id);
+    if (!c || c.price === null || this.cosmeticsOwned.has(id)) return false;
+    if (!this.canAfford(c.price)) return false;
+    this.setCoins(this.coins - c.price, -c.price, "style");
+    track("cosmetic_bought", { id, price: c.price });
+    this.unlockCosmetic(id);
+    this.selectCosmetic(id);
+    return true;
+  }
+
+  /** Wear an owned cosmetic. */
+  selectCosmetic(id: string): boolean {
+    const c = cosmeticById(id);
+    if (!c || !this.cosmeticsOwned.has(id)) return false;
+    this.cosmeticsSelected[c.kind] = id;
+    applyStyle(this.cosmeticsSelected);
+    this.saveProgress();
+    this.bus.emit("cosmetics:changed", { id });
+    return true;
+  }
+
+  /* ---------------- the Challenge Run ---------------- */
+
+  /** Has every level of this world (level INDICES from..to) been cleared? */
+  worldCleared(fromId: number, toId: number): boolean {
+    for (let id = fromId; id <= toId; id++) if (!this.clearedLevels[id - 1]) return false;
+    return true;
+  }
+
+  /** A world's run is cleared: the badge, and its exclusive skin. */
+  completeChallenge(countryId: number): string | null {
+    const first = !this.challengesDone[countryId];
+    this.challengesDone[countryId] = true;
+    this.saveProgress();
+    const skin = challengeSkin(countryId) ?? null;
+    if (first && skin) this.unlockCosmetic(skin);
+    return first ? skin : null;
+  }
+
+  /* ---------------- star chests ---------------- */
+
+  /** Every level's best rating, summed. */
+  get totalStars(): number {
+    let n = 0;
+    for (const k in this.bestStars) n += this.bestStars[k] | 0;
+    return n;
+  }
+  get chestsEarned(): number { return Math.floor(this.totalStars / STARS_PER_CHEST); }
+  chestReady(): boolean { return this.chestsEarned > this.chestsClaimed; }
+  /** Stars toward the next chest not yet earned: 0..STARS_PER_CHEST. */
+  get chestProgress(): number {
+    return this.chestReady() ? STARS_PER_CHEST : this.totalStars - this.chestsEarned * STARS_PER_CHEST;
+  }
+
+  /** What chest number `n` (1-based) holds - fixed, never rolled. */
+  chestContents(n: number): ChestContents {
+    const coins = Math.min(CHEST_COINS_MAX, CHEST_COINS_BASE + CHEST_COINS_STEP * (n - 1));
+    const odd = n % 2 === 1;
+    /* a spring only once springs exist; before that the same value in ramps */
+    const springs = odd && this.springsUnlocked ? 1 : 0;
+    const ramps = odd ? (springs ? 0 : 2) : n % 4 === 0 ? 2 : 1;
+    return { n, coins, springs, ramps, cosmetic: n % COSMETIC_EVERY === 0 ? chestCosmetic(n) : null };
+  }
+
+  /** Open the next earned chest: pay it and record it. Null if none is due. */
+  claimChest(): ChestContents | null {
+    if (!this.chestReady()) return null;
+    const c = this.chestContents(this.chestsClaimed + 1);
+    this.chestsClaimed++;
+    this.saveProgress();
+    track("chest_opened", { n: c.n, coins: c.coins, springs: c.springs, ramps: c.ramps, cosmetic: c.cosmetic });
+    this.grantCoins(c.coins, "chest");
+    if (c.springs) this.grantSprings(c.springs, "chest");
+    if (c.ramps) this.grantRamps(c.ramps, "chest");
+    if (c.cosmetic) this.unlockCosmetic(c.cosmetic);
+    return c;
   }
 
   recordPickups(levelIndex: number, stars: number): void {
@@ -887,10 +1114,9 @@ export class RewardManager {
        bus has no listeners yet this early, and loadAll() announces the totals
        once it has finished. */
     if (pending) {
-      if (pending.kind === "balls") {
-        this.balls += pending.n;
-        progressStore.saveBalls(this.balls);
-      } else if (pending.kind === "coins") {
+      /* An owed ball prize from before balls were free is paid in coins, one
+         for one - the same rate the tank itself was cashed in at. */
+      if (pending.kind === "balls" || pending.kind === "coins") {
         this.coins += pending.n;
         this.saveWallet();
       } else {
@@ -997,8 +1223,7 @@ export class RewardManager {
     this.spinning = false;
     this.spinShown = { kind: p.kind, n: p.n };
     progressStore.saveSpin(this.spinLast, null, this.spinOffered, this.bonusSpins);
-    if (p.kind === "balls") this.grant(p.n, "spin");
-    else if (p.kind === "coins") this.grantCoins(p.n, "spin");
+    if (p.kind === "coins") this.grantCoins(p.n, "spin");
     else this.grantRamps(p.n, "spin");
     this.bus.emit("spin:won", { prizeIndex: ix, kind: p.kind, n: p.n });
   }
@@ -1010,7 +1235,8 @@ export class RewardManager {
       at all, or the weights stop meaning what BOX_PRIZES says they mean. */
   boxTableFor(levelId: number): readonly BoxPrize[] {
     const ok = this.springsUnlocked && levelId >= SPRING_UNLOCK_LEVEL;
-    return ok ? BOX_PRIZES : BOX_PRIZES.filter((p) => p.kind !== "springs");
+    return ok ? BOX_PRIZES
+      : BOX_PRIZES.map((p) => (p.kind === "springs" ? { ...SPRING_STANDIN, w: p.w } : p));
   }
 
   /** Weighted pick over that table - the same walk the wheel uses. */
@@ -1037,9 +1263,6 @@ export class RewardManager {
     switch (p.kind) {
       case "coins":
         this.grantCoins(p.n, "box");
-        break;
-      case "balls":
-        this.grant(p.n, "box");
         break;
       case "ramps":
         this.grantRamps(p.n, "box");

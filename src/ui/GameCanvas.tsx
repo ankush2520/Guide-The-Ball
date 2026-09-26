@@ -243,8 +243,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       const g = levels.grabRadius(s);
       const del = levels.deleteButtonAt(s);
       if (Math.hypot(p.x - del.x, p.y - del.y) <= DEL_GRAB) {
-        levels.removeRamp(sel); controller.selected = -1;
-        controller.notifyRampsChanged(); return;
+        controller.removeRamp(sel); return;
       }
       if (Math.hypot(p.x - s.x1, p.y - s.y1) <= g) {
         controller.dragging = { mode: 'p1', ix: sel, lx: p.x, ly: p.y }; return;

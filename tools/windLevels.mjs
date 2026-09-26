@@ -46,6 +46,14 @@ const NAMES = {
 };
 export { NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, rng, rint };
 
+/** A proper integer hash (murmur3's finaliser): neighbouring ids come out
+    unrelated, which a plain LCG seeded with them does not. */
+export function mix(n){
+  let h = n | 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
 function rng(seed){ return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296); }
 const rint = (r, a, b) => a + Math.floor(r() * (b - a + 1));
 const rfl = (r, a, b) => Math.round((a + r() * (b - a)) * 100) / 100;
@@ -283,11 +291,22 @@ export async function runWorld(world){
     /* a world can swap its fire for red obstacles, same size, same spot
        (Stormhold: fire does not belong in the rain) */
     if (world.noFire){ L.obstacles.push(...L.fires); L.fires = []; }
+    /* OCCASIONAL WIND: some cities also get Windemere's wind, picked by a
+       random draw of their own - separate from the layout's, so adding it
+       never moves anything already on the board. */
+    if (world.windChance && !L.wind){
+      const wr = rng(mix(id));
+      if (mix(id + 1000) / 4294967296 < world.windChance){
+        const pos = id - world.from + 1;
+        const lo = L.targetMove ? { ...L.target, x: (L.targetMove.x0 + L.targetMove.x1) / 2 } : L.target;
+        L.wind = windFor(wr, pos <= 8 ? 1 : 2, pos >= 13, L.spawn.x, lo, lo);
+      }
+    }
     out.push(toRaw(L));
     const n = L.fires.length + L.breakables.length + L.obstacles.length;
-    const extra = L.wind ? 'wind ' + L.wind.map(z => (z.ax > 0 ? '+' : '') + z.ax).join(' ')
-                : L.storm ? `storm ${L.storm.points.length} points`
-                : L.fish ? `${L.fish.length} eater fish` : '';
+    const extra = [L.storm && `storm ${L.storm.points.length} points`, L.fish && `${L.fish.length} eater fish`,
+                   L.wind && 'wind ' + L.wind.map(z => (z.ax > 0 ? '+' : '') + z.ax).join(' ')]
+                  .filter(Boolean).join(', ');
     console.log(`${id} ${L.name.padEnd(15)} ${String(n).padStart(2)} hazards (f${L.fires.length} b${L.breakables.length} o${L.obstacles.length})` +
                 `  ${extra}  ${L.targetType}${L.targetMove ? ' moving' : ''}  blocks ${L.maxBlocks}${L.gift ? '  gift' : ''}`);
   }

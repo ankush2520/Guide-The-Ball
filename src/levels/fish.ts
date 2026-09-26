@@ -14,6 +14,19 @@
    ============================================================ */
 import type { FishDef } from './types';
 
+/** Every clock on a board, as periods in steps: the patrol, each fish, the
+    storm's full cycle. A board looks the same at step t as at step t0 only
+    when t matches t0 on ALL of them - which is what a hint's drop moment
+    needs. Empty on a board with no clock at all. */
+export function boardCycles(lv: { targetMove?: { period: number }; fish?: FishDef[];
+                                  storm?: { gaps: number[] } }): number[] {
+  const out: number[] = [];
+  if (lv.targetMove && lv.targetMove.period > 0) out.push(lv.targetMove.period);
+  if (lv.fish) for (const f of lv.fish) out.push(f.period);
+  if (lv.storm) out.push(lv.storm.gaps.reduce((a, b) => a + b, 0));
+  return out;
+}
+
 /** How many crests the wave has along a lane of this length. */
 export function fishWaves(f: FishDef): number {
   return Math.max(1, Math.round(Math.abs(f.x1 - f.x0) / 110));

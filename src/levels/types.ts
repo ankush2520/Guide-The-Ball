@@ -35,7 +35,10 @@ export interface Rect { x: number; y: number; w: number; h: number; }
 
 export interface BoosterDef extends Circle { angle: number; speed: number; }
 
-export interface WindDef extends Rect { ax?: number; ay?: number; }
+/** `look` is set when the level loads (levels/index.ts), from what else is on
+    the board - it only changes how the wind is DRAWN: leaves in open air,
+    slanting rain in a storm, a water current under the sea. */
+export interface WindDef extends Rect { ax?: number; ay?: number; look?: 'air' | 'rain' | 'current'; }
 export type SlipperyDef = Rect;
 /** `id` is written by the generator to label a pair; the sim ignores it. */
 export type BreakableDef = Circle;
@@ -65,6 +68,12 @@ export interface StormDef { points: Vec[]; gaps: number[]; }
     steps, bobbing `amp` px on a wave around `y`, and eats the ball on
     contact. See levels/fish.ts. */
 export interface FishDef { x0: number; x1: number; y: number; amp: number; period: number; r: number; }
+
+/** A HINT: one proven winning plan for a level, found by tools/genhints.mjs
+    in the real simulator on the level's own seed. `ramps` are the ramps to
+    draw (one may carry `spring`); `t0`, on a timed board (moving target,
+    fish, thunder), is the patrol-clock step to drop at. */
+export interface Hint { ramps: Segment[]; t0?: number; }
 
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
     the same shape of data - what differs is entirely what contact means. The

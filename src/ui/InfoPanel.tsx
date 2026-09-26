@@ -2,12 +2,13 @@
    currently looking at called out. */
 import { useGame, useGameVersion } from '../core/GameContext';
 import { GLOSSARY } from './glossary';
-import { STARTING_BALLS, CLEAR_BONUS, AD_REWARD, STARTING_COINS,
-         BALL_PRICE, RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
+import { BALLS_PER_LEVEL, BALLS_EXAM, CONTINUE_BALLS, STARTING_COINS,
+         SPARE_FROM, HELPED_MAX_STARS,
+         RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
          COIN_CLEAR } from '../managers/RewardManager';
 
 export function InfoPanel({ onClose }: { onClose: () => void }) {
-  const { levels } = useGame();
+  const { levels, controller } = useGame();
   useGameVersion();
   /* The PLAY level, so anything the player has just put down is marked as
      being on this board - which it is. */
@@ -33,21 +34,27 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              the next go is an adjustment, not a rebuild.</p>
 
           <h4>On the board</h4>
-          {GLOSSARY.map(g => (
-            <div key={g.cls} className={'iline' + (g.has(lv) ? ' here' : '')}>
+          {/* the intro cards for everything on this board, again */}
+          <div className="row">
+            <button id="btn-replay-intros"
+                    onClick={() => { controller.replayIntros(); onClose(); }}>
+              Show this board's intro cards
+            </button>
+          </div>
+          {GLOSSARY.filter(g => g.onBoard !== false).map(g => (
+            <div key={g.key} className={'iline' + (g.has(lv) ? ' here' : '')}>
               <span className={'sw ' + g.cls} />
               <span><b>{g.name}</b><span className="d">{g.long}</span></span>
             </div>
           ))}
 
           <h4>Balls</h4>
-          <p>Every drop costs one ball, whether it wins or loses. Moving between
-             levels is free.</p>
-          <p>You start with <b>{STARTING_BALLS}</b>. Clearing a level for the first
-             time ever pays a bonus that grows through the game
-             (+{CLEAR_BONUS[0]} early, up to +{CLEAR_BONUS[CLEAR_BONUS.length - 1]} late),
-             the ad button on the out-of-balls screen pays +{AD_REWARD}, and you can
-             buy more with coins.</p>
+          <p>Every level gives you <b>{BALLS_PER_LEVEL}</b> balls ({BALLS_EXAM} on the
+             last four levels of each world). A miss uses one; a win ends the level.</p>
+          <p>Out of balls? <b>Restart the level</b> for free with a clean board, or
+             watch an ad for <b>+{CONTINUE_BALLS}</b> and keep your ramps where they are.
+             Your star rating counts every drop since you entered the level, restarts
+             included.</p>
 
           <h4>Coins</h4>
           <p>Clearing a level pays coins the <b>first time you beat it</b> &mdash;
@@ -55,26 +62,25 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              ({COIN_CLEAR[0][0]}&ndash;{COIN_CLEAR[0][2]} early, up to
              {COIN_CLEAR[COIN_CLEAR.length - 1][0]}&ndash;
              {COIN_CLEAR[COIN_CLEAR.length - 1][2]} late). Replaying a board you have
-             already cleared pays nothing: a drop costs a ball, so a board you can
+             already cleared pays nothing: replays are free, so a board you can
              already beat would otherwise print money. Replays are for a better
              star rating. You start with <b>{STARTING_COINS}</b>, and the daily
              wheel pays coins too.</p>
           <p>Coins are spent in the <b>shop</b>, behind the gear:
-             <b>{BALL_PRICE}</b> coins a ball, <b>{RAMP_PRICE}</b> coins a spare ramp,
+             <b>{RAMP_PRICE}</b> coins a spare ramp, <b>{SPRING_PRICE}</b> a spring,
              and both come cheaper by the bundle. Nothing converts back the
              other way.</p>
 
           <h4>Spare ramps</h4>
-          <p>Every level hands you its own ramp budget, and that never changes. A
-             <b>spare</b> is one extra ramp you own outright, and it is spent
-             automatically: once a board's own ramps are gone, the next one you
-             draw comes out of the drawer. The <b>+N</b> on the ramps counter is
-             what is in there.</p>
-          <p>A spare is spent by a ramp you actually keep - a drag too short to
-             become one costs nothing - and it does not follow you to the next
-             level. Spares never count toward the star for coming in under the
-             budget &mdash; that is always measured against the ramps the level
-             itself gave you, so a spare can buy you a solution but never a star.</p>
+          <p>Every level hands you its own ramp budget. A <b>spare</b> is one extra
+             ramp you own, for a level you are stuck on: at most <b>one</b> per level,
+             and not on the first {SPARE_FROM - 1} levels. Once a board's own ramps are
+             gone, the next ramp you draw uses it. The <b>+N</b> on the ramps counter
+             is how many you have.</p>
+          <p>It is only used up if you <b>win</b> with it - restart, leave the level
+             or take the ramp off again and it goes back in your bag. A clear that
+             needed one earns at most <b>{HELPED_MAX_STARS} stars</b>: solve it without
+             help for three.</p>
 
           <h4>Springs</h4>
           <p>From level <b>{SPRING_UNLOCK_LEVEL}</b> you can carry your own
@@ -96,7 +102,7 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
 
           <h4>Mystery boxes</h4>
           <p>Some boards carry a <b>chest</b>. Hit it with the ball on the way
-             past and it pays out something random: coins, balls, a spare ramp,
+             past and it pays out something random: coins, a spare ramp,
              occasionally a spring or a free spin of the wheel. It never
              changes where the ball goes, so it is always worth routing through
              if you can.</p>

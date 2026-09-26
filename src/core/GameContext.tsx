@@ -83,6 +83,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // `resumeAt` rather than `highest` so the dev unlock cannot send a boot
     // to the final level. See RewardManager.
     controller.setLevel(rewards.resumeAt);
+    /* An old save's ball tank was just cashed in (RewardManager.migrateBalls):
+       say so once, after the level's own flashes so it is the one left up. */
+    if (rewards.migratedCoins > 0) {
+      controller.showFlash(`Balls are now free every level! +${rewards.migratedCoins} coins`);
+      rewards.migratedCoins = 0;
+    }
 
     const services: GameServices = { bus, levels, rewards, controller, canvas };
     installGameHook(services);      // the Playwright suite and the solver sweep

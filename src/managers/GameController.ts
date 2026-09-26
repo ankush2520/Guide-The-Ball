@@ -14,7 +14,8 @@
    ============================================================ */
 import type { FlightKind, GameBus, Phase } from '../core/events';
 import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
-import { RewardManager, prizeLabel } from './RewardManager';
+import { RewardManager, prizeLabel, ballsFor, starsFor, CONTINUE_BALLS, SPRING_UNLOCK_LEVEL, CHALLENGE_BALLS,
+         SPARE_PER_LEVEL, SPARE_FROM, STUCK_AFTER_RESTARTS } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
@@ -25,7 +26,12 @@ import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import { strikeAt } from '../levels/storm';
-import type { Level, Segment, Vec } from '../levels/types';
+import { levelSeed, LEVELS, COUNTRIES } from '../levels';
+import { INTROS, GLOSSARY, type IntroCtx } from '../ui/glossary';
+import { track } from '../analytics/track';
+import { HINTS } from '../levels/hints.data';
+import { boardCycles } from '../levels/fish';
+import type { Circle, Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
 const STEP_MS = STEP_MS_DEFAULT;
@@ -39,31 +45,11 @@ const HIT_COLOR: Record<string, string> = {
   boost: '#ff7a18',
 };
 
-/* The mechanics tips. The game is plan-first, so a new mechanic is taught the
-   moment it APPEARS on a board - not when the ball hits it, by which point
-   the plan it should have informed is already committed. The obstacle keeps
-   its on-contact tip: "that scattered you randomly" only means something once
-   it has. Short on purpose: the flash is one fixed-height line. */
-export const MECH_TIPS: { key: string; has: (lv: Level) => boolean; text: string }[] = [
-  { key: 'booster',   has: lv => lv.boosters.length > 0,
-    text: 'Booster: fires you where the arrow points.' },
-  { key: 'wind',      has: lv => lv.wind.length > 0,
-    text: 'Wind: pushes the ball while it is inside.' },
-  { key: 'slippery',  has: lv => lv.slippery.length > 0,
-    text: 'Ice: bounces here keep nearly all their speed.' },
-  { key: 'breakable', has: lv => lv.breakables.length > 0,
-    text: 'Breakable: bounces once, then shatters.' },
-  { key: 'star',      has: lv => lv.stars.length > 0,
-    text: 'Gold stars are optional pickups.' },
-  { key: 'box',       has: lv => lv.boxes.length > 0,
-    text: 'Mystery box: hit it for a random reward.' },
-];
-
 /* ============================================================
    "THERE IS A GIFT IN THIS TARGET"
 
-   Not in MECH_TIPS, and the difference is the whole reason: a
-   mechanic tip is taught ONCE, ever, because a mechanic is a rule
+   Not an intro card (ui/glossary), and the difference is the whole
+   reason: a mechanic is introduced ONCE, ever, because it is a rule
    to learn. A gift in the target is not a rule, it is a fact
    about the board in front of you - the same class of thing as
    `needsSpring` - so it is said every time that board is
@@ -97,19 +83,86 @@ export const LANE_TIP = 'Ramps can\'t cross the moving target\'s track.';
    a drawn ramp was aimed BY the drag that made it. That step
    only existed to undo a ramp the game had placed for you.
    ============================================================ */
-export type TutStep = 'intro' | 'draw' | 'drop' | 'retry';
+export type TutStep = 'intro' | 'draw' | 'drop' | 'retry'
+  /* the spring walkthrough, on first reaching level 10 */
+  | 'springBag' | 'springRamp';
+
+/* ============================================================
+   INTRO CARDS
+
+   A card that explains something NEW before the board becomes
+   playable: title, one line, a drawn icon, "Got it". Queued, so
+   several new things on one level come one after another. While
+   any card is up, nothing can be drawn and nothing dropped.
+
+   `onDone` runs when the card is dismissed - the spring card
+   uses it to hand over the springs and start the walkthrough.
+   ============================================================ */
+export interface IntroCard {
+  key: string;
+  title: string;
+  text: string;
+  /** Which drawing the card shows - see ui/introIcons. */
+  icon: string;
+  onDone?: () => void;
+  /** The board objects to pulse while this card is up. */
+  highlight?: (lv: Level, simT: number) => Circle[];
+  /** A WORLD card: bigger, in the world's own sky. */
+  world?: { sky: [string, string, string]; accent: string };
+}
 
 /** What a finished level shows on the win card. */
 export interface WinCard {
-  stars: number; note: string; bonus: number; coins: number;
+  stars: number; note: string; coins: number;
   isLast: boolean; nextId: number | null;
   /** Springs this win actually spent. Zero on all but a handful of boards. */
   springs: number;
+  /** Whether the coins have been paid yet - the card offers "Collect" or the
+      doubled ad first. `paid` is what actually landed. */
+  collected: boolean;
+  paid: number;
+  /** During a Challenge Run: where the run is, and whether this win ended it. */
+  challenge?: { at: number; of: number; balls: number; done: boolean; skin: string | null };
 }
 
 export class GameController {
   phase: Phase = 'plan';
+  /* ============================================================
+     TRIES, AND THIS LEVEL'S BALLS
+
+     `tries` is every drop since the player ENTERED this level -
+     across restarts and ad continues alike - and it is what the
+     star rating reads, so restarting cannot wash out a bad run.
+     It resets only on leaving the level (setLevel).
+
+     `ballsLeft` is this level's own supply (RewardManager.ballsFor).
+     A drop uses one; running out opens the choice to restart or
+     continue. `restarts` counts restarts in this entry, for the
+     "Stuck?" offer.
+     ============================================================ */
   tries = 0;
+  /** Intro cards waiting to be shown, in order - see IntroCard. */
+  intros: IntroCard[] = [];
+  /** How many cards this batch had, for the "1/2" dots. */
+  introTotal = 0;
+  /** Where the spring walkthrough is, or null when it is not running. */
+  private springCoach = false;
+  ballsLeft = 0;
+  ballsMax = 0;
+  restarts = 0;
+  /* ============================================================
+     THE CHALLENGE RUN
+
+     While `challenge` is set, the world's levels are played in a
+     row on ONE pool of CHALLENGE_BALLS (ballsLeft carries across
+     them instead of being refilled per level). Running out sends
+     the player back to the world's first level with a full pool.
+     No hints, no spare ramps, no out-of-balls choice, no continue
+     ad - and nothing is recorded: stars, coins and clears are
+     never touched by a run. Picking a level from the picker ends
+     it.
+     ============================================================ */
+  challenge: { id: number; from: number; to: number; name: string } | null = null;
   /* Whatever the engine produced. The controller never names a concrete
      ball class - see PhysicsEngine. */
   ball: BallState | null = null;
@@ -242,8 +295,8 @@ export class GameController {
        on screen somewhere. The counters are React reading this version
        number, so anything that moves a balance has to bump it, or the HUD
        and the shop go stale until something else happens to redraw them. */
-    for (const e of ['balls:changed', 'coins:changed', 'ramps:changed',
-                     'springs:changed', 'spin:granted'] as const)
+    for (const e of ['coins:changed', 'ramps:changed',
+                     'springs:changed', 'spin:granted', 'cosmetics:changed'] as const)
       bus.on(e, () => this.changed());
   }
 
@@ -251,8 +304,68 @@ export class GameController {
       budget, or a spare in the drawer to cover it. Read by the canvas before
       a draft begins and by the caption that offers the gesture. */
   get canDraw(): boolean {
-    return this.phase === 'plan' &&
-           (this.levels.canPlaceRamp || this.rewards.extraRamps > 0);
+    return this.phase === 'plan' && !this.intros.length &&
+           (this.levels.canPlaceRamp || this.spareAvailable);
+  }
+
+  /** Whether a spare ramp may be taken on THIS board right now: not on the
+      first levels, at most SPARE_PER_LEVEL, and only if one is in the bag. */
+  get spareAvailable(): boolean {
+    return !this.challenge && this.sparesAllowed && this.levels.extraBudget < SPARE_PER_LEVEL
+      && this.rewards.extraRamps > 0;
+  }
+  /** Spares are not a thing at all on the first few levels - the HUD hides
+      them there. */
+  get sparesAllowed(): boolean { return this.levels.level.id >= SPARE_FROM; }
+
+  /** Whether the "Stuck?" offer is up: after STUCK_AFTER_RESTARTS restarts in
+      this entry, once, until dismissed. */
+  stuckDismissed = false;
+  get stuckOffer(): boolean {
+    return !this.challenge && this.restarts >= STUCK_AFTER_RESTARTS && !this.stuckDismissed
+      && this.phase === 'plan' && !this.intros.length;
+  }
+  dismissStuck(): void { this.stuckDismissed = true; this.changed(); }
+
+  /* ============================================================
+     THE HINT
+
+     One proven winning plan per level (levels/hints.data.ts, made
+     by tools/genhints.mjs on the level's own seed). Showing it
+     draws its ramps as a dashed ghost for the rest of this level
+     ENTRY, and on a timed board pulses the drop point at the
+     proven moment. It counts as help: the clear is capped at
+     HELPED_MAX_STARS, like a spare ramp.
+
+     Paying for it (the first one free, then an ad) is the UI's
+     job; this only shows it.
+     ============================================================ */
+  hintShown = false;
+  /** Whether this board has a hint, not yet shown this entry. */
+  get hintAvailable(): boolean {
+    return !this.challenge && !!HINTS[this.levels.level.id] && !this.hintShown;
+  }
+  showHint(): void {
+    const h = HINTS[this.levels.level.id];
+    if (!h || this.hintShown) return;
+    this.hintShown = true;
+    this.stuckDismissed = true;
+    track('hint_used', { level: this.levels.level.id });
+    // short: the caption is one line on a phone
+    this.showFlash('Trace the dashed ramp' + (h.ramps.length > 1 ? 's' : '')
+      + (h.ramps.some(r => r.spring) ? ' + spring' : '')
+      + (h.t0 !== undefined ? ', drop on the pulse' : '') + '. Max 2★');
+    this.changed();
+  }
+
+  /** Take a ramp off the board (its × button). If that brings the board back
+      within its own budget, a reserved spare goes back to the bag. */
+  removeRamp(i: number): void {
+    this.levels.removeRamp(i);
+    this.selected = -1;
+    if (this.levels.releaseSpareIfUnused())
+      this.showFlash('Spare ramp returned to your bag.');
+    this.notifyRampsChanged();
   }
 
   /** Begin a ramp at `p`. Returns false when there is nothing left to draw
@@ -305,16 +418,13 @@ export class GameController {
     this.changed();
   }
 
-  /** Take one spare ramp from the drawer and add it to THIS level's budget.
-      The two halves belong to different managers - the drawer is the player's
-      and the budget is the board's - so joining them is the controller's job,
-      as it is for every other spend. */
+  /** RESERVE a spare ramp for this board: its budget grows by one, but the
+      bag is only charged if the level is WON with it (finish). Restarting,
+      leaving, or removing it hands it back. */
   useExtraRamp(): boolean {
-    if (this.phase !== 'plan') return false;
-    if (!this.rewards.spendExtraRamp()) return false;
+    if (this.phase !== 'plan' || !this.spareAvailable) return false;
     this.levels.extraBudget++;
-    const left = this.rewards.extraRamps;
-    this.showFlash(`Extra ramp added - ${left} left in your drawer.`);
+    this.showFlash('Spare ramp in use - only spent if you win. Max 2 stars.');
     this.changed();
     return true;
   }
@@ -337,7 +447,7 @@ export class GameController {
   }
 
   /** Whether the bag may show this item at all. Springs do not exist before
-      level 21 - see RewardManager.springsUnlocked. */
+      level 10 - see RewardManager.springsUnlocked. */
   itemUnlocked(kind: ItemKind): boolean {
     return kind === 'spring' ? this.rewards.springsUnlocked : true;
   }
@@ -391,6 +501,7 @@ export class GameController {
     }
     this.selected = rampIx;
     this.showFlash('Spring fitted - that ramp now throws four times harder.');
+    if (this.springCoach) this.endSpringCoach();
     this.notifyRampsChanged();
     return true;
   }
@@ -611,11 +722,11 @@ export class GameController {
   /* ---------------- the drop ---------------- */
 
   drop(): void {
-    if (this.phase !== 'plan') return;
+    if (this.phase !== 'plan' || this.intros.length) return;
     /* Out of balls. Drop is deliberately left ENABLED for this: a dead grey
        button tells a player they are stuck without telling them what to do
-       about it, so the press opens the way to get more instead. */
-    if (this.rewards.balls <= 0) { this.bus.emit('balls:empty', {}); this.changed(); return; }
+       about it, so the press opens the restart / continue choice instead. */
+    if (this.ballsLeft <= 0) { this.bus.emit('balls:empty', {}); this.changed(); return; }
     // the walkthrough's last step is this very tap
     this.tutDropping = this.tutorialStep() === 'drop';
     if (this.tutDropping) this.tutorialDone();
@@ -629,7 +740,7 @@ export class GameController {
        miss means the ramps need changing, never that the dice were bad.
        Each level has its own seed, so the pattern differs board to board. */
     const seed = this.seedOverride !== null
-      ? this.seedOverride : (Math.imul(this.levels.level.id, 2654435761) >>> 1);
+      ? this.seedOverride : levelSeed(this.levels.level.id);
     this.releaseBall();
     const t0 = Math.floor(this.patrolClock);
     this.lastT0 = t0;
@@ -643,10 +754,9 @@ export class GameController {
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.acc = 0;
 
-    /* one ball per press, win or lose: what costs is throwing it, not the
-       result. Committed before the drop runs, so an interrupted run still
-       paid. */
-    this.rewards.spendBall();
+    /* One of this level's balls per drop. A win ends the level, so in
+       practice it is the misses that use them up. */
+    this.ballsLeft = Math.max(0, this.ballsLeft - 1);
     this.tries++;
     this.setPhase('drop');
     this.bus.emit('drop:started', { level: this.levels.playLevel, seed, tries: this.tries });
@@ -717,6 +827,59 @@ export class GameController {
       : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);
+    track('ball_lost', { level: this.levels.level.id, result, ballsLeft: this.ballsLeft, tries: this.tries });
+    /* That was the last ball: offer the way on straight away, rather than
+       waiting for a Drop press that can only lead there. In a Challenge Run
+       there is no choice - the run starts again from the world's first level. */
+    if (this.ballsLeft <= 0) {
+      if (this.challenge) {
+        const ch = this.challenge;
+        this.ballsLeft = CHALLENGE_BALLS;
+        this.setLevel(ch.from - 1, true);
+        this.showFlash(`Out of balls - the ${ch.name} Challenge Run starts again from level ${ch.from}.`);
+      } else this.bus.emit('balls:empty', {});
+    }
+  }
+
+  /* ============================================================
+     OUT OF BALLS: THE TWO WAYS ON
+
+     continueLevel() - after a WATCHED rewarded ad (the panel only
+     calls it on true): more balls, and the board exactly as it
+     was, every ramp and spring where the player left them.
+
+     restartLevel() - free and instant: a fresh board and a full
+     set of balls. The drawn ramps are cleared; a spring fitted to
+     one goes back to the bag with it, because a spring is only
+     ever charged on a win. `tries` is NOT reset - see above.
+     Never followed by an ad.
+     ============================================================ */
+  continueLevel(): void {
+    if (this.phase !== 'plan') return;
+    this.ballsLeft += CONTINUE_BALLS;
+    this.ballsMax = Math.max(this.ballsMax, this.ballsLeft);
+    this.showFlash(`+${CONTINUE_BALLS} balls - your ramps are right where you left them.`);
+    this.changed();
+  }
+
+  restartLevel(): void {
+    this.releaseBall();
+    this.capture = null;
+    this.winCard = null; this.pendingCard = null; this.gift = null;
+    this.selected = -1; this.dragging = null; this.armedSpring = false; this.draft = null;
+    this.levels.restartBoard();
+    this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
+    this.boxSeen = []; this.springFired = [];
+    this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
+    this.renderer.particles.clear(); this.renderer.trail.clear();
+    this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
+    this.ballsMax = ballsFor(this.levels.level.id);
+    this.ballsLeft = this.ballsMax;
+    this.restarts++;
+    track('level_restart', { level: this.levels.level.id, restarts: this.restarts, tries: this.tries });
+    this.lastResult = null;
+    this.hideFlash();
+    this.setPhase('plan');
   }
 
   /* Only a win reaches here - it is the one moment that still earns a
@@ -728,17 +891,43 @@ export class GameController {
        win card and the bag are already telling the same story by the time
        either is looked at. */
     const springsUsed = this.commitSprings();
+    /* THE ONE PLACE A SPARE RAMP IS SPENT: a win that actually needed it. */
+    const usedSpare = this.levels.extraBudget > 0 && this.levels.rampsUsed > this.levels.levelBudget;
+    if (usedSpare) {
+      this.rewards.spendExtraRamp();
+      track('spare_ramp_used', { level: lv.id });
+    }
+    if (springsUsed > 0) track('spring_used', { level: lv.id, n: springsUsed });
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
-    const { stars, bonus, coins, note, firstClear } = this.rewards.recordClear(
-      this.levels.levelIndex, lv.id, this.levels.isLast,
-      this.tries, this.levels.rampsUsed, this.levels.levelBudget);
+    /* A Challenge Run records nothing - see `challenge`. The card still shows
+       the rating, worked out the same way. */
+    const ch = this.challenge;
+    const { stars, coins, note, firstClear } = ch
+      ? { stars: starsFor(this.tries, this.levels.rampsUsed, this.levels.levelBudget),
+          coins: 0, note: '', firstClear: false }
+      : this.rewards.recordClear(
+          this.levels.levelIndex, lv.id, this.levels.isLast,
+          this.tries, this.levels.rampsUsed, this.levels.levelBudget,
+          usedSpare ? 'spare' : this.hintShown ? 'hint' : null);
+    let challenge: WinCard['challenge'];
+    if (ch) {
+      const done = lv.id >= ch.to;
+      const skin = done ? this.rewards.completeChallenge(ch.id) : null;
+      challenge = { at: lv.id - ch.from + 1, of: ch.to - ch.from + 1, balls: this.ballsLeft, done, skin };
+      if (done) this.challenge = null;
+    }
 
+    track('level_win', { level: lv.id, stars, tries: this.tries, usedSpareRamp: usedSpare,
+                         usedHint: this.hintShown, usedSpring: springsUsed > 0, firstClear });
     const card: WinCard = {
-      stars, note, bonus, coins, isLast: this.levels.isLast,
+      stars, note, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
       springs: springsUsed,
+      collected: coins <= 0, paid: 0,
+      challenge,
     };
+    if (challenge?.done) card.isLast = true;      // the run ends here: no Next
     this.capture = null;
 
     /* IS THIS TARGET WRAPPED? Claimed here rather than when the panel opens,
@@ -794,6 +983,23 @@ export class GameController {
     this.changed();
   }
 
+  /* ============================================================
+     COLLECTING A CLEAR
+
+     The win card pays on the player's choice: "Collect N" or
+     "Watch ad: collect 2N" (the UI calls this with doubled=true
+     ONLY after a watched ad). Leaving the card any other way -
+     Next, Replay, the level picker - collects the plain amount,
+     so a clear can never go unpaid.
+     ============================================================ */
+  collectWin(doubled = false): void {
+    const card = this.winCard ?? this.pendingCard;
+    if (!card || card.collected) return;
+    card.collected = true;
+    card.paid = this.rewards.payClear(card.coins, doubled);
+    this.changed();
+  }
+
   private emitEnded(result: DropResult): void {
     this.bus.emit('drop:ended', { result, level: this.levels.level,
                                   tries: this.tries, rampsUsed: this.levels.rampsUsed });
@@ -801,7 +1007,11 @@ export class GameController {
 
   /* ---------------- level flow ---------------- */
 
-  setLevel(i: number): void {
+  /** Enter level index `i`. `inChallenge` is the run moving itself on; any
+      other call (the picker, a test) ends a Challenge Run. */
+  setLevel(i: number, inChallenge = false): void {
+    if (!inChallenge) this.challenge = null;
+    this.collectWin();                  // an uncollected clear is paid, never lost
     this.levels.setLevel(i);
     this.tutRetry = false; this.tutDropping = false;
     this.releaseBall();
@@ -813,7 +1023,18 @@ export class GameController {
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.renderer.invalidateBackdrop();
+    track('level_start', { level: this.levels.level.id });
     this.tries = 0;
+    this.restarts = 0;
+    this.stuckDismissed = false;
+    this.hintShown = false;
+    if (this.challenge) {
+      // the run's one pool carries across its levels
+      this.ballsMax = CHALLENGE_BALLS;
+    } else {
+      this.ballsMax = ballsFor(this.levels.level.id);
+      this.ballsLeft = this.ballsMax;
+    }
     // every visit starts the patrol (and the storm) from the same phase
     this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
     this.hideFlash();
@@ -826,21 +1047,58 @@ export class GameController {
        and the board's appearance, so joining them is this method's job - the
        same cross-manager seam as every other spend here. */
     this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
-    /* Reaching level 21 is what puts the first spring in the bag. Announced
-       with a flash rather than a modal: it is a gift, not an interruption. */
-    if (this.rewards.noteLevelReached(this.levels.level.id))
-      this.showFlash('Springs unlocked - one is in your bag!');
+    this.intros = []; this.introTotal = 0;
+    /* Reaching level 10 is what puts the first springs in the bag. It is a
+       NEW POWER, so it gets a card before the board is playable - and the
+       springs are credited when the card is dismissed, then flown in, then
+       the walkthrough shows how to use one. */
+    if (this.rewards.springGiftDue(this.levels.level.id)) {
+      this.queueIntro({
+        key: 'spring', icon: 'spring', title: 'New power: Spring!',
+        text: 'Put it on a ramp you drew and the ball launches 4x harder. Only used up if you win.',
+        onDone: () => {
+          this.markSeen('spring');
+          const n = this.rewards.claimSpringGift();
+          if (n > 0) this.bus.emit('springs:gifted', { n });
+          this.startSpringCoach();
+        },
+      });
+    } else if (this.rewards.springGift && !this.rewards.springUnlockSeen
+               && this.levels.level.id >= SPRING_UNLOCK_LEVEL) {
+      // the walkthrough was interrupted last time - carry on with it
+      this.startSpringCoach();
+    }
     this.teachNewMechanics();
     this.teachSpringBoard();
     this.teachGiftBoard();
   }
 
-  nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
+  nextLevel(): void { this.setLevel(this.levels.levelIndex + 1, !!this.challenge); }
 
-  /** Replay: drop the same layout again, which costs a ball like any drop -
-      and at the same patrol phase, so it is the same drop, not a new roll. */
+  /** Start a world's Challenge Run from its first level - only once every
+      level of it has been cleared. */
+  startChallenge(countryId: number): boolean {
+    const c = COUNTRIES.find(k => k.id === countryId);
+    if (!c || c.to - c.from + 1 < 20 || !this.rewards.worldCleared(c.from, c.to)) return false;
+    this.setLevel(c.from - 1);                 // ends any other run first
+    this.challenge = { id: c.id, from: c.from, to: c.to, name: c.name };
+    this.ballsMax = CHALLENGE_BALLS;
+    this.ballsLeft = CHALLENGE_BALLS;
+    this.showFlash(`${c.name} Challenge Run: all ${c.to - c.from + 1} levels, ${CHALLENGE_BALLS} balls. No hints, no help.`);
+    this.changed();
+    return true;
+  }
+
+  /** Replay: drop the same layout again, at the same patrol phase, so it is
+      the same drop, not a new roll. A replay of a cleared board follows the
+      same few-balls rule as any visit, so it starts a fresh supply. */
   retry(): void {
+    this.collectWin();
     this.patrolClock = this.lastT0;
+    if (!this.challenge) {
+      this.ballsMax = ballsFor(this.levels.level.id);
+      this.ballsLeft = this.ballsMax;
+    }
     this.setPhase('plan');
     this.winCard = null; this.pendingCard = null; this.gift = null;
     this.drop();
@@ -862,10 +1120,55 @@ export class GameController {
     this.changed();
   }
 
+  /* ---------------- intro cards ---------------- */
+
+  get intro(): IntroCard | null { return this.intros[0] ?? null; }
+  /** 1-based position of the card on screen within its batch. */
+  get introIndex(): number { return this.introTotal - this.intros.length + 1; }
+
+  queueIntro(card: IntroCard): void {
+    if (this.intros.some(c => c.key === card.key)) return;
+    this.intros.push(card);
+    this.introTotal++;
+    this.changed();
+  }
+
+  /** "Got it" on the card on screen. */
+  dismissIntro(): void {
+    const card = this.intros.shift();
+    if (!this.intros.length) this.introTotal = 0;
+    card?.onDone?.();
+    this.changed();
+  }
+
+  /* ---------------- the spring walkthrough ----------------
+
+     Two coach steps, shown once: point at the bag ("tap Use"), then - once a
+     spring is armed - at the player's ramp ("tap your ramp"). Fitting a spring
+     finishes it; the coach's Skip ends it early. Either way it is recorded,
+     and never runs again. */
+  private startSpringCoach(): void {
+    if (this.rewards.springUnlockSeen) return;
+    this.springCoach = true;
+    this.changed();
+  }
+
+  private endSpringCoach(): void {
+    this.springCoach = false;
+    this.rewards.springUnlockSeen = true;
+    this.rewards.saveProgress();
+    this.changed();
+  }
+
   /* ---------------- teaching ---------------- */
 
   tutorialStep(): TutStep | null {
-    if (this.levels.levelIndex !== 0 || this.phase !== 'plan') return null;
+    if (this.phase !== 'plan' || this.intros.length) return null;
+    /* only while there is a spring to use - an empty bag has nothing to Use,
+       and the need-a-spring strip is the way on there instead */
+    if (this.springCoach && (this.armedSpring || this.itemCount('spring').left > 0))
+      return this.armedSpring ? 'springRamp' : 'springBag';
+    if (this.levels.levelIndex !== 0) return null;
     if (this.tutRetry) return 'retry';
     if (this.rewards.tutorialSeen) return null;
     if (!this.tutIntroDone) return 'intro';
@@ -878,6 +1181,8 @@ export class GameController {
     switch (this.tutorialStep()) {
       case 'intro': this.tutIntroDone = true; break;
       case 'retry': this.tutRetry = false; break;
+      // the spring coach's button is its Skip
+      case 'springBag': case 'springRamp': this.endSpringCoach(); return;
       default: return;
     }
     this.changed();
@@ -895,26 +1200,80 @@ export class GameController {
   }
 
   /** Skip means skip all of it, the just-in-time obstacle tip included. */
+  /** Skip ends the level-1 walkthrough and the on-contact obstacle tip. The
+      intro cards are NOT skipped with it: each is one card, once, and it is
+      the only place a new mechanic is explained before it matters. */
   tutorialSkip(): void {
     this.rewards.tutorialSeen = true;
     this.tutRetry = false;
     this.rewards.obstacleTipSeen = true;
-    for (const t of MECH_TIPS) this.rewards.tipsSeen[t.key] = true;
     this.rewards.saveProgress();
     this.changed();
   }
 
+  /* ============================================================
+     "NEW THING" INTRO CARDS
+
+     On entering a level: first, on the first visit to a new WORLD,
+     its world card ("New here: ..."); then a card for every thing
+     on this board the player has never been introduced to, in the
+     registry's order (ui/glossary INTROS). Each is recorded in
+     tipsSeen when its "Got it" is pressed, and never comes back on
+     its own. The Info panel can replay a board's cards.
+     ============================================================ */
+  private introCtx(): IntroCtx {
+    return { spares: this.sparesAllowed ? this.rewards.extraRamps : 0,
+             hint: !!HINTS[this.levels.level.id] };
+  }
+
+  private markSeen(key: string): void {
+    if (this.rewards.tipsSeen[key]) return;
+    this.rewards.tipsSeen[key] = true;
+    this.rewards.saveProgress();
+  }
+
+  private queueEntry(e: (typeof INTROS)[number], mark: boolean): void {
+    this.queueIntro({ key: e.key, title: e.title!, text: e.intro!, icon: e.icon ?? '',
+                      highlight: e.highlight,
+                      onDone: mark ? () => this.markSeen(e.key) : undefined });
+  }
+
   private teachNewMechanics(): void {
     if (!this.rewards.tutorialSeen) return;      // the ramp lesson comes first
-    const lv = this.levels.level;
-    for (const t of MECH_TIPS) {
-      if (!this.rewards.tipsSeen[t.key] && t.has(lv)) {
-        this.rewards.tipsSeen[t.key] = true;
-        this.rewards.saveProgress();
-        this.showFlash(t.text);
-        this.bus.emit('tip:shown', { key: t.key, text: t.text });
-        return;
-      }
+    const lv = this.levels.level, seen = this.rewards.tipsSeen, ctx = this.introCtx();
+    /* the world card, the first time a world after the first is entered */
+    const country = this.levels.country, wkey = `world-${country.id}`;
+    if (country.from > 1 && !seen[wkey]) {
+      const inWorld = LEVELS.filter(l => l.id >= country.from && l.id <= country.to);
+      const news = INTROS.filter(e => !seen[e.key] && e.key !== 'balls' && e.key !== 'spareRamp'
+                                      && e.key !== 'hint' && inWorld.some(l => e.has(l, ctx)));
+      this.queueIntro({ key: wkey, icon: '', title: `Welcome to ${country.name}!`,
+                        text: news.length ? `New here: ${news.map(e => e.title!.replace(/^New power: /, '').replace(/!$/, '')).join(' + ')}`
+                                          : 'A new world - same rules, harder boards.',
+                        world: { sky: country.sky, accent: country.accent },
+                        onDone: () => this.markSeen(wkey) });
+    }
+    for (const e of INTROS) {
+      if (seen[e.key] || !e.has(lv, ctx)) continue;
+      if (e.key === 'spring' && this.intros.some(c => c.key === 'spring')) continue;
+      this.queueEntry(e, true);
+    }
+    this.devGuard();
+  }
+
+  /** The Info panel's "show this board's cards again". */
+  replayIntros(): void {
+    const lv = this.levels.level, ctx = this.introCtx();
+    for (const e of INTROS) if (e.has(lv, ctx)) this.queueEntry(e, false);
+  }
+
+  /** DEV builds: warn about any entity on this board that no registry entry
+      explains, so no future mechanic ships without a card. */
+  private devGuard(): void {
+    if (!import.meta.env?.DEV) return;
+    for (const ent of this.levels.entities) {
+      if (!GLOSSARY.some(g => g.covers?.includes(ent.kind)))
+        console.warn(`[intro] level ${this.levels.level.id}: '${ent.kind}' has no glossary/intro entry`);
     }
   }
 
@@ -1014,7 +1373,27 @@ export class GameController {
       handleR: HANDLE_R,
       delR: DEL_R,
       tutorial: this.fillTutorial(),
+      /* the hint's ghost ramps, while it is shown, and whether the drop point
+         should pulse right now (a timed board at the proven moment) */
+      hint: this.hintShown ? HINTS[lv.id]?.ramps ?? null : null,
+      /* what the intro card on screen is about, pulsing on the board */
+      introHighlight: this.intro?.highlight
+        ? this.intro.highlight(this.levels.playLevel, this.patrolClock) : null,
+      hintPulse: this.hintShown && this.phase === 'plan' && this.atHintMoment(),
     };
+  }
+
+  /** On a timed board: is the board back at the moment the hint was proven
+      at? Only if EVERY clock on it is - within a few steps, since the drop
+      itself is floored to a step. */
+  private atHintMoment(): boolean {
+    const h = HINTS[this.levels.level.id];
+    if (!h || h.t0 === undefined) return false;
+    const t = this.patrolClock;
+    return boardCycles(this.levels.playLevel).every(P => {
+      const d = (((t - h.t0!) % P) + P) % P;
+      return Math.min(d, P - d) <= 3;
+    });
   }
 
   /* OR-ed rather than taken from the ball: a box claimed on an earlier visit
@@ -1056,7 +1435,7 @@ export class GameController {
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
     if (this.armedSpring) return 'Tap one of your ramps to fit the spring.';
     if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
-    if (this.levels.rampsLeft <= 0 && this.rewards.extraRamps <= 0)
+    if (this.levels.rampsLeft <= 0 && !this.spareAvailable)
       return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';
     return 'Drag to draw a ramp. Tap a ramp to adjust it, or empty board to drop.';
   }

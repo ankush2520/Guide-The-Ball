@@ -11,7 +11,7 @@
    needs no game running, so a headless sweep never has to boot
    React. The GAME half is attached once the managers exist.
    ============================================================ */
-import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls } from '../levels';
+import { LEVELS, COUNTRIES, countryOf, cityOf, cityIndex, initLevel, buildWalls, levelSeed } from '../levels';
 import type { Level, RawLevel, Segment } from '../levels/types';
 import { RAMP_LEN } from '../items/items';
 import { createEngine, MatterEngine, MATTER_TUNED, MATTER_PURE } from '../physics/engines';
@@ -23,12 +23,13 @@ import { VIEW_SCALE } from '../render/view';
 import { DEL_OFF, DEL_R, DEL_GRAB } from '../managers/LevelManager';
 import * as PAL from '../render/palette';
 import type { GameServices } from './GameContext';
-import { starsFor, STARTING_BALLS, AD_REWARD, CLEAR_BONUS,
-         STARTING_COINS, BALL_PRICE, RAMP_PRICE, BALL_BUNDLES, RAMP_BUNDLES,
+import { starsFor, BALLS_PER_LEVEL, BALLS_EXAM, CONTINUE_BALLS, ballsFor,
+         STARTING_COINS, RAMP_PRICE, RAMP_BUNDLES,
          SPRING_PRICE, SPRING_BUNDLES, SPRING_UNLOCK_LEVEL, BOX_PRIZES,
          COIN_CLEAR, coinsFor,
          SPIN_PRIZES, SPIN_COOLDOWN_MS, SPIN_MS } from '../managers/RewardManager';
-import { BALLS_KEY, SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
+import { SPIN_KEY, WALLET_KEY } from '../managers/ProgressStore';
+import { readEvents } from '../analytics/track';
 import { STAR_N } from '../render/Starfield';
 import { Ease } from '../render/Tweens';
 import { Sound } from '../audio/Sound';
@@ -108,10 +109,9 @@ const physics = {
     SPRING_DECAY: C.SPRING_DECAY, SPRING_CD: C.SPRING_CD,
     BOOST_SUB_PX: C.BOOST_SUB_PX, BOOST_SUBSTEPS_MAX: C.BOOST_SUBSTEPS_MAX,
   },
-  BALLS: { key: BALLS_KEY, start: STARTING_BALLS,
-           adReward: AD_REWARD, clearBonus: CLEAR_BONUS.slice() },
+  BALLS: { perLevel: BALLS_PER_LEVEL, exam: BALLS_EXAM, continueBalls: CONTINUE_BALLS },
   WALLET: { key: WALLET_KEY, startCoins: STARTING_COINS,
-            ballPrice: BALL_PRICE, rampPrice: RAMP_PRICE,
+            rampPrice: RAMP_PRICE,
             springPrice: SPRING_PRICE,
             clearTable: COIN_CLEAR.map(r => r.slice()) },
   /* The spring and the box table, published so the suite can hold the shipped
@@ -131,6 +131,8 @@ const physics = {
   /* The patrol solved directly, so a test can check the curve itself rather
      than inferring it from where a ball happened to land. */
   targetAt,
+  /** The seed the game drops every level with - what hints are proved on. */
+  levelSeed,
 
   /* The legacy argument order, kept exactly: (ramps, seed, levelIdx, broken).
      levelIdx is optional, as it was - the tuning rig calls simulate(ramps,
@@ -266,8 +268,14 @@ export function installGameHook(s: GameServices): void {
 
     audioMix: () => Sound.debugMix(),
 
-    balls: () => rewards.balls,
-    setBalls: (n: number) => rewards.setBallsForTest(n),
+    /* this LEVEL's balls - there is no tank any more */
+    /** The tracking ring buffer (Part K), oldest first. */
+    events: () => readEvents(),
+    balls: () => c.ballsLeft,
+    setBalls: (n: number) => { c.ballsLeft = Math.max(0, n | 0); },
+    ballsFor: (id: number) => ballsFor(id),
+    restartLevel: () => c.restartLevel(),
+    continueLevel: () => c.continueLevel(),
     coins: () => rewards.coins,
     spareRamps: () => rewards.extraRamps,
     setWallet: (coins: number, ramps: number, springs?: number) =>
@@ -279,7 +287,6 @@ export function installGameHook(s: GameServices): void {
       levels.moveRampBy(ix, dx, dy);
       c.notifyRampsChanged();
     },
-    buyBalls: (n: number) => rewards.buyBalls(n),
     buyRamps: (n: number) => rewards.buyRamps(n),
     buySprings: (n: number) => rewards.buySprings(n),
     springCost: (n: number) => rewards.springCost(n),
@@ -354,13 +361,11 @@ export function installGameHook(s: GameServices): void {
     grantBonusSpin: (n = 1) => rewards.grantBonusSpin(n),
     /* The shop's table and the prices it charges, so a test can check the two
        against each other rather than against numbers copied out of the UI. */
-    BALL_BUNDLES, RAMP_BUNDLES,
-    ballCost: (n: number) => rewards.ballCost(n),
+    RAMP_BUNDLES,
     rampCost: (n: number) => rewards.rampCost(n),
     useExtraRamp: () => c.useExtraRamp(),
     budget: () => ({ level: levels.levelBudget, inForce: levels.budget,
                      left: levels.rampsLeft, extra: levels.extraBudget }),
-    clearBonus: (id: number) => rewards.clearBonus(id),
     cleared: () => ({ ...rewards.clearedLevels }),
     stars: () => ({ ...rewards.bestStars }),
     pickups: () => ({ ...rewards.bestPickups }),
@@ -402,14 +407,11 @@ export function installGameHook(s: GameServices): void {
     },
 
     ballInfo: () => {
-      const buy = document.getElementById('btn-buy') as HTMLButtonElement | null;
-      return { balls: rewards.balls,
+      return { balls: c.ballsLeft, max: c.ballsMax,
                /* the drop is a tap on the board now: it is refused by phase,
                   not by a disabled button */
                dropDisabled: c.phase !== 'plan',
-               stopShown: !!document.getElementById('noballs'),
-               buyDisabled: buy ? buy.disabled : true,
-               buyText: buy ? buy.textContent ?? '' : 'Buy Balls — Coming Soon' };
+               stopShown: !!document.getElementById('noballs') };
     },
 
     spinTarget(ix: number, from: number, jitter = 0) {

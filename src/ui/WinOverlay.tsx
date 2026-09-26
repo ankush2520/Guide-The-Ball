@@ -2,7 +2,7 @@
    THE WIN CARD
 
    Deliberately short. It used to spell out the try count, the
-   ramp count, which star was missed and how to earn it, the
+   ramp count, which star was missed and how to earn it, a
    ball bonus and the next level's number - five lines of prose
    over a board the player wants to get back to. Everything in
    it except the payout is either already on screen (the level
@@ -23,14 +23,42 @@
    different things and a win card is the worst place to confuse
    them: one is what you just did, the other is what it cost.
    ============================================================ */
+import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
+import { Ads } from '../ads/Ads';
+import { useAdOffer } from '../ads/useAdOffer';
+import { ChestBar } from './ChestPanel';
+import { MIDGAME_FROM_LEVEL } from '../managers/RewardManager';
 
 export function WinOverlay() {
   const { controller } = useGame();
   useGameVersion();
 
+  const [waiting, setWaiting] = useState(false);
   const card = controller.winCard;
+  useAdOffer('double', controller.phase === 'over' && !!card && !card.collected && card.coins > 0
+                       && Ads.available());
   if (controller.phase !== 'over' || !card) return null;
+  /* A first clear pays on a CHOICE: collect it, or watch an ad for double -
+     two equal buttons. Replays pay nothing, so they go straight to the usual
+     Replay / Next. */
+  const owed = !card.collected && card.coins > 0;
+  /* NEXT: the one natural break an interstitial may use (Ads.midgame stops
+     gameplay around it; the phase change after it starts gameplay again). */
+  const next = async () => {
+    if (controller.levels.level.id >= MIDGAME_FROM_LEVEL) {
+      setWaiting(true);
+      await Ads.midgame();
+      setWaiting(false);
+    }
+    controller.nextLevel();
+  };
+  const double = async () => {
+    setWaiting(true);
+    const ok = await Ads.rewarded('double');
+    setWaiting(false);
+    if (ok) controller.collectWin(true);
+  };
 
   return (
     <div className="overlay" id="overlay">
@@ -54,7 +82,17 @@ export function WinOverlay() {
             <i className="mouth" />
           </i>
         </div>
-        <div className="big" id="ov-title">Target hit!</div>
+        <div className="big" id="ov-title">
+          {card.challenge?.done ? 'Challenge cleared!' : 'Target hit!'}
+        </div>
+        {card.challenge && (
+          <div className="sub" id="ov-challenge">
+            {card.challenge.done
+              ? (card.challenge.skin ? 'A new ball skin is yours - wear it from the shop\'s Style tab.'
+                                     : 'Every level in a row. Well played!')
+              : `Challenge Run: level ${card.challenge.at} of ${card.challenge.of} · ${card.challenge.balls} balls left`}
+          </div>
+        )}
         <div className="stars" id="ov-stars">
           {[0, 1, 2].map(i => <i key={i} className={i < card.stars ? 'on' : ''}>&#9733;</i>)}
         </div>
@@ -65,15 +103,10 @@ export function WinOverlay() {
               replaces it says which it is, once, where the number was. */}
           {card.coins > 0 ? (
             <span className="reward" id="ov-coins">
-              <i className="coin" /><b>+{card.coins}</b>
+              <i className="coin" /><b>+{card.collected ? card.paid : card.coins}</b>
             </span>
           ) : (
             <span className="nopay" id="ov-nopay">Already earned &mdash; replays are practice</span>
-          )}
-          {card.bonus > 0 && (
-            <span className="reward" id="ov-balls" title="First clear bonus">
-              <i className="pip" /><b>+{card.bonus}</b>
-            </span>
           )}
           {/* The one thing on this card that went the other way. A spring is
               charged for by the win, so the win is where it has to be shown -
@@ -88,12 +121,26 @@ export function WinOverlay() {
             level" and the difference between them - one re-drops for you, the
             other hands the board back to edit first - was too fine to be
             worth a third button on a card this short. */}
+        <ChestBar small />
+        {owed ? (
+          <div className="row pair">
+            <button id="btn-collect" disabled={waiting} onClick={() => controller.collectWin(false)}>
+              Collect {card.coins}
+            </button>
+            {Ads.available() && (
+              <button id="btn-collect-ad" disabled={waiting} onClick={double}>
+                {waiting ? 'Loading ad…' : `Watch ad: collect ${card.coins * 2}`}
+              </button>
+            )}
+          </div>
+        ) : (
         <div className="row">
           <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>
           {!card.isLast && (
-            <button id="btn-next" className="primary" onClick={() => controller.nextLevel()}>Next</button>
+            <button id="btn-next" className="primary" disabled={waiting} onClick={next}>Next</button>
           )}
         </div>
+        )}
       </div>
     </div>
   );

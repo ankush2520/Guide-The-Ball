@@ -16,18 +16,19 @@ import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
 import { RAMP_STYLE } from '../entities/Ramp';
+import { activeStyle } from '../cosmetics/cosmetics';
 import { rampAllowed } from '../levels/patrol';
 import { drawSpring } from './Spring';
 import { Backdrop } from './Backdrop';
 import { drawStarfield } from './Starfield';
 import { drawClouds } from './Clouds';
-import { BALL, INK, OBSTACLE, isLightSky } from './palette';
+import { INK, OBSTACLE, isLightSky } from './palette';
 import { Trail } from './Trail';
 import { ParticleSystem } from './Particles';
 import { drawSeg } from './primitives';
 import { VIEW_SCALE } from './view';
 import type { Phase } from '../core/events';
-import type { Country, Segment } from '../levels/types';
+import type { Circle, Country, Segment } from '../levels/types';
 
 export const MAX_SCALE = 2;
 
@@ -36,6 +37,15 @@ export const MAX_SCALE = 2;
 export interface Squash { amt: number; nx: number; ny: number; }
 
 export interface CaptureState { t: number; bx: number; by: number; cx: number; cy: number; }
+
+/** The player's ramps in the worn ramp colour (cosmetics); the rest of the
+    style is the ramp's own. One object, rebuilt only when the colour moves. */
+let rampCache: { fill: string; style: typeof RAMP_STYLE } | null = null;
+function playerRamp(): typeof RAMP_STYLE {
+  if (!rampCache || rampCache.fill !== activeStyle.ramp)
+    rampCache = { fill: activeStyle.ramp, style: { ...RAMP_STYLE, fill: activeStyle.ramp } as typeof RAMP_STYLE };
+  return rampCache.style;
+}
 
 export interface RenderState {
   level: Level;
@@ -72,6 +82,12 @@ export interface RenderState {
   delR: number;
   /** Whether a spring is out of the bag waiting for a ramp to be tapped. */
   armedSpring: boolean;
+  /** The hint's ramps while it is shown (a dashed ghost), else null. */
+  hint: readonly Segment[] | null;
+  /** A timed board's hint: the board is at the proven drop moment now. */
+  hintPulse: boolean;
+  /** What the intro card on screen is about: pulse a glow ring round each. */
+  introHighlight: readonly Circle[] | null;
   /** Which first-run step is showing, if any. The bubble is DOM (Coach.tsx);
       the board adds only what has to sit ON the board - see drawCoach. */
   tutorial: { step: string | null };
@@ -211,8 +227,16 @@ export class Renderer {
         e.drawCapture(ctx, s.capture.t / s.captureMs, s.capture.cx, s.capture.cy);
     }
 
+    /* THE INTRO CARD'S SUBJECT: a breathing glow ring round every object the
+       card on screen is about, so the player sees exactly which one it is. */
+    if (s.introHighlight) this.drawIntroHighlight(s.introHighlight, s.clock);
+
+    /* THE HINT: its ramps as a dashed ghost under the player's own, so a
+       ramp drawn over one sits right on top of it. */
+    if (s.hint) this.drawHint(s.hint, s.clock);
+
     /* ramps - the player's own entities, drawn above the board furniture */
-    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
+    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, playerRamp());
 
     /* THE RAMP BEING DRAWN, in the same pen as a placed one so what you see
        under your finger is what you are about to get. Translucent while it is
@@ -224,7 +248,7 @@ export class Renderer {
       /* ...and across a moving target's track, which is the same promise:
          nothing is placed there. */
       if (len < s.minRamp || !rampAllowed(s.level, s.draft)) ctx.globalAlpha = 0.45;
-      drawSeg(ctx, s.draft, RAMP_HT, RAMP_STYLE);
+      drawSeg(ctx, s.draft, RAMP_HT, playerRamp());
       ctx.restore();
     }
 
@@ -243,6 +267,8 @@ export class Renderer {
     for (const r of s.ramps) if (r.spring) drawSpring(ctx, r, s.clock);
 
     if (s.phase === 'plan') this.drawSpawnMarker(s.level);
+    // a timed board's hint: the drop point pulses at the proven moment
+    if (s.hintPulse) this.drawHintPulse(s.level, s.clock);
     if (s.tutorial.step) this.drawCoach(s);
 
     /* the comet behind the ball, then the impact sparks over it */
@@ -250,6 +276,54 @@ export class Renderer {
     this.particles.draw(ctx);
 
     this.drawBall(s);
+    ctx.restore();
+  }
+
+  /** A hint ramp: the ramp's own width, dashed and faint - a ghost to trace,
+      never mistaken for a real one. A spring on it shows as a faint coil. */
+  private drawHint(ramps: readonly Segment[], clock: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.setLineDash([10, 8]);
+    for (const r of ramps) {
+      ctx.strokeStyle = 'rgba(40,110,230,0.22)';
+      ctx.lineWidth = RAMP_HT * 2 + 6;
+      ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(40,110,230,0.75)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.45;
+    for (const r of ramps) if (r.spring) drawSpring(ctx, r, clock);
+    ctx.restore();
+  }
+
+  private drawIntroHighlight(list: readonly Circle[], clock: number): void {
+    const ctx = this.ctx, k = 0.5 + 0.5 * Math.sin(clock * 5);
+    ctx.save();
+    for (const c of list) {
+      const r = c.r + 8 + k * 6;
+      const g = ctx.createRadialGradient(c.x, c.y, c.r, c.x, c.y, r + 10);
+      g.addColorStop(0, 'rgba(255,214,64,0)');
+      g.addColorStop(0.55, `rgba(255,214,64,${0.35 + 0.3 * k})`);
+      g.addColorStop(1, 'rgba(255,214,64,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r + 10, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(240,160,0,${0.6 + 0.4 * k})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** "Drop now": a ring swelling out of the spawn point. */
+  private drawHintPulse(lv: Level, clock: number): void {
+    const ctx = this.ctx, k = (clock * 2.5) % 1;
+    ctx.save();
+    ctx.strokeStyle = `rgba(40,110,230,${0.9 * (1 - k)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(lv.spawn.x, lv.spawn.y, 12 + k * 26, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 
@@ -272,7 +346,7 @@ export class Renderer {
     for (const r of s.ramps) {
       ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke();
     }
-    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, RAMP_STYLE);
+    for (const r of s.ramps) drawSeg(ctx, r, RAMP_HT, playerRamp());
     ctx.restore();
   }
 
@@ -291,7 +365,7 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(255,210,63,.75)';
     ctx.lineWidth = RAMP_HT * 2 + 16;
     ctx.beginPath(); ctx.moveTo(seg.x1, seg.y1); ctx.lineTo(seg.x2, seg.y2); ctx.stroke();
-    drawSeg(ctx, seg, RAMP_HT, RAMP_STYLE);
+    drawSeg(ctx, seg, RAMP_HT, playerRamp());
     // dashed line down the bar, so selection survives on top of a same-coloured ramp
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.8;
@@ -390,24 +464,37 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** The warm halo, built about the origin. */
+  /** The worn ball skin changed: the cached gradients are stale. */
+  private styleSeen = -1;
+  private checkStyle(): void {
+    if (this.styleSeen === activeStyle.version) return;
+    this.styleSeen = activeStyle.version;
+    this.bloomGrad = null; this.coreGrad = null;
+  }
+
+  /** The halo in the skin's edge colour, built about the origin. */
   private bloomFor(rad: number): CanvasGradient {
+    this.checkStyle();
     if (this.bloomGrad && this.bloomRad === rad) return this.bloomGrad;
     const g = this.ctx.createRadialGradient(0, 0, rad * 0.8, 0, 0, rad * 2.2);
-    g.addColorStop(0, 'rgba(255,180,0,.30)');
-    g.addColorStop(1, 'rgba(255,180,0,0)');
+    const edge = activeStyle.ball[2];
+    g.addColorStop(0, edge + '4d');     // ~30%
+    g.addColorStop(1, edge + '00');
     this.bloomGrad = g; this.bloomRad = rad;
     return g;
   }
 
   /** White at the highlight falling off to gold - already origin-relative. */
   private coreFor(rad: number): CanvasGradient {
+    this.checkStyle();
     if (this.coreGrad && this.coreRad === rad) return this.coreGrad;
     const g = this.ctx.createRadialGradient(-rad * 0.30, -rad * 0.34, rad * 0.05,
                                             0, 0, rad);
-    g.addColorStop(0,    BALL.hi);
-    g.addColorStop(0.45, BALL.mid);
-    g.addColorStop(1,    BALL.edge);
+    /* the worn ball skin (cosmetics) - the classic one is BALL's own colours */
+    const [hi, mid, edge] = activeStyle.ball;
+    g.addColorStop(0,    hi);
+    g.addColorStop(0.45, mid);
+    g.addColorStop(1,    edge);
     this.coreGrad = g; this.coreRad = rad;
     return g;
   }

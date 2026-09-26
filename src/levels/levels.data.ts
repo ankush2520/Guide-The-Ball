@@ -1414,6 +1414,7 @@ export const RAW_LEVELS: RawLevel[] = [
     spawn: { x: 386, y: 40 },
     obstacles: [{ x: 267, y: 126, r: 27 }],
     breakables: [{ x: 333, y: 382, r: 28 }],
+    wind: [{ x: 0, y: 165, w: 480, h: 123, ax: 0.58, ay: 0 }],
     storm: {
       points: [
         { x: 71, y: 622 },
@@ -1460,6 +1461,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 333, y: 711, r: 31 },
       { x: 349, y: 287, r: 27 },
     ],
+    wind: [{ x: 0, y: 337, w: 480, h: 202, ax: 0.48, ay: 0 }],
     storm: {
       points: [
         { x: 290, y: 676 },
@@ -1486,6 +1488,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 320, y: 308, r: 27 },
       { x: 114, y: 544, r: 26 },
     ],
+    wind: [{ x: 0, y: 283, w: 480, h: 189, ax: 0.71, ay: 0 }],
     storm: {
       points: [
         { x: 302, y: 264 },
@@ -1512,6 +1515,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 120, y: 276, r: 27 },
       { x: 294, y: 298, r: 26 },
     ],
+    wind: [{ x: 0, y: 226, w: 480, h: 146, ax: -0.61, ay: 0 }],
     storm: {
       points: [
         { x: 92, y: 227 },
@@ -1539,6 +1543,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 132, y: 239, r: 24 },
       { x: 349, y: 275, r: 24 },
     ],
+    wind: [{ x: 0, y: 121, w: 480, h: 163, ax: -0.66, ay: 0 }],
     storm: {
       points: [
         { x: 216, y: 390 },
@@ -1658,6 +1663,10 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 122, y: 275, r: 22 },
       { x: 122, y: 711, r: 25 },
     ],
+    wind: [
+      { x: 0, y: 134, w: 480, h: 188, ax: -0.64, ay: 0 },
+      { x: 0, y: 384, w: 480, h: 139, ax: -0.36, ay: 0 },
+    ],
     storm: {
       points: [
         { x: 118, y: 385 },
@@ -1689,6 +1698,10 @@ export const RAW_LEVELS: RawLevel[] = [
     breakables: [
       { x: 335, y: 743, r: 24 },
       { x: 122, y: 242, r: 25 },
+    ],
+    wind: [
+      { x: 0, y: 229, w: 480, h: 111, ax: 0.65, ay: 0 },
+      { x: 0, y: 450, w: 480, h: 148, ax: 0.4, ay: 0 },
     ],
     storm: {
       points: [
@@ -1722,6 +1735,10 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 355, y: 272, r: 23 },
       { x: 121, y: 250, r: 25 },
       { x: 386, y: 138, r: 19 },
+    ],
+    wind: [
+      { x: 0, y: 251, w: 480, h: 125, ax: -0.39, ay: 0 },
+      { x: 0, y: 419, w: 480, h: 124, ax: 0.51, ay: 0 },
     ],
     storm: {
       points: [
@@ -1882,6 +1899,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 139, y: 301, r: 20 },
       { x: 123, y: 678, r: 19 },
     ],
+    wind: [{ x: 0, y: 150, w: 109, h: 246, ax: 0.52, ay: 0 }],
     storm: {
       points: [
         { x: 239, y: 540 },
@@ -2054,6 +2072,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 302, y: 526, r: 25 },
       { x: 327, y: 321, r: 30 },
     ],
+    wind: [{ x: 0, y: 147, w: 480, h: 136, ax: 0.42, ay: 0 }],
     fish: [{ x0: 423, x1: 172, y: 422, amp: 30, period: 236, r: 17 }],
     boxes: [{ x: 112, y: 406 }],
     target: { x: 120, y: 663, r: 35 },
@@ -2069,6 +2088,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 306, y: 711, r: 31 },
       { x: 339, y: 542, r: 27 },
     ],
+    wind: [{ x: 0, y: 301, w: 480, h: 211, ax: 0.76, ay: 0 }],
     fish: [{ x0: 45, x1: 279, y: 310, amp: 20, period: 229, r: 20 }],
     boxes: [{ x: 218, y: 425 }],
     target: { x: 100, y: 595, r: 36 },
@@ -2241,6 +2261,10 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 351, y: 267, r: 24 },
       { x: 344, y: 562, r: 25 },
     ],
+    wind: [
+      { x: 0, y: 169, w: 480, h: 192, ax: -0.44, ay: 0 },
+      { x: 0, y: 467, w: 480, h: 135, ax: -0.59, ay: 0 },
+    ],
     fish: [
       { x0: 442, x1: 274, y: 344, amp: 15, period: 207, r: 16 },
       { x0: 62, x1: 243, y: 692, amp: 20, period: 244, r: 16 },
@@ -2267,6 +2291,10 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 126, y: 561, r: 23 },
       { x: 352, y: 298, r: 25 },
       { x: 385, y: 165, r: 19 },
+    ],
+    wind: [
+      { x: 0, y: 122, w: 480, h: 217, ax: 0.47, ay: 0 },
+      { x: 0, y: 409, w: 480, h: 138, ax: -0.78, ay: 0 },
     ],
     fish: [
       { x0: 184, x1: 46, y: 644, amp: 20, period: 201, r: 18 },
@@ -2403,6 +2431,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 130, y: 630, r: 17 },
       { x: 128, y: 158, r: 19 },
     ],
+    wind: [{ x: 371, y: 177, w: 109, h: 195, ax: -0.5, ay: 0 }],
     fish: [
       { x0: 298, x1: 446, y: 648, amp: 30, period: 237, r: 20 },
       { x0: 312, x1: 63, y: 226, amp: 18, period: 213, r: 18 },
@@ -2469,6 +2498,7 @@ export const RAW_LEVELS: RawLevel[] = [
       { x: 344, y: 307, r: 17 },
       { x: 373, y: 186, r: 19 },
     ],
+    wind: [{ x: 373, y: 149, w: 107, h: 259, ax: -0.46, ay: 0 }],
     fish: [
       { x0: 97, x1: 233, y: 259, amp: 28, period: 236, r: 19 },
       { x0: 206, x1: 408, y: 682, amp: 17, period: 197, r: 16 },

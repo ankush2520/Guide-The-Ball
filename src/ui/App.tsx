@@ -24,7 +24,11 @@ import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
 import { GiftPanel } from './GiftPanel';
 import { LevelSelect } from './LevelSelect';
-import { NoBallsPanel } from './NoBallsPanel';
+import { OutOfBallsPanel } from './OutOfBallsPanel';
+import { ChestPanel } from './ChestPanel';
+import { IntroCard } from './IntroCard';
+import { OfferStrip } from './OfferStrip';
+import { flyReward } from './CoinFlight';
 import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -34,8 +38,10 @@ import { CoinFlight } from './CoinFlight';
 import { Confetti } from './Confetti';
 import { Coach } from './Coach';
 import { Sound } from '../audio/Sound';
+import { Ads } from '../ads/Ads';
+import { track, sessionMs } from '../analytics/track';
 
-type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items';
+type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items' | 'chest';
 
 function Game() {
   const { bus, levels, controller, rewards } = useGame();
@@ -54,9 +60,14 @@ function Game() {
   const close = () => setStack(s => s.slice(0, -1));
   const has = (p: Panel) => stack.includes(p);
 
-  /* The out-of-balls screen is opened by the GAME, not by a button - pressing
-     Drop with an empty tank has to lead somewhere. */
+  /* The out-of-balls screen is opened by the GAME, not by a button: the last
+     ball of a level missing, or Drop pressed with none left, leads here. */
   useEffect(() => bus.on('balls:empty', () => open('noballs')), [bus]);
+  useEffect(() => bus.on('panel:open', ({ panel }) => open(panel)), [bus]);
+  /* The level-10 spring gift: two springs fly from the middle of the screen
+     into the bag, which bounces, with a "+2". */
+  useEffect(() => bus.on('springs:gifted', ({ n }) =>
+    flyReward('springs', { x: window.innerWidth / 2, y: window.innerHeight * 0.45 }, `+${n}`)), [bus]);
 
   /* ============================================================
      THE WHEEL LETS ITSELF IN
@@ -92,6 +103,23 @@ function Game() {
     return () => clearInterval(id);
   }, [controller, rewards]);
 
+  /* ============================================================
+     THE PLATFORM'S GAMEPLAY EVENTS
+
+     Live play is the board with nothing over it, in planning or
+     mid-drop. Any panel, or the win card ('over'), is a stop. The
+     wrapper deduplicates, so this only has to state what is true
+     whenever either input changes.
+     ============================================================ */
+  useEffect(() => {
+    const sync = () => {
+      const live = stackRef.current.length === 0 && controller.phase !== 'over';
+      if (live) Ads.gameplayStart(); else Ads.gameplayStop();
+    };
+    sync();
+    return bus.on('phase:changed', sync);
+  }, [bus, controller, stack]);
+
   /* A country recolours the chrome accent. The entity palette never changes. */
   useEffect(() => {
     const apply = () => document.documentElement.style
@@ -111,7 +139,10 @@ function Game() {
     const names = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
     const unlock = () => Sound.unlock();
     names.forEach(n => window.addEventListener(n, unlock, true));
-    const onVis = () => (document.hidden ? Sound.pause() : Sound.nudge());
+    const onVis = () => {
+      if (document.hidden) { Sound.pause(); track('session_end', { ms: sessionMs() }); }
+      else Sound.nudge();
+    };
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('pageshow', Sound.nudge);
     return () => {
@@ -146,12 +177,15 @@ function Game() {
              onOpenLevels={() => open('levels')} />
         <GameCanvas>
           <Status />
+          <OfferStrip onShop={() => open('shop')} />
         </GameCanvas>
         <Controls />
       </div>
 
       {/* The walkthrough bubble. Over the board, under every panel. */}
       <Coach hidden={stack.length > 0} />
+      {/* "Here is something new" - before the board is playable. */}
+      <IntroCard hidden={stack.length > 0} />
       {/* The gift beat comes BEFORE the win card and never with it: the
           controller holds the card back while a wrapped target is being
           opened, so only one of these two is ever on screen. */}
@@ -164,9 +198,9 @@ function Game() {
       {/* Above every panel: it flies from the win card to the HUD, so it has
           to paint over both of them. */}
       <CoinFlight />
-      {has('noballs') && <NoBallsPanel onClose={close} onSpin={() => open('spin')}
-                                       onShop={() => open('shop')} />}
-      {has('levels')  && <LevelSelect  onClose={close} />}
+      {has('noballs') && <OutOfBallsPanel onClose={close} />}
+      {has('levels')  && <LevelSelect  onClose={close} onChest={() => open('chest')} />}
+      {has('chest')   && <ChestPanel   onClose={close} />}
       {has('settings') && <SettingsPanel onClose={close}
                                          onOpenInfo={() => open('info')}
                                          onOpenShop={() => open('shop')}

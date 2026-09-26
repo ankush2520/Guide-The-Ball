@@ -11,9 +11,11 @@
    ============================================================ */
 import { useEffect, useRef, useState } from 'react';
 import { useGame } from '../core/GameContext';
+import { Ads } from '../ads/Ads';
+import { useAdOffer } from '../ads/useAdOffer';
 import { flyReward } from './CoinFlight';
 import { SPIN_PRIZES, SPIN_MS, JACKPOT_COINS,
-         prizeValue, prizeLabel } from '../managers/RewardManager';
+         prizeValue, prizeLabel, type WheelKind } from '../managers/RewardManager';
 
 const WHEEL_R = 106;
 
@@ -48,19 +50,16 @@ function spinTarget(ix: number, from: number, jitter: number): number {
    runs of the same kind get the darker shade of their family
    (`alt`), so no two identical slices ever sit side by side.
    ============================================================ */
-const PALETTE: Record<'coins' | 'balls' | 'ramps', [string, string][]> = {
+const PALETTE: Record<WheelKind, [string, string][]> = {
   // amber gold - the hub currency
   coins: [['#ffd76b', '#d98b0c'], ['#ffc44f', '#b9700a']],
-  // pearl, the colour of the ball mark in the HUD - and pointedly not a
-  // second gold, which is what a coin wedge and a ball wedge used to be
-  balls: [['#eceffb', '#8b8fb4'], ['#dfe3f5', '#767aa2']],
   // the ramp's own cyan, straight off the board
   ramps: [['#7fe0ff', '#1c86c4'], ['#6bd6fb', '#146ea6']],
 };
 // the jackpots get a brighter, hotter gold than any ordinary coin wedge
 const JACKPOT: [string, string] = ['#fff3c4', '#f0a80e'];
 
-function wedgeColours(kind: 'coins' | 'balls' | 'ramps',
+function wedgeColours(kind: WheelKind,
                       jackpot: boolean, i: number): [string, string] {
   if (jackpot) return JACKPOT;
   return PALETTE[kind][i % 2];
@@ -71,7 +70,7 @@ function wedgeColours(kind: 'coins' | 'balls' | 'ramps',
    light now, so all three are inked dark rather than switching on jackpot.
    Inked flat, the rim is the ONLY thing separating the first two - which is
    why the HUD's marks carry it too, rather than leaning on colour. */
-function drawUnit(g: CanvasRenderingContext2D, kind: 'coins' | 'balls' | 'ramps',
+function drawUnit(g: CanvasRenderingContext2D, kind: WheelKind,
                   x: number, y: number): void {
   g.save();
   g.fillStyle = 'rgba(28,16,2,.72)';
@@ -79,12 +78,10 @@ function drawUnit(g: CanvasRenderingContext2D, kind: 'coins' | 'balls' | 'ramps'
     g.translate(x, y); g.rotate(-0.35);
     g.beginPath(); g.roundRect(-9, -2.5, 18, 5, 2.5); g.fill();
   } else {
-    g.beginPath(); g.arc(x, y, kind === 'coins' ? 5.5 : 4.5, 0, Math.PI * 2); g.fill();
-    if (kind === 'coins') {
-      // a coin reads as a coin, not a ball, because it has a rim
-      g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1.4;
-      g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.stroke();
-    }
+    g.beginPath(); g.arc(x, y, 5.5, 0, Math.PI * 2); g.fill();
+    // a coin reads as a coin because it has a rim
+    g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1.4;
+    g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); g.stroke();
   }
   g.restore();
 }
@@ -188,6 +185,15 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
   }, []);
 
   const ready = rewards.spinReady() && !spinning;
+  const [adWaiting, setAdWaiting] = useState(false);
+  const adSpin = rewards.canAdSpin() && Ads.available();
+  useAdOffer('wheel', adSpin);
+  const watchSpin = async () => {
+    setAdWaiting(true);
+    const ok = await Ads.rewarded('wheel');
+    setAdWaiting(false);
+    if (ok) { rewards.grantAdSpin(); setTick(t => t + 1); }
+  };
 
   const doSpin = () => {
     if (!ready) return;
@@ -223,10 +229,21 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
           <div className="wheelptr" />
           <div className="wheelhub" />
         </div>
-        <div className="row">
-          <button id="btn-spin-go" className="primary" disabled={!ready} onClick={doSpin}>Spin</button>
-          <button id="btn-spin-close" disabled={spinning} onClick={onClose}>Close</button>
-        </div>
+        {/* After the daily spin, once a day: a watched ad earns one more.
+            It takes the Spin button's place, and is the same size as Close. */}
+        {adSpin ? (
+          <div className="row pair">
+            <button id="btn-spin-ad" disabled={adWaiting} onClick={watchSpin}>
+              {adWaiting ? 'Loading ad…' : 'Watch ad: spin again'}
+            </button>
+            <button id="btn-spin-close" onClick={onClose}>Close</button>
+          </div>
+        ) : (
+          <div className="row">
+            <button id="btn-spin-go" className="primary" disabled={!ready} onClick={doSpin}>Spin</button>
+            <button id="btn-spin-close" disabled={spinning} onClick={onClose}>Close</button>
+          </div>
+        )}
       </div>
     </div>
   );
