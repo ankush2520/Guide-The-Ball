@@ -34,6 +34,7 @@ import {
 } from 'matter-js';
 import type { Level, Segment, Circle } from '../../levels/types';
 import { targetAt } from '../../levels/target';
+import { strikeAt, STORM_R } from '../../levels/storm';
 import type { BallState, PhysicsEngine } from '../PhysicsEngine';
 import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '../types';
 import { mulberry32, falses, closestOnSeg } from '../math';
@@ -126,6 +127,8 @@ export class MatterBall implements BallState {
   got: boolean[];
   gotBox: boolean[];
   stars = 0; boosts = 0; springs = 0; boxes = 0;
+  /** The last lightning strike that knocked this ball (see levels/storm). */
+  struck = -1;
 
   restX: number; restY: number; restAt = 0;
   restMin = Infinity;
@@ -598,6 +601,17 @@ export class MatterEngine implements PhysicsEngine {
         b.result = 'burned';
         return;
       }
+    }
+
+    /* ---- lightning: a live strike that reaches the ball ENDS the run, like
+       fire. Off the same step clock as the patrol, so it is exactly where and
+       when the board shows it. `struck` is kept so the game can play the
+       crack for the strike that did it. */
+    const strike = strikeAt(lv, b.t0 + b.steps);
+    if (strike && reached(strike.p, STORM_R + BALL_R)) {
+      b.struck = strike.key;
+      b.result = 'zapped';
+      return;
     }
 
     /* The target's position NOW, which on a patrolling board is not where it

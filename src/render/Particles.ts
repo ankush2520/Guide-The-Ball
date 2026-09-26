@@ -25,7 +25,7 @@ export class ParticleSystem {
   /** Fan `n` particles out of (x,y), biased along the (nx,ny) direction.
       spread is the half-angle of the fan in radians; speed is px per step. */
   burst(x: number, y: number, nx: number, ny: number, color: string,
-        n: number, speed: number, spread: number, lifeMs: number): void {
+        n: number, speed: number, spread: number, lifeMs: number, size = 1): void {
     const base = Math.atan2(ny, nx);
     for (let i = 0; i < n; i++) {
       const p = this.pool[this.slot];
@@ -35,7 +35,7 @@ export class ParticleSystem {
       p.x = x; p.y = y;
       p.vx = Math.cos(a) * v; p.vy = Math.sin(a) * v;
       p.max = p.life = lifeMs * (0.7 + Math.random() * 0.6);
-      p.r = 1 + Math.random() * 1.4;
+      p.r = (1 + Math.random() * 1.4) * size;
       p.color = color;
     }
   }

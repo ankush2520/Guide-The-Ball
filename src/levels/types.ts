@@ -56,6 +56,11 @@ export type BoxDef = Vec;
     obstacle that scatters it. */
 export interface OvalDef extends Vec { rx: number; ry: number; angle?: number; }
 
+/** A THUNDERSTORM: lightning strikes `points` in order, `gaps[i]` steps
+    after point i (the last gap wraps back to point 0), and loops forever.
+    See levels/storm.ts for the clock and what a strike does. */
+export interface StormDef { points: Vec[]; gaps: number[]; }
+
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
     the same shape of data - what differs is entirely what contact means. The
     red obstacle deflects; this ends the drop. */
@@ -110,6 +115,7 @@ export interface RawLevel {
   stars?: StarDef[];
   fires?: FireDef[];
   ovals?: OvalDef[];
+  storm?: StormDef;
   /** Optional bonus pickups. Scenery to the physics, like stars: a box can
       never change where the ball goes, which is what makes it safe to add to
       a level whose solution is already proved. */

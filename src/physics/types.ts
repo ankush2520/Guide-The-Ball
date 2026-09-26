@@ -5,7 +5,7 @@
     value rather than reusing `out` only so the board can say what happened,
     which is the difference between a hazard that reads as unfair and one that
     reads as a rule. */
-export type DropResult = 'win' | 'out' | 'timeout' | 'burned';
+export type DropResult = 'win' | 'out' | 'timeout' | 'burned' | 'zapped';
 
 /** What the ball last touched. Drives the juice, never the physics. */
 export type HitKind = 'ramp' | 'wall' | 'obstacle' | 'breakable' | 'booster'

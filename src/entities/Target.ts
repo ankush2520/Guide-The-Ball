@@ -11,7 +11,7 @@ import { TIE, WRAP } from './MysteryBox';
 
    Note what does NOT happen here: nothing rotates. The rings breathe along
    their radius only. An orbiting element implies the target SPINS, which it
-   never does - on a Needlecrest board it slides, and those two would fight.
+   never does - on a patrolling board it slides, and those two would fight.
 
    Where it is drawn is not its authored centre. A patrolling target is
    painted at targetAt(simT), the same function and the same clock the win

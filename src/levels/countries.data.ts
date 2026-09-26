@@ -1,9 +1,10 @@
 /* ============================================================
    COUNTRIES
 
-   Thirteen countries spanning levels 1-150. Each owns a run of
+   Eleven countries spanning levels 1-150. Each owns a run of
    levels ("cities"), one mechanic, and one backdrop palette.
-   Verdholm and Emberkeep hold twenty cities each; the rest ten.
+   Verdholm, Emberkeep, Windemere and Stormhold hold twenty cities
+   each; the rest ten.
 
    The names are invented, inspired by real regions rather than
    naming any actual place.
@@ -21,7 +22,7 @@
    grid, used at low alpha. `accent` recolours the UI chrome.
 
    Every country is now a day sky. Verdholm was the prototype;
-   the other twelve follow it, each keeping its old hue as a
+   the other ten follow it, each keeping its old hue as a
    pastel. Every stop is pale enough that the wall grey and the
    target's dark green still clear 3:1 on it (the test suite
    checks every day sky), which is why none of them go deeper.
@@ -37,9 +38,11 @@ import type { Country } from './types';
    came apart the moment the third country shipped was number six.
 
    So the list below is ordered by from/to - the order the game is actually
-   played in - and the ids run out of sequence down it. The three built
-   countries hold 1-50; the ten still to be authored queue up behind them in
-   plan order, and each drops into the next free block as it lands. */
+   played in - and the ids run out of sequence down it. The four built
+   countries hold 1-80; the seven still to be authored queue up behind them in
+   plan order, and each drops into the next free block as it lands. Countries
+   10 (Needlecrest) and 5 (Zunmara Ruins) no longer exist: Windemere and
+   Stormhold absorbed their blocks. */
 export const COUNTRIES: Country[] = [
   /* Verdholm's levels are frozen and hand-designed. Its palette was the
      night navy the game's contrast was first tuned against; it is now the
@@ -73,26 +76,39 @@ export const COUNTRIES: Country[] = [
   { id: 6, name: 'Emberkeep', from: 21,  to: 40,  mechanic: 'fire - the hazard that ends the run',
     sky: ['#ffe4de', '#ffe9e2', '#fff3ea'], wash: '230,100,70', accent: '#ff5a2e' },
 
-  /* Crisp white-blue-grey, and the cleanest board in the game by design: a
-     precision country should have the least to look at. */
-  { id: 10, name: 'Needlecrest', from: 41,  to: 50, mechanic: 'precision spike + moving targets',
-    sky: ['#e6ebf2', '#f0f3f7', '#f8f9fb'], wash: '110,135,170', accent: '#5f8cc4' },
+  /* ============================================================
+     WINDEMERE - twenty cities, levels 41-60
 
-  /* Soft sage-mint - low chroma on purpose, because wind streaks are the
-     thing that should be moving here. */
-  { id: 3, name: 'Windemere', from: 51,  to: 60,  mechanic: 'wind zones',
+     The third TWENTY-level world. It follows Emberkeep city for
+     city - the same fire, breakable and obstacle mix, the same
+     targets, the same oval-and-spring exam at 57-60 - with WIND
+     on top: one constant zone early, two from 49, and two that
+     oppose each other from 53. It absorbed Needlecrest, whose
+     ten patrol boards were the old 41-50.
+
+     Soft sage-mint - low chroma on purpose, because wind streaks
+     are the thing that should be moving here.
+     ============================================================ */
+  { id: 3, name: 'Windemere', from: 41,  to: 60,  mechanic: 'wind + fire',
     sky: ['#d6f0e6', '#e5f6ee', '#f1faf5'], wash: '80,165,135', accent: '#2fb584' },
 
-  /* Icy cyan into snow-white, pushed greener than Verdholm's sky blue so the
-     two never read alike. */
-  { id: 4, name: 'Frostvale', from: 61,  to: 70,  mechanic: 'slippery zones',
-    sky: ['#d2f1f7', '#e3f7fa', '#f4fcfd'], wash: '90,180,215', accent: '#27b0e0' },
+  /* ============================================================
+     STORMHOLD - twenty cities, levels 61-80
 
-  /* Lilac settling into warm sandstone - a ruin at dusk. It was the portal
-     country, and the two-colour split was the pair; what is left is the
-     dusk, which suits a gauntlet of broken stone just as well. */
-  { id: 5, name: 'Zunmara Ruins', from: 71,  to: 80,  mechanic: 'the gauntlet - dense obstacles',
-    sky: ['#f0e5fb', '#f1e6fb', '#fbf3e3'], wash: '150,100,215', accent: '#f5a623' },
+     The fourth TWENTY-level world. It follows Emberkeep city for
+     city - the same hazard counts (its fire turned to red
+     obstacles: fire does not belong in the rain), the same
+     targets, the same oval-and-spring exam at 77-80 - with a
+     THUNDERSTORM on top: rain always falling, and lightning that
+     strikes a fixed ring of points in a fixed order, over and
+     over, knocking the ball off its line (levels/storm.ts). It
+     absorbed Frostvale and Zunmara Ruins, the old 61-70 and 71-80.
+
+     Frostvale's icy cyan into snow-white - a cold, wet sky, which
+     the rain and the lightning's yellow both read clearly against.
+     ============================================================ */
+  { id: 4, name: 'Stormhold', from: 61,  to: 80,  mechanic: 'thunderstorm',
+    sky: ['#d2f1f7', '#e3f7fa', '#f4fcfd'], wash: '90,180,215', accent: '#27b0e0' },
 
   /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,
      strongest thing on screen. */

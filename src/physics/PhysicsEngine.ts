@@ -43,6 +43,8 @@ export interface BallState {
   firedSpring: boolean[];
   /** Times a sprung ramp has launched the ball this drop. */
   springs: number;
+  /** The last lightning strike that knocked the ball (-1 if none yet). */
+  struck: number;
 
   stars: number;
   boosts: number;

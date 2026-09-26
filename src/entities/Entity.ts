@@ -43,11 +43,11 @@ export interface DrawContext {
 }
 
 export type EntityKind =
-  | 'slippery' | 'wind'          // ground
+  | 'slippery' | 'wind' | 'rain'  // ground
   | 'target'
   | 'wall' | 'oval'
   | 'obstacle' | 'fire'
-  | 'breakable' | 'booster' | 'star' | 'box'
+  | 'breakable' | 'booster' | 'star' | 'box' | 'storm'
   /* the two the PLAYER makes */
   | 'ramp';
 
@@ -55,7 +55,7 @@ export type EntityKind =
    the ball, the ramps and the obstacles all read as being ON the board
    rather than behind it. */
 export const LAYER: Record<EntityKind, number> = {
-  slippery: 0, wind: 0,
+  slippery: 0, wind: 0, rain: 0,
   target: 1,
   wall: 2, oval: 2,
   /* Fire shares the obstacle's layer: they are the same class of furniture
@@ -66,6 +66,8 @@ export const LAYER: Record<EntityKind, number> = {
      registry order so two that overlap read box-over-star - the box is the
      rarer thing and the one worth noticing. */
   box: 4,
+  /* lightning is weather over the board, so it paints over its furniture */
+  storm: 4,
   /* What the player placed paints ON TOP of the board's own furniture, so a
      booster dropped over an obstacle is visibly in front of it. */
   ramp: 5,};

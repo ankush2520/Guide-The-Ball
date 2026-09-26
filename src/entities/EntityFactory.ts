@@ -28,6 +28,8 @@ import { MovingTarget } from './MovingTarget';
 import { isMoving } from '../levels/target';
 import { Wall } from './Wall';
 import { Oval } from './Oval';
+import { Rain } from './Rain';
+import { Storm } from './Storm';
 import { OVAL_SEGS } from '../levels/ovals';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
@@ -49,6 +51,7 @@ interface Spec {
 const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   slippery:  { ctor: SlipperyZone, pick: lv => lv.slippery },
   wind:      { ctor: WindZone,     pick: lv => lv.wind },
+  rain:      { ctor: Rain,         pick: lv => (lv.storm ? [lv.storm] : []) },
   /* One target per level; a patrolling one is the same kind with its lane
      drawn under it - see MovingTarget. */
   target:    { ctor: Target,       pick: lv => [lv.target],
@@ -63,6 +66,7 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   booster:   { ctor: Booster,      pick: lv => lv.boosters },
   star:      { ctor: StarPickup,   pick: lv => lv.stars },
   box:       { ctor: MysteryBox,   pick: lv => lv.boxes },
+  storm:     { ctor: Storm,        pick: lv => (lv.storm ? [lv.storm] : []) },
   // 'ramp' is deliberately absent: it is player-made, not level data, and is
   // built one at a time by createRamp().
 };

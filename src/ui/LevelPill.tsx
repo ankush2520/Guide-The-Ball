@@ -5,7 +5,7 @@
    bar, in the gap between the + button and the bag.
 
    It used to sit under the board and carry the city name too
-   ("Level 12 · Frostvale II"). Both changed for the same
+   ("Level 12 · Stormhold II"). Both changed for the same
    reason: the row it lived in cost the board height, and the
    bar already had empty space beside the +. Only the NUMBER is
    up here - a long city name would not survive the width the

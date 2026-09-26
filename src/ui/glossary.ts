@@ -21,8 +21,9 @@ export const GLOSSARY: GlossaryEntry[] = [
   { cls: 'tg', has: () => true, name: 'Target',
     long: 'Land the ball anywhere inside the ring and the level is cleared.' },
   { cls: 'ob', has: lv => lv.obstacles.length > 0, name: 'Obstacle',
-    long: 'Bounces the ball off at a RANDOM angle. Plan around it, not through it - a route ' +
-          'that depends on hitting one is a gamble, not a plan.' },
+    long: 'Knocks the ball off at an unexpected angle - but the same shot always bounces the ' +
+          'same way, so a bounce you have seen once can be planned for. Safest is to route ' +
+          'around it.' },
   /* Directly after the obstacle, because the ONE thing a player has to learn
      here is the difference between the two, and a list that separates them
      makes that comparison harder than it needs to be. */
@@ -38,12 +39,12 @@ export const GLOSSARY: GlossaryEntry[] = [
           'drops at the same moment again. The pale track it rides on is its own: ramps ' +
           'cannot be drawn across it.' },
   { cls: 'bk', has: lv => lv.breakables.length > 0, name: 'Breakable block',
-    long: 'Bounces you randomly exactly like an obstacle, then shatters and is gone. It stays ' +
+    long: 'Bounces you off exactly like an obstacle, then shatters and is gone. It stays ' +
           'gone for your next drop on this level, so a first attempt can be spent clearing a path.' },
   { cls: 'bs', has: lv => lv.boosters.length > 0, name: 'Booster pad',
     long: 'The orange DISC. Fires the ball along its arrow at a fixed speed, every single time. ' +
-          'Unlike an obstacle there is nothing random about it - the arrow is exactly the heading ' +
-          'you leave on.' },
+          'Unlike an obstacle it does not knock you off at an angle - the arrow is exactly the ' +
+          'heading you leave on.' },
   /* The player's own item, straight after the level's own pad: the two are
      different shapes doing different jobs, and the only thing to learn is
      which is which. This one is always listed - it is in the bag, not on the

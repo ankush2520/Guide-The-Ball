@@ -199,7 +199,7 @@ const lvinfo = await page.evaluate(() => {
   let prevId = 0;
   LEVELS.forEach((l, i) => {
     /* STRICTLY INCREASING, not 1..n. The countries are authored out of
-       order - Emberkeep and Needlecrest are in, the countries between them
+       order - Emberkeep and Windemere are in, the countries between them
        are not yet - so the array has id gaps at the country borders until
        they land. What must never break is the ORDER (progression walks the
        array) and the country containment checked below, since countryOf()
@@ -258,14 +258,14 @@ const lvinfo = await page.evaluate(() => {
    way: build a country and forget to give it the next free block and the
    numbering splits, which is exactly what it used to do. */
 const PLAN_ID_GAPS = '';
-/* Needlecrest patrols every target (41-50). Verdholm uses the moving target
-   in its final exam (17, 19, 20); Emberkeep through its whole back half -
-   three middle cities (28, 31, 34) and two of its exam (36, 39). */
-const PLAN_MOVING  = '17,19,20,28,31,34,36,39,41,42,43,44,45,46,47,48,49,50';
+/* Every oval exam patrols up and down (17-20, 37-40, 57-60). Emberkeep's
+   middle cities patrol side to side (28, 31, 34, 36), and Windemere mirrors
+   them in each later world (48, 51, 54, 56 and 68, 71, 74, 76). */
+const PLAN_MOVING  = '17,18,19,20,28,31,34,36,37,38,39,40,48,51,54,56,57,58,59,60,68,71,74,76,77,78,79,80';
 /* Verdholm is generated (tools/genlevels.mjs, VERD_DENSITY): level N carries
    about N obstacles, levelling off at 14-18 hazards in the exam (a patrol
-   counts as one); one ramp for the three lessons, three for the exam. */
-const PLAN_BLOCKS = '1,1,1,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3';
+   counts as one); one ramp for the three lessons, three from city 10 on. */
+const PLAN_BLOCKS = '1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3';
 const PLAN_OBST   = '1,2,3,4,4,5,6,7,8,9,10,11,12,13,14,15,15,17,16,17';
 const PLAN_TYPES  = 'OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN,' +
                     'SIDE_WALL,POCKET,NARROW_GAP,POCKET,OPEN,OPEN,OPEN,OPEN,OPEN,OPEN';
@@ -504,7 +504,7 @@ check(e.sMax <= C.MAX_SPEED + 1e-9 && e.vyMax <= C.TERMINAL_VY + 1e-9,
    target sliding through the space a ramp occupies made the collision read
    as a bug, and this section was the guard against it returning.
 
-   Needlecrest reintroduces movement, deliberately and in a narrower form,
+   Patrols reintroduce movement, deliberately and in a narrower form,
    so the guard is rewritten rather than deleted. What killed the first
    attempt was never "the target moved" - it was that COLLIDABLE GEOMETRY
    moved. So the property defended here is now exactly that one:
@@ -532,20 +532,25 @@ const stat = await page.evaluate(async () => {
     /* t=0 is what the player plans against, so the authored centre and the
        patrol's start have to be the same point. If they drift apart, the
        board shows one thing and the drop begins somewhere else. */
-    if (targetAt(lv, 0).x !== lv.target.x) planMismatch++;
-    const lo = Math.min(lv.targetMove.x0, lv.targetMove.x1);
-    const hi = Math.max(lv.targetMove.x0, lv.targetMove.x1);
+    if (targetAt(lv, 0).x !== lv.target.x || targetAt(lv, 0).y !== lv.target.y) planMismatch++;
+    const mv = lv.targetMove;
+    const lo = Math.min(mv.x0, mv.x1), hi = Math.max(mv.x0, mv.x1);
+    const y0 = mv.y0 ?? lv.target.y, y1 = mv.y1 ?? lv.target.y;
+    const ylo = Math.min(y0, y1), yhi = Math.max(y0, y1);
     for (let k = 0; k <= 64; k++){
-      const c = targetAt(lv, lv.targetMove.period * k / 64);
-      if (c.y !== lv.target.y || c.r !== lv.target.r) vertical++;
-      if (c.x < lo - 1e-9 || c.x > hi + 1e-9) outOfBounds++;
+      const c = targetAt(lv, mv.period * k / 64);
+      /* on the straight line between its two waypoints, radius fixed */
+      const off = (c.x - mv.x0) * (y1 - y0) - (c.y - y0) * (mv.x1 - mv.x0);
+      if (Math.abs(off) > 1e-6 || c.r !== lv.target.r) vertical++;
+      if (c.x < lo - 1e-9 || c.x > hi + 1e-9 || c.y < ylo - 1e-9 || c.y > yhi + 1e-9) outOfBounds++;
     }
   });
   // walls are built once at boot and must stay identical to a fresh build
   let wallsStale = 0;
   LEVELS.forEach(lv => {
     const fresh = buildWalls(lv, lv.target);
-    if (fresh.length !== lv.walls.length) { wallsStale++; return; }
+    /* an oval's rim is appended after the target's own walls (levels/ovals.ts) */
+    if (fresh.length + (lv.ovals || []).length * 64 !== lv.walls.length) { wallsStale++; return; }
     for (let i = 0; i < fresh.length; i++){
       const f = fresh[i], w = lv.walls[i];
       if (f.x1!==w.x1 || f.y1!==w.y1 || f.x2!==w.x2 || f.y2!==w.y2) wallsStale++;
@@ -564,7 +569,7 @@ const stat = await page.evaluate(async () => {
 check(stat.noMoveBlock, 'no level carries the old 2D `move` waypoint block');
 check(stat.patrols > 0, 'the patrol sampler actually had levels to sample',
   `${stat.patrols} patrolling levels`);
-check(stat.vertical === 0, 'a patrolling target never changes y or radius - horizontal only',
+check(stat.vertical === 0, 'a patrolling target stays on its straight track, radius fixed',
   `${stat.vertical} samples off the line`);
 check(stat.outOfBounds === 0, 'and never leaves the bounds it was authored with',
   `${stat.outOfBounds} samples outside`);
@@ -601,7 +606,7 @@ check(statDrop === 0, 'simulating a drop never displaces a target');
 const patrol = await page.evaluate(async () => {
   const g = window.__gtb;
   const wait = ms => new Promise(r => setTimeout(r, ms));
-  const li = g.LEVELS.findIndex(l => l.id === 41);          // Needlecrest, untouched
+  const li = g.LEVELS.findIndex(l => l.id === 28);          // Emberkeep, a side-to-side patrol
   const lv = g.LEVELS[li];
   g.setBalls(9); g.setLevel(li); g.setRamps([]); g.setSeed(1);
   const enter = g.state();

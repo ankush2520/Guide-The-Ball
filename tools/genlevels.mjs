@@ -237,220 +237,22 @@ const SPECS = {
     }
   },
 
-  10: {
-    name: 'Needlecrest',
-    /* Needlecrest is the precision country, and a MOVING target is precision
-       in the one axis the game had never asked for: when. The bands are the
-       tightest in the game, and the target is small - but the real difficulty
-       is that arriving in the right place at the wrong moment is a miss. */
-    gate: i => ({ minTol: 2, maxTol: 16 - i * 0.8, maxBlind: 0.035,
-                  requireMove: true, maxObHits: 1.0 }),
-    make(r, i, n, taken){
-      const last = i === n - 1;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 90, 170) : rint(r, 310, 390), y: 40 };
-      /* The patrol runs ACROSS the board, and the ball has to meet it partway.
-         x0 is where it sits while the player plans, so the board they look at
-         is honest about where the run begins. */
-      let target = null, move = null;
-      for (let a = 0; a < 90 && !target; a++){
-        const span = rint(r, 90, 180);
-        const x0 = rint(r, 60, 420 - span);
-        const x1 = x0 + span;
-        const ty = rint(r, 600, 720);
-        /* Compared on x0, which is what gets STORED as target.x and what the
-           board shows while the player plans. Comparing the patrol's midpoint
-           instead let two levels with different spans share an identical
-           starting spot and still pass - the spread check downstream reads
-           target.x, so the dedupe key has to be the same field. */
-        if (taken.some(t => Math.hypot(t.x - x0, t.y - ty) < 46)) continue;
-        /* The period is the mechanic's only tuning knob, in STEPS. A ball
-           takes roughly 80-110 steps to reach this depth, so a period in this
-           band means the target has crossed at least once - and at the short
-           end, several times - by the time it arrives. */
-        const period = rint(r, 70, 210);
-        target = { x: x0, y: ty, r: last ? rint(r, 20, 24) : rint(r, 22, 28) };
-        move = { x0, x1, period };
-      }
-      if (!target) return null;
-      const obstacles = [];
-      const want = last ? 3 : (i < 3 ? 1 : 2);
-      let guard = 0;
-      while (obstacles.length < want && guard++ < 200){
-        const o = { x: rint(r, 60, 420), y: rint(r, 240, 560), r: rint(r, 24, 32) };
-        if (o.y > target.y - 110) continue;          // keep the approach clean
-        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!spaced(o, obstacles)) continue;
-        obstacles.push(o);
-      }
-      return {
-        name: pick(r, last ? ['The Needle'] : MOVE_NAMES),
-        maxBlocks: 2,
-        // OPEN is not a style choice here: walls are built from the target
-        // centre and would be dragged along by the patrol. See levels/index.
-        targetType: 'OPEN',
-        spawn, obstacles, target, targetMove: move
-      };
-    }
-  }
-,
-
   /* ---------------------------------------------------------------- */
   /* The remaining ten countries. Every mechanic they use was already
      built and shipped - what was missing was only the level data, which
      is why these are specs and not engine work. */
   /* ---------------------------------------------------------------- */
 
-  3: {
-    name: 'Windemere',
-    /* Wind is the first mechanic that acts on the ball CONTINUOUSLY rather
-       than at a moment, so the boards give it room: a wide band the ball
-       falls through, and a target placed where only the drift can reach. */
-    gate: i => ({ minTol: 3, maxTol: 25 - i * 1.1, maxBlind: 0.06,
-                  requireZone: 'wind', maxObHits: 1.2 }),
-    make(r, i, n, taken){
-      const last = i === n - 1;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 80, 150) : rint(r, 330, 400), y: 40 };
-      const toward = leftSpawn ? 1 : -1;
-      /* Spanning the spawn column, so the drop cannot miss it. The push is
-         well under WIND_CAP - the cap is a safety rail, not a target. */
-      const zy = rint(r, 200, 300), zh = rint(r, 170, 260);
-      const wind = [{ x: 0, y: zy, w: W, h: zh,
-                      ax: toward * rng(r, 0.35, 0.95), ay: 0 }];
-      let target = null;
-      for (let a = 0; a < 200 && !target; a++){
-        const tx = leftSpawn ? rint(r, 290, 430) : rint(r, 50, 190);
-        const ty = rint(r, 580, 740);
-        if (Math.abs(tx - spawn.x) < 165) continue;
-        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
-      }
-      if (!target) return null;
-      const obstacles = [];
-      const want = last ? 3 : (i < 3 ? 1 : 2);
-      let guard = 0;
-      while (obstacles.length < want && guard++ < 200){
-        const o = { x: rint(r, 60, 420), y: rint(r, 300, 600), r: rint(r, 26, 34) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!spaced(o, obstacles)) continue;
-        obstacles.push(o);
-      }
-      return { name: pick(r, last ? ['The Gale'] : WIND_NAMES), maxBlocks: 2,
-               targetType: last ? 'SIDE_WALL' : 'OPEN',
-               wallSide: leftSpawn ? 'right' : 'left',
-               spawn, obstacles, wind, target };
-    }
-  },
+  /* 3 - Windemere (41-60) is NOT generated here. Its cities are placed
+     directly by tools/windLevels.mjs (41-56, Emberkeep's layouts with wind)
+     and tools/ovalLevels.mjs --only=57-60 (the oval exam), and play-tested by
+     hand. There is deliberately no spec, so `genlevels 3 --write` refuses
+     rather than splicing ten old boards over the twenty that ship. */
 
-  4: {
-    name: 'Frostvale',
-    /* Ice makes the ball keep what a bounce would normally cost it, so the
-       difficulty is SETTLING, not reaching. The sheet therefore sits low, in
-       the approach to the target, where overshooting is the failure. */
-    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.1, maxBlind: 0.055,
-                  requireZone: 'slippery', maxObHits: 1.2 }),
-    make(r, i, n, taken){
-      const last = i === n - 1;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 80, 160) : rint(r, 320, 400), y: 40 };
-      let target = null;
-      for (let a = 0; a < 200 && !target; a++){
-        const tx = leftSpawn ? rint(r, 280, 425) : rint(r, 55, 200);
-        const ty = rint(r, 600, 740);
-        if (Math.abs(tx - spawn.x) < 150) continue;
-        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 38) };
-      }
-      if (!target) return null;
-      // full width so it always straddles the fall line, and deep enough to
-      // cover the run-in to the target
-      const zy = rint(r, 360, 470);
-      const slippery = [{ x: 0, y: zy, w: W, h: rint(r, 180, 280) }];
-      const obstacles = [];
-      const want = last ? 3 : (i < 3 ? 1 : 2);
-      let guard = 0;
-      while (obstacles.length < want && guard++ < 200){
-        const o = { x: rint(r, 60, 420), y: rint(r, 260, 560), r: rint(r, 26, 34) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!spaced(o, obstacles)) continue;
-        obstacles.push(o);
-      }
-      return { name: pick(r, last ? ['Black Ice'] : ICE_NAMES), maxBlocks: 2,
-               targetType: last ? 'POCKET' : 'OPEN',
-               wallSide: leftSpawn ? 'right' : 'left',
-               spawn, obstacles, slippery, target };
-    }
-  },
-
-  5: {
-    name: 'Zunmara Ruins',
-    /* ============================================================
-       THE COUNTRY THAT IS A SHAPE, NOT A MECHANIC
-
-       Zunmara was the PORTAL country: one pair per board, and a
-       target parked across the board where falling alone could
-       not reach it, because the portal was the shortcut that got
-       you there. Portals were removed from the game, so there is
-       nothing here to author - and a target placed for a shortcut
-       that no longer exists is simply unreachable.
-
-       What replaces it is the GAUNTLET: no new mechanic at all,
-       just a cluster of obstacles standing between the fall line
-       and a target tucked against a side wall. Every other
-       country in the set is defined by a thing the board DOES;
-       this one is defined by how little room it leaves, which is
-       what keeps it from reading as Verdholm with more rocks.
-
-       The gate is the ordinary one - winnable on every seed, not
-       by luck, not by accident - plus maxObHits held low, so a
-       solution has to thread the cluster rather than pinball
-       through it.
-       ============================================================ */
-    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.1, maxBlind: 0.05, maxObHits: 1.0 }),
-    make(r, i, n, taken){
-      const last = i === n - 1;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 90, 170) : rint(r, 310, 390), y: 40 };
-      /* The target is across the board from the spawn, against the far wall -
-         reachable by a fall and a deflection, unlike the portal-era boards,
-         but never straight down. */
-      let target = null;
-      for (let a = 0; a < 220 && !target; a++){
-        const tx = leftSpawn ? rint(r, 300, 430) : rint(r, 50, 180);
-        const ty = rint(r, 630, 740);
-        if (Math.abs(tx - spawn.x) < 140) continue;
-        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 37) };
-      }
-      if (!target) return null;
-
-      /* THE CLUSTER. More obstacles than anywhere else this early, packed
-         into the middle band so the gaps between them are the level. They are
-         kept off the target's mouth and off the first 200px of the fall, so
-         the board is a thing to be threaded rather than a lid. */
-      const obstacles = [];
-      const want = last ? 6 : 4 + Math.floor(i / 4);
-      let guard = 0;
-      while (obstacles.length < want && guard++ < 400){
-        const o = { x: rint(r, 55, 425), y: rint(r, 250, 610), r: rint(r, 22, 31) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        /* the tight pad is the point: 10px between rims is a gap a ball can
-           be aimed through, where the usual 16 is a corridor it falls down */
-        if (!spaced(o, obstacles)) continue;
-        obstacles.push(o);
-      }
-      if (obstacles.length < want - 1) return null;
-
-      return { name: pick(r, last ? ['The Gauntlet'] : RUIN_NAMES), maxBlocks: 2,
-               targetType: last ? 'SIDE_WALL' : 'OPEN',
-               wallSide: leftSpawn ? 'right' : 'left',
-               spawn, obstacles, target };
-    }
-  },
+  /* 4 - Stormhold (61-80) and the old 5 - Zunmara Ruins are NOT generated
+     here either: tools/stormLevels.mjs places 61-76 (Emberkeep's layouts
+     with a thunderstorm) and tools/ovalLevels.mjs --only=77-80 the oval
+     exam. No spec, so `genlevels 4 --write` refuses instead of overwriting. */
 
   7: {
     name: 'Nocturne Sands',
@@ -886,7 +688,7 @@ function verdField(r, i, taken){
   if (obstacles.length < N || !covers(obstacles)) return null;
   const WALLS = ['SIDE_WALL', 'POCKET', 'NARROW_GAP', 'POCKET'];
   const targetType = middle ? WALLS[i - 10] : 'OPEN';
-  const lv = { name: VERD_NAMES[i], maxBlocks: i < 3 ? 1 : 2, targetType,
+  const lv = { name: VERD_NAMES[i], maxBlocks: i < 3 ? 1 : i >= 9 ? 3 : 2, targetType,
                wallSide: leftSpawn ? 'right' : 'left', spawn, obstacles, target };
   if (targetType === 'NARROW_GAP') lv.gapW = rint(r, 46, 54);
   return lv;
@@ -994,7 +796,8 @@ function emberField(r, i, taken){
     /* Indexed, not rolled: a twenty-city world rolling a nine-name pool
        produced "Hot Gate" three times. */
     name: FIRE_NAMES[i % FIRE_NAMES.length],
-    maxBlocks: 2,
+    /* every world's cities 10-20 get three ramps */
+    maxBlocks: i >= 9 ? 3 : 2,
     targetType,
     wallSide: leftSpawn ? 'right' : 'left',
     spawn, obstacles, breakables, fires, target

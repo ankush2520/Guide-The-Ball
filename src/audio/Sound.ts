@@ -12,24 +12,37 @@
    sound is silently dead forever and nothing says why.
    ============================================================ */
 
-const MUTE_KEY = 'gtb.muted.v1';
+const MUTE_KEY = "gtb.muted.v1";
+
+/* ============================================================
+   WEATHER VOLUMES - change these to taste.
+   1 = as designed, 0.5 = half as loud, 2 = twice as loud, 0 = off.
+   ============================================================ */
+const RAIN_VOLUME = 0.2; // the rain loop on storm levels (61-80)
+const THUNDER_VOLUME = 0.3; // the rumble of every lightning strike
+const CRACK_VOLUME = 0.3; // the crack when a strike hits the ball
+const FIRE_VOLUME = 0.2; // the fire crackle on fire levels (21-60)
+const BURN_VOLUME = 0.4; // the whoosh when the ball touches fire
 
 const BPM = 112;
-const STEP = (60 / BPM) / 2;             // one eighth note, in seconds
+const STEP = 60 / BPM / 2; // one eighth note, in seconds
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
 // C - G - Am - F. Four bars of eight eighth-notes each.
 const CHORDS = [
-  { root: 48, tones: [60, 64, 67, 72] },   // C
-  { root: 43, tones: [55, 59, 62, 67] },   // G
-  { root: 45, tones: [57, 60, 64, 69] },   // Am
-  { root: 41, tones: [53, 57, 60, 65] },   // F
+  { root: 48, tones: [60, 64, 67, 72] }, // C
+  { root: 43, tones: [55, 59, 62, 67] }, // G
+  { root: 45, tones: [57, 60, 64, 69] }, // Am
+  { root: 41, tones: [53, 57, 60, 65] }, // F
 ];
 /* which eighth-notes of a bar the arp speaks on - the rests are what keep it
    from turning into a nagging loop while you think */
 const ARP = [0, 2, 3, 5, 6];
 
-export type BounceKind = 'obstacle' | 'ramp';
+export type BounceKind = "obstacle" | "ramp";
+/** The level's background weather: rain on a storm board, a crackle on a
+    fire board, or nothing. */
+export type Ambience = "none" | "rain" | "fire";
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -37,6 +50,17 @@ class SoundEngine {
   private music: GainNode | null = null;
   private sfx: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
+  /* Ambience: its own bus straight to the master (never through the delay -
+     an echoing hiss is mush), a longer noise buffer for loops and the
+     thunder's rumble, and what the current level wants playing. */
+  private ambBus: GainNode | null = null;
+  private longNoise: AudioBuffer | null = null;
+  private wantAmb: Ambience = "none";
+  private amb: {
+    kind: Ambience;
+    srcs: AudioScheduledSourceNode[];
+    timer: ReturnType<typeof setInterval> | null;
+  } | null = null;
   /* kept only so the mix can be inspected at runtime - see debugMix() */
   private wetGain: GainNode | null = null;
   private fbGain: GainNode | null = null;
@@ -49,15 +73,23 @@ class SoundEngine {
   private lastBounce = -1;
 
   constructor() {
-    try { this.isMuted = localStorage.getItem(MUTE_KEY) === '1'; } catch { /* blocked storage */ }
+    try {
+      this.isMuted = localStorage.getItem(MUTE_KEY) === "1";
+    } catch {
+      /* blocked storage */
+    }
   }
 
-  get muted(): boolean { return this.isMuted; }
+  get muted(): boolean {
+    return this.isMuted;
+  }
 
   private ensure(): boolean {
     if (this.ctx) return true;
-    const AC = window.AudioContext ||
-               (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
     if (!AC) return false;
     /* ============================================================
        WE SHARE THE PHONE'S AUDIO. WE DO NOT TAKE IT.
@@ -78,65 +110,122 @@ class SoundEngine {
        ============================================================ */
     try {
       const nav = navigator as Navigator & { audioSession?: { type: string } };
-      if (nav.audioSession) nav.audioSession.type = 'ambient';
-    } catch { /* not supported */ }
-    try { this.ctx = new AC(); } catch { return false; }
+      if (nav.audioSession) nav.audioSession.type = "ambient";
+    } catch {
+      /* not supported */
+    }
+    try {
+      this.ctx = new AC();
+    } catch {
+      return false;
+    }
 
     /* Safari parks the context in 'interrupted' (not 'suspended') after a
        call, a lock screen or another app grabbing audio, and never leaves it
        on its own. Notice that, and rebuild the beat when we come back. */
     this.ctx.onstatechange = () => {
       if (!this.ctx) return;
-      if (this.ctx.state === 'running') this.startMusic();
+      if (this.ctx.state === "running") this.startMusic();
       else this.stopMusic();
     };
 
     const c = this.ctx;
-    this.master = c.createGain(); this.master.gain.value = this.isMuted ? 0 : 1;
+    this.master = c.createGain();
+    this.master.gain.value = this.isMuted ? 0 : 1;
     this.master.connect(c.destination);
     // one shared delay gives every layer the same room to sit in
-    const delay = c.createDelay(1.0); delay.delayTime.value = STEP * 1.5;
-    const fb = c.createGain(); fb.gain.value = 0.28;
-    const wet = c.createGain(); wet.gain.value = 0.30;
-    this.fbGain = fb; this.wetGain = wet;
-    delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(this.master);
-    this.music = c.createGain(); this.music.gain.value = 0.32;
-    this.sfx = c.createGain(); this.sfx.gain.value = 0.85;
-    this.music.connect(this.master); this.music.connect(delay);
-    this.sfx.connect(this.master); this.sfx.connect(delay);
+    const delay = c.createDelay(1.0);
+    delay.delayTime.value = STEP * 1.5;
+    const fb = c.createGain();
+    fb.gain.value = 0.28;
+    const wet = c.createGain();
+    wet.gain.value = 0.3;
+    this.fbGain = fb;
+    this.wetGain = wet;
+    delay.connect(fb);
+    fb.connect(delay);
+    delay.connect(wet);
+    wet.connect(this.master);
+    this.music = c.createGain();
+    this.music.gain.value = 0.32;
+    this.sfx = c.createGain();
+    this.sfx.gain.value = 0.85;
+    this.music.connect(this.master);
+    this.music.connect(delay);
+    this.sfx.connect(this.master);
+    this.sfx.connect(delay);
     this.noiseBuf = c.createBuffer(1, c.sampleRate * 0.4, c.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    this.longNoise = c.createBuffer(1, c.sampleRate * 3, c.sampleRate);
+    const ld = this.longNoise.getChannelData(0);
+    for (let i = 0; i < ld.length; i++) ld[i] = Math.random() * 2 - 1;
+    this.ambBus = c.createGain();
+    this.ambBus.gain.value = 1;
+    this.ambBus.connect(this.master);
     return true;
   }
 
-  private tone(dest: AudioNode, freq: number, t: number, dur: number,
-               peak: number, type: OscillatorType = 'triangle'): void {
+  private tone(
+    dest: AudioNode,
+    freq: number,
+    t: number,
+    dur: number,
+    peak: number,
+    type: OscillatorType = "triangle",
+  ): void {
     const c = this.ctx!;
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.setValueAtTime(freq, t);
+    const o = c.createOscillator(),
+      g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak, t + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
+    o.connect(g);
+    g.connect(dest);
+    o.start(t);
+    o.stop(t + dur + 0.03);
   }
 
-  private noise(dest: AudioNode, t: number, dur: number, peak: number, cutoff: number): void {
+  private noise(
+    dest: AudioNode,
+    t: number,
+    dur: number,
+    peak: number,
+    cutoff: number,
+  ): void {
     const c = this.ctx!;
-    const src = c.createBufferSource(); src.buffer = this.noiseBuf;
-    const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = cutoff;
+    const src = c.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = c.createBiquadFilter();
+    f.type = "highpass";
+    f.frequency.value = cutoff;
     const g = c.createGain();
     g.gain.setValueAtTime(peak, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(dest); src.start(t); src.stop(t + dur + 0.02);
+    src.connect(f);
+    f.connect(g);
+    g.connect(dest);
+    src.start(t);
+    src.stop(t + dur + 0.02);
   }
 
   /* A tone whose pitch moves: up to `f1` in the first third, then on to `f2`.
      A fast bend is what makes a hit read as a cartoon "boing". */
-  private sweep(dest: AudioNode, f0: number, f1: number, f2: number, t: number,
-                dur: number, peak: number, type: OscillatorType = 'triangle'): void {
+  private sweep(
+    dest: AudioNode,
+    f0: number,
+    f1: number,
+    f2: number,
+    t: number,
+    dur: number,
+    peak: number,
+    type: OscillatorType = "triangle",
+  ): void {
     const c = this.ctx!;
-    const o = c.createOscillator(), g = c.createGain();
+    const o = c.createOscillator(),
+      g = c.createGain();
     o.type = type;
     o.frequency.setValueAtTime(f0, t);
     o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.3);
@@ -144,7 +233,10 @@ class SoundEngine {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
+    o.connect(g);
+    g.connect(dest);
+    o.start(t);
+    o.stop(t + dur + 0.03);
   }
 
   /* A struck chord, marimba-style: a triangle body that dies away at once, and
@@ -152,8 +244,8 @@ class SoundEngine {
      separate even through the shared delay. */
   private pluck(freqs: number[], t: number): void {
     for (const f of freqs) {
-      this.tone(this.music!, f, t, 0.24, 0.08, 'triangle');
-      this.tone(this.music!, f * 4, t, 0.05, 0.015, 'sine');
+      this.tone(this.music!, f, t, 0.24, 0.08, "triangle");
+      this.tone(this.music!, f * 4, t, 0.05, 0.015, "sine");
     }
   }
 
@@ -161,39 +253,57 @@ class SoundEngine {
      callbacks are far too jittery to sound on directly, so they only ever
      hand exact start times to the audio clock. */
   private scheduleStep(i: number, t: number): void {
-    const bar = Math.floor(i / 8) % 4, beat = i % 8;
+    const bar = Math.floor(i / 8) % 4,
+      beat = i % 8;
     const ch = CHORDS[bar];
     // off-beat chord stabs - the bounce in the loop
     if (beat === 2 || beat === 6) this.pluck(ch.tones.slice(0, 3).map(mtof), t);
     // a short hopping bass, pitched high enough for a phone speaker
     if (beat === 0 || beat === 3 || beat === 4 || beat === 6)
-      this.tone(this.music!, mtof(ch.root), t, beat === 0 ? 0.26 : 0.16, 0.28, 'triangle');
+      this.tone(
+        this.music!,
+        mtof(ch.root),
+        t,
+        beat === 0 ? 0.26 : 0.16,
+        0.28,
+        "triangle",
+      );
     if (ARP.indexOf(beat) !== -1) {
       const m = ch.tones[(i * 3 + beat) % ch.tones.length] + 12;
-      this.tone(this.music!, mtof(m), t, 0.20, 0.10, 'triangle');
-      if (beat === 0) this.tone(this.music!, mtof(m + 12), t, 0.10, 0.02, 'sine');   // sparkle
+      this.tone(this.music!, mtof(m), t, 0.2, 0.1, "triangle");
+      if (beat === 0)
+        this.tone(this.music!, mtof(m + 12), t, 0.1, 0.02, "sine"); // sparkle
     }
-    if (beat % 2 === 1) this.noise(this.music!, t, 0.035, 0.030, 7000);
+    if (beat % 2 === 1) this.noise(this.music!, t, 0.035, 0.03, 7000);
   }
 
   private pump = (): void => {
     if (!this.ctx) return;
     while (this.nextTime < this.ctx.currentTime + 0.15) {
-      if (this.nextTime < this.ctx.currentTime) this.nextTime = this.ctx.currentTime + 0.03;
+      if (this.nextTime < this.ctx.currentTime)
+        this.nextTime = this.ctx.currentTime + 0.03;
       this.scheduleStep(this.stepIx, this.nextTime);
-      this.nextTime += STEP; this.stepIx = (this.stepIx + 1) % 32;
+      this.nextTime += STEP;
+      this.stepIx = (this.stepIx + 1) % 32;
     }
   };
 
   private startMusic(): void {
-    if (!this.ctx || this.started || this.ctx.state !== 'running') return;
-    this.started = true; this.nextTime = this.ctx.currentTime + 0.1; this.stepIx = 0;
-    this.pump(); this.timer = setInterval(this.pump, 25);
+    this.applyAmbience();
+    if (!this.ctx || this.started || this.ctx.state !== "running") return;
+    this.started = true;
+    this.nextTime = this.ctx.currentTime + 0.1;
+    this.stepIx = 0;
+    this.pump();
+    this.timer = setInterval(this.pump, 25);
   }
 
   private stopMusic = (): void => {
     this.started = false;
-    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
   };
 
   /* Anything other than 'running' means silence, so retry on every state we
@@ -201,8 +311,15 @@ class SoundEngine {
      iOS has taken the audio away from us. */
   private resumeCtx(): void {
     if (!this.ctx) return;
-    if (this.ctx.state !== 'running') {
-      try { this.ctx.resume()?.then(() => this.startMusic(), () => {}); } catch { /* ignore */ }
+    if (this.ctx.state !== "running") {
+      try {
+        this.ctx.resume()?.then(
+          () => this.startMusic(),
+          () => {},
+        );
+      } catch {
+        /* ignore */
+      }
     }
     this.startMusic();
   }
@@ -223,7 +340,9 @@ class SoundEngine {
   /** For everything that is NOT a gesture - coming back from the background, a
       bfcache restore, a sound effect finding the context asleep. It nudges a
       context that already exists and never builds one. */
-  nudge = (): void => { if (this.ctx && !this.isMuted) this.resumeCtx(); };
+  nudge = (): void => {
+    if (this.ctx && !this.isMuted) this.resumeCtx();
+  };
 
   /** Backgrounding: drop the scheduler so we do not wake up owing the audio
       clock a burst of notes that all fire at once - and SUSPEND, so a game
@@ -231,7 +350,11 @@ class SoundEngine {
       player watches something else. nudge() on the way back resumes it. */
   pause = (): void => {
     this.stopMusic();
-    try { this.ctx?.suspend(); } catch { /* ignore */ }
+    try {
+      this.ctx?.suspend();
+    } catch {
+      /* ignore */
+    }
   };
 
   /* Mute SUSPENDS the context, it does not just turn it down. A suspended
@@ -241,14 +364,27 @@ class SoundEngine {
      ramp stays so that unmuting fades in rather than snapping. */
   toggle(): boolean {
     this.isMuted = !this.isMuted;
-    try { localStorage.setItem(MUTE_KEY, this.isMuted ? '1' : '0'); } catch { /* blocked */ }
+    try {
+      localStorage.setItem(MUTE_KEY, this.isMuted ? "1" : "0");
+    } catch {
+      /* blocked */
+    }
     if (this.ctx && this.master)
-      this.master.gain.setTargetAtTime(this.isMuted ? 0 : 1, this.ctx.currentTime, 0.02);
+      this.master.gain.setTargetAtTime(
+        this.isMuted ? 0 : 1,
+        this.ctx.currentTime,
+        0.02,
+      );
     if (this.isMuted) {
       this.stopMusic();
       /* after the ramp, so the last note is faded out rather than cut */
-      try { setTimeout(() => { if (this.isMuted) this.ctx?.suspend(); }, 120); }
-      catch { /* ignore */ }
+      try {
+        setTimeout(() => {
+          if (this.isMuted) this.ctx?.suspend();
+        }, 120);
+      } catch {
+        /* ignore */
+      }
     } else {
       /* toggle() is only ever reached from a tap on the mute row, so this is
          inside a gesture and may construct the context if it is the first */
@@ -261,24 +397,197 @@ class SoundEngine {
   bounce(kind: BounceKind): void {
     if (this.isMuted) return;
     // driven by the physics loop, not by a tap - so nudge, never construct
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
+    const t = this.ctx.currentTime;
+    if (t - this.lastBounce < 0.035) return; // a scatter of hits is one sound
+    this.lastBounce = t;
+    if (kind === "obstacle") {
+      // a cartoon boing: pitch springs up, then sags
+      this.sweep(this.sfx!, 220, 540, 260, t, 0.11, 0.28, "triangle");
+      this.sweep(this.sfx!, 110, 270, 130, t, 0.11, 0.06, "square");
+      this.sweep(this.sfx!, 130, 130, 60, t, 0.08, 0.2, "sine"); // the thump under it
+    } else {
+      // ramp/wall: a clean bright tick
+      this.tone(this.sfx!, 880, t, 0.085, 0.2, "triangle");
+      this.tone(this.sfx!, 1320, t, 0.055, 0.1, "sine");
+    }
+  }
+
+  /* ============================================================
+     WEATHER
+
+     Rain and a fire's crackle are LOOPS that belong to the level,
+     not to a moment: setAmbience() says what the board wants, and
+     applyAmbience() makes it so whenever the context is running.
+     It is idempotent, so the game can simply state its wish every
+     frame. Thunder and a burn are one-shot effects.
+     ============================================================ */
+
+  /** What the level wants playing. Cheap to call every frame. */
+  setAmbience(kind: Ambience): void {
+    if (kind === this.wantAmb) return;
+    this.wantAmb = kind;
+    this.applyAmbience();
+  }
+
+  private applyAmbience(): void {
+    if (this.amb && this.amb.kind === this.wantAmb) return;
+    if (this.amb) {
+      for (const s of this.amb.srcs) {
+        try {
+          s.stop();
+        } catch {
+          /* already stopped */
+        }
+      }
+      if (this.amb.timer) clearInterval(this.amb.timer);
+      this.amb = null;
+    }
+    const c = this.ctx;
+    if (!c || c.state !== "running" || this.isMuted || this.wantAmb === "none")
+      return;
+    const loop = (lo: number, hi: number, gain: number) => {
+      const src = c.createBufferSource();
+      src.buffer = this.longNoise;
+      src.loop = true;
+      const hp = c.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = lo;
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = hi;
+      const g = c.createGain();
+      g.gain.value = gain;
+      src.connect(hp);
+      hp.connect(lp);
+      lp.connect(g);
+      g.connect(this.ambBus!);
+      src.start();
+      return { src, g };
+    };
+    if (this.wantAmb === "rain") {
+      /* a bright hiss for the drops and a darker body under it, the hiss
+         slowly swelling so the rain is never a flat tone */
+      const hiss = loop(900, 6500, 0.0067 * RAIN_VOLUME);
+      const body = loop(150, 900, 0.0053 * RAIN_VOLUME);
+      const lfo = c.createOscillator(),
+        depth = c.createGain();
+      lfo.frequency.value = 0.13;
+      depth.gain.value = 0.0023 * RAIN_VOLUME;
+      lfo.connect(depth);
+      depth.connect(hiss.g.gain);
+      lfo.start();
+      this.amb = { kind: "rain", srcs: [hiss.src, body.src, lfo], timer: null };
+    } else {
+      /* CRACKLE, not roar: no continuous noise at all (a filtered hiss is
+         wind), only tiny sharp clicks in quick clusters - the snap of wood -
+         and now and then a soft low pop. Kept well under the music. */
+      const timer = setInterval(() => {
+        if (
+          !this.ctx ||
+          this.ctx.state !== "running" ||
+          this.isMuted ||
+          FIRE_VOLUME <= 0
+        )
+          return;
+        const t0 = this.ctx.currentTime;
+        if (Math.random() < 0.35) {
+          let t = t0 + Math.random() * 0.03;
+          for (let k = 0, n = 1 + Math.floor(Math.random() * 4); k < n; k++) {
+            this.noise(
+              this.ambBus!,
+              t,
+              0.003 + Math.random() * 0.006,
+              (0.008 + Math.random() * 0.014) * FIRE_VOLUME,
+              2500 + Math.random() * 3000,
+            );
+            t += 0.006 + Math.random() * 0.022;
+          }
+        }
+        if (Math.random() < 0.03)
+          this.sweep(
+            this.ambBus!,
+            240,
+            170,
+            90,
+            t0 + 0.01,
+            0.06,
+            0.012 * FIRE_VOLUME,
+            "sine",
+          );
+      }, 45);
+      this.amb = { kind: "fire", srcs: [], timer };
+    }
+  }
+
+  /** A lightning strike anywhere on the board: the rumble that rolls away. */
+  thunder(): void {
+    if (this.isMuted || THUNDER_VOLUME <= 0) return;
+    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
+    const c = this.ctx, t = c.currentTime;
+    // dark noise that swells and then rolls off for two seconds
+    const src = c.createBufferSource(); src.buffer = this.longNoise;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 170;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3 * THUNDER_VOLUME, t + 0.10);
+    g.gain.exponentialRampToValueAtTime(0.15 * THUNDER_VOLUME, t + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
+    src.connect(lp); lp.connect(g); g.connect(this.ambBus!);
+    src.start(t, Math.random() * 0.5); src.stop(t + 2.4);
+    this.sweep(this.ambBus!, 70, 55, 32, t, 1.4, 0.05 * THUNDER_VOLUME, 'sine');   // the weight under it
+  }
+
+  /** A strike that HIT the ball: the sharp crack, on top of the rumble. */
+  crack(): void {
+    if (this.isMuted || CRACK_VOLUME <= 0) return;
     if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
     const t = this.ctx.currentTime;
-    if (t - this.lastBounce < 0.035) return;   // a scatter of hits is one sound
-    this.lastBounce = t;
-    if (kind === 'obstacle') {                 // a cartoon boing: pitch springs up, then sags
-      this.sweep(this.sfx!, 220, 540, 260, t, 0.11, 0.28, 'triangle');
-      this.sweep(this.sfx!, 110, 270, 130, t, 0.11, 0.06, 'square');
-      this.sweep(this.sfx!, 130, 130, 60, t, 0.08, 0.20, 'sine');   // the thump under it
-    } else {                                   // ramp/wall: a clean bright tick
-      this.tone(this.sfx!, 880, t, 0.085, 0.20, 'triangle');
-      this.tone(this.sfx!, 1320, t, 0.055, 0.10, 'sine');
+    this.noise(this.sfx!, t, 0.18, 0.14 * CRACK_VOLUME, 1400);
+    this.noise(this.sfx!, t + 0.04, 0.12, 0.08 * CRACK_VOLUME, 2600);
+  }
+
+  /** The ball touched fire: a whoosh up and a sizzle as it goes out. */
+  burn(): void {
+    if (this.isMuted || BURN_VOLUME <= 0) return;
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
     }
+    const c = this.ctx,
+      t = c.currentTime;
+    const src = c.createBufferSource();
+    src.buffer = this.longNoise;
+    const bp = c.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(350, t);
+    bp.frequency.exponentialRampToValueAtTime(2400, t + 0.3);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.45 * BURN_VOLUME, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfx!);
+    src.start(t);
+    src.stop(t + 0.5);
+    this.noise(this.sfx!, t + 0.12, 0.55, 0.1 * BURN_VOLUME, 4500); // the sizzle
+    this.sweep(this.sfx!, 320, 200, 70, t, 0.35, 0.14 * BURN_VOLUME, "sine"); // the "fwoomp"
   }
 
   /** The live mix, for the test suite's headroom checks. Reads the real
       nodes rather than any constant, so it cannot drift from what is heard. */
-  debugMix(): { music: number | null; sfx: number | null;
-                wet: number | null; fb: number | null; built: boolean } {
+  debugMix(): {
+    music: number | null;
+    sfx: number | null;
+    wet: number | null;
+    fb: number | null;
+    built: boolean;
+  } {
     return {
       music: this.music ? this.music.gain.value : null,
       sfx: this.sfx ? this.sfx.gain.value : null,
@@ -295,12 +604,15 @@ class SoundEngine {
   coin(i = 0): void {
     if (this.isMuted) return;
     // fired by an animation frame, not by a tap - so nudge, never construct
-    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
     const t = this.ctx.currentTime;
     const f = 1245 * Math.pow(2, Math.min(i, 7) / 12);
-    this.tone(this.sfx!, f, t, 0.075, 0.105, 'triangle');
-    this.tone(this.sfx!, f * 2, t, 0.04, 0.04, 'sine');
-    this.tone(this.sfx!, f * 3, t, 0.025, 0.022, 'sine');   // bell partial - the toy "ting"
+    this.tone(this.sfx!, f, t, 0.075, 0.105, "triangle");
+    this.tone(this.sfx!, f * 2, t, 0.04, 0.04, "sine");
+    this.tone(this.sfx!, f * 3, t, 0.025, 0.022, "sine"); // bell partial - the toy "ting"
     this.noise(this.sfx!, t, 0.02, 0.028, 8000);
   }
 
@@ -308,23 +620,39 @@ class SoundEngine {
       itself waits for the win card, in step with the confetti. */
   capture(): void {
     if (this.isMuted) return;
-    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
-    this.sweep(this.sfx!, 700, 520, 250, this.ctx.currentTime, 0.12, 0.18, 'sine');
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
+    this.sweep(
+      this.sfx!,
+      700,
+      520,
+      250,
+      this.ctx.currentTime,
+      0.12,
+      0.18,
+      "sine",
+    );
   }
 
   /** SFX 2 - the level is cleared: a quick run up, then a "ta-da" chord. */
   win(): void {
     if (this.isMuted) return;
-    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
-    const t = this.ctx.currentTime, run = [72, 76, 79, 84];   // C major, up
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
+    const t = this.ctx.currentTime,
+      run = [72, 76, 79, 84]; // C major, up
     for (let i = 0; i < run.length; i++)
-      this.tone(this.sfx!, mtof(run[i]), t + i * 0.06, 0.16, 0.18, 'triangle');
+      this.tone(this.sfx!, mtof(run[i]), t + i * 0.06, 0.16, 0.18, "triangle");
     const hit = t + run.length * 0.06 + 0.04;
-    for (const m of [84, 88, 91])                              // the "da!"
-      this.tone(this.sfx!, mtof(m), hit, 0.55, 0.10, 'triangle');
+    for (const m of [84, 88, 91]) // the "da!"
+      this.tone(this.sfx!, mtof(m), hit, 0.55, 0.1, "triangle");
     // sparkle on top: a thin square, then a higher sine glint
-    this.tone(this.sfx!, mtof(96), hit, 0.22, 0.03, 'square');
-    this.tone(this.sfx!, mtof(100), hit + 0.08, 0.30, 0.04, 'sine');
+    this.tone(this.sfx!, mtof(96), hit, 0.22, 0.03, "square");
+    this.tone(this.sfx!, mtof(100), hit + 0.08, 0.3, 0.04, "sine");
     this.noise(this.sfx!, hit, 0.35, 0.04, 7000);
   }
 }

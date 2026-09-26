@@ -24,6 +24,7 @@ import { clamp } from '../physics/math';
 import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
+import { strikeAt } from '../levels/storm';
 import type { Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
@@ -473,6 +474,7 @@ export class GameController {
 
   private tick(dt: number): void {
     if (this.phase === 'plan') this.patrolClock += dt / STEP_MS;
+    this.weather();
     if (this.phase === 'drop' && this.ball) {
       this.acc += dt;
       while (this.acc >= STEP_MS) {
@@ -487,6 +489,21 @@ export class GameController {
       this.capture.t += dt;
       if (this.capture.t >= CAPTURE_MS) this.finish('win');
     }
+  }
+
+  /** The board's sound: rain on a storm level, a crackle where there is
+      fire, and a thunder RUMBLE on every lightning strike - read off the same
+      step clock the bolt is drawn on, so the two are in time. The CRACK is
+      only for a strike that hits the ball (see reactToStep). */
+  private lastStrike = -1;
+  private lastRumble = -1;
+  private weather(): void {
+    const lv = this.levels.playLevel;
+    Sound.setAmbience(lv.storm ? 'rain' : lv.fires.length ? 'fire' : 'none');
+    if (!lv.storm) return;
+    const simT = this.ball ? this.ball.t0 + this.ball.steps : this.patrolClock;
+    const s = strikeAt(lv, simT);
+    if (s && s.key !== this.lastRumble) { this.lastRumble = s.key; Sound.thunder(); }
   }
 
   /* Everything the physics RECORDED, turned into things you can see and hear.
@@ -508,6 +525,12 @@ export class GameController {
       this.openBox(k, lv.boxes[k]);
     }
 
+    // lightning that knocked the ball this step: that, and only that, cracks
+    if (b.struck !== -1 && b.struck !== this.lastStrike) {
+      this.lastStrike = b.struck;
+      Sound.crack();
+    }
+
     // a block that shattered this step throws its pieces
     while (this.seenBroke < b.justBroke.length) {
       const bk = lv.breakables[b.justBroke[this.seenBroke++]];
@@ -518,8 +541,9 @@ export class GameController {
 
     if (b.hit.n !== this.seenHit) {
       this.seenHit = b.hit.n;
-      Sound.bounce(b.hit.kind === 'obstacle' || b.hit.kind === 'breakable'
-                   ? 'obstacle' : 'ramp');
+      if (b.hit.kind !== 'fire')
+        Sound.bounce(b.hit.kind === 'obstacle' || b.hit.kind === 'breakable'
+                     ? 'obstacle' : 'ramp');
       this.reactToHit(b.hit);
       /* The just-in-time obstacle tip, and the reason it needs its own flag:
          level 1 has no obstacles at all, so this can only ever fire on a later
@@ -527,7 +551,7 @@ export class GameController {
       if (b.hit.kind === 'obstacle' && !this.rewards.obstacleTipSeen) {
         this.rewards.obstacleTipSeen = true;
         this.rewards.saveProgress();
-        this.showFlash('Obstacles bounce you randomly — try to avoid them.');
+        this.showFlash('Obstacles knock you off at an angle — try to avoid them.');
       }
     }
   }
@@ -600,13 +624,17 @@ export class GameController {
     this.capture = null; this.dragging = null; this.selected = -1;
     this.armedSpring = false; this.draft = null;
     this.hideFlash();
+    /* DETERMINISTIC bounces: the obstacle scatter is seeded by the LEVEL,
+       not rolled per drop, so the same ramps always give the same run - a
+       miss means the ramps need changing, never that the dice were bad.
+       Each level has its own seed, so the pattern differs board to board. */
     const seed = this.seedOverride !== null
-      ? this.seedOverride : (Math.random() * 0x7fffffff) | 0;
+      ? this.seedOverride : (Math.imul(this.levels.level.id, 2654435761) >>> 1);
     this.releaseBall();
     const t0 = Math.floor(this.patrolClock);
     this.lastT0 = t0;
     this.ball = this.engine.createBall(this.levels.playLevel, seed, this.levels.sessionBroken, t0);
-    this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
+    this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0; this.lastStrike = -1;
     /* A box already opened - this session or a previous visit - must not pop
        again, so the run starts with those already accounted for. */
     this.boxSeen = this.levels.sessionBoxes.slice();
@@ -656,16 +684,30 @@ export class GameController {
      rebuild. No overlay, no button to dismiss. */
   private missed(result: DropResult): void {
     this.lastResult = result;
+    if (result === 'burned') Sound.burn();
+    // where the ball died, read before it is released
+    const at = this.ball ? { x: this.ball.x, y: this.ball.y } : null;
     if (this.tutDropping) { this.tutRetry = true; this.tutDropping = false; }
     this.releaseBall();
     this.capture = null;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.squash.amt = 0; this.seenHit = 0; this.seenBroke = 0;
+    /* The ball goes up in light: embers for fire, sparks for lightning.
+       Two small bursts from the fixed particle pool (PARTICLE_MAX), so it
+       costs nothing extra on a phone. */
+    if (at && result === 'burned') {
+      this.renderer.particles.burst(at.x, at.y, 0, -1, '#ff4a12', 16, 3.4, Math.PI, 700, 2.6);
+      this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffa800', 12, 2.4, Math.PI * 0.6, 900, 2.2);
+    } else if (at && result === 'zapped') {
+      this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffc400', 16, 4.6, Math.PI, 600, 2.6);
+      this.renderer.particles.burst(at.x, at.y, 0, -1, '#2f8cff', 12, 3.4, Math.PI, 700, 2.2);
+    }
     this.setPhase('plan');
     /* Fire says what it was, because a run that ends on contact with
        something looks like a bug unless the board names it. */
     this.showFlash(
       result === 'burned' ? 'Burned up! Fire ends the drop - go around it.'
+      : result === 'zapped' ? 'Zapped! Lightning ends the drop - time it or go around it.'
       : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);
@@ -766,8 +808,8 @@ export class GameController {
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.renderer.invalidateBackdrop();
     this.tries = 0;
-    // every visit starts the patrol from the same phase
-    this.patrolClock = 0; this.lastT0 = 0;
+    // every visit starts the patrol (and the storm) from the same phase
+    this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
     this.hideFlash();
     this.setPhase('plan');
     if (this.levels.levelIndex > this.rewards.highest) {
