@@ -3,14 +3,14 @@
 
    Two clusters, and nothing in the middle:
 
-     coins  balls  ramps  |  Level 7 ▾  bag  settings
+     coins  ●●○  ramps  |  Level 7 ▾  bag  settings
 
    THE + IS GONE. It existed to hand out a fixed-length ramp,
    and ramps are drawn by hand again - a drag across the board
    is the ramp - so there is nothing left for a spawn button to
    do. What it was carrying on its badge, the ramps left on this
    board, moved to a chip of its own beside the coins and the
-   balls: it is a COUNT, and the bar already had two.
+   ball pips: it is a COUNT, and the bar already had two.
 
    The BAG is the inventory tray: everything the player owns and
    can place, which today means springs. It is deliberately not
@@ -64,8 +64,13 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
         <div className="counter coins" title="Coins — spend them in the shop">
           <i className="coin" /><b id="coin-count">{coins}</b>
         </div>
-        <div className={'counter balls' + (rewards.balls <= 0 ? ' empty' : '')} title="Balls left">
-          <i className="pip" /><b id="ball-count">{rewards.balls}</b>
+        {/* THIS LEVEL'S balls, as pips: a full one per ball left, a hollow
+            one per ball used. A count, not a currency - see ballsFor. */}
+        <div className={'counter balls' + (controller.ballsLeft <= 0 ? ' empty' : '')}
+             title={`Balls left on this level: ${controller.ballsLeft}`} id="ball-count">
+          {Array.from({ length: controller.ballsMax }, (_, i) => (
+            <i key={i} className={'pip' + (i < controller.ballsLeft ? '' : ' used')} />
+          ))}
         </div>
         {/* Ramps LEFT ON THIS BOARD, plus the spares in the drawer, which are
             spent automatically once the board's own run out. Dimmed at zero

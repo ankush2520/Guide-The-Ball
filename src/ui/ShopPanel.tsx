@@ -1,8 +1,9 @@
 /* ============================================================
    THE SHOP
 
-   One direction only: coins buy balls, spare ramps and
-   springs, and nothing sells them back. That is what keeps the
+   One direction only: coins buy spare ramps and springs, and
+   nothing sells them back. Balls are not sold - every level
+   hands out its own (RewardManager.ballsFor). That is what keeps the
    wallet legible - a coin is always worth exactly what this
    panel says.
 
@@ -26,8 +27,8 @@
    two must come from one table.
    ============================================================ */
 import { useGame, useGameVersion } from '../core/GameContext';
-import { BALL_PRICE, RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
-         BALL_BUNDLES, RAMP_BUNDLES, SPRING_BUNDLES,
+import { RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
+         RAMP_BUNDLES, SPRING_BUNDLES,
          type Bundle } from '../managers/RewardManager';
 
 /* How much better than buying singles this row is, as whole percent. The
@@ -50,27 +51,6 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="scroll">
-          <h4>Balls</h4>
-          <p className="shopnote">
-            Every drop costs one ball, win or lose. {BALL_PRICE} coins each,
-            and fewer the more you take.
-          </p>
-          <div className="buyrow">
-            {BALL_BUNDLES.map(b => {
-              const cost = rewards.ballCost(b.n);
-              const off = saving(b, BALL_PRICE);
-              return (
-                <button key={b.n} className="buybtn" id={`btn-buy-balls-${b.n}`}
-                        disabled={!rewards.canAfford(cost)}
-                        onClick={() => rewards.buyBalls(b.n)}>
-                  <b><i className="pip" />{b.n}</b>
-                  <span className="price"><i className="coin" />{cost}</span>
-                  {off > 0 && <span className="save">{off}% off</span>}
-                </button>
-              );
-            })}
-          </div>
-
           <h4>Spare ramps</h4>
           <p className="shopnote">
             Every level hands you its own ramps. A spare is one more, on any

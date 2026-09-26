@@ -2,7 +2,7 @@
    THE WIN CARD
 
    Deliberately short. It used to spell out the try count, the
-   ramp count, which star was missed and how to earn it, the
+   ramp count, which star was missed and how to earn it, a
    ball bonus and the next level's number - five lines of prose
    over a board the player wants to get back to. Everything in
    it except the payout is either already on screen (the level
@@ -69,11 +69,6 @@ export function WinOverlay() {
             </span>
           ) : (
             <span className="nopay" id="ov-nopay">Already earned &mdash; replays are practice</span>
-          )}
-          {card.bonus > 0 && (
-            <span className="reward" id="ov-balls" title="First clear bonus">
-              <i className="pip" /><b>+{card.bonus}</b>
-            </span>
           )}
           {/* The one thing on this card that went the other way. A spring is
               charged for by the win, so the win is where it has to be shown -

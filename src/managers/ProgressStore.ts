@@ -12,8 +12,10 @@
 export const SAVE_KEY   = 'gtb.progress.v1';
 export const BALLS_KEY  = 'gtb.balls.v1';
 export const SPIN_KEY   = 'gtb.spin.v1';
+/* The OLD ball tank. Only ever read once, to cash it in for coins, and then
+   deleted - balls are handed out per level now. */
 /* Coins and the spare-ramp drawer. Its own key rather than a field on the
-   progress blob: like the ball tank, it is spent and earned constantly, and
+   progress blob: it is spent and earned constantly, and
    a wallet write must not have to rewrite the whole save to happen. */
 export const WALLET_KEY = 'gtb.wallet.v1';
 
@@ -43,6 +45,9 @@ export interface SaveData {
       quietly claim the other. Absent from every save written before gifts
       existed, which reads as "none opened", which is right. */
   gifts?: Record<number, boolean>;
+  /** Set once the old ball tank has been cashed in for coins (or found empty)
+      - see RewardManager.migrateBalls. Every save written since has it. */
+  migratedBalls?: boolean;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */
@@ -88,7 +93,10 @@ export class ProgressStore {
     if (typeof raw.balls !== 'number' || !isFinite(raw.balls)) return null;
     return Math.max(0, raw.balls | 0);
   }
-  saveBalls(balls: number): void { writeJSON(BALLS_KEY, { balls }); }
+  /** Forget the old tank, once it has been cashed in. */
+  clearBalls(): void {
+    try { localStorage.removeItem(BALLS_KEY); } catch { /* blocked storage */ }
+  }
 
   loadSpin(): SpinData {
     const raw = readJSON<{ last?: unknown; pending?: unknown; offered?: unknown;

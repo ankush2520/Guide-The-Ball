@@ -70,7 +70,6 @@ const FAN = 19;
    arrival is the button's own bump instead. */
 const LANDS: Record<FlightKind, { to: string; mark: string }> = {
   coins:    { to: '.counter.coins .coin', mark: 'flycoin' },
-  balls:    { to: '.counter.balls .pip',  mark: 'flyball' },
   ramps:    { to: '.counter.ramps',       mark: 'flyramp' },
   springs:  { to: '#btn-inventory',       mark: 'flyspring' },
   spin:     { to: '#btn-settings',        mark: 'flyspin' },
@@ -205,7 +204,6 @@ export function CoinFlight() {
    thing that just arrived. */
 const TOOK: Record<FlightKind, string> = {
   coins: '.counter.coins',
-  balls: '.counter.balls',
   ramps: '.counter.ramps',
   springs: '#btn-inventory',
   spin: '#btn-settings',

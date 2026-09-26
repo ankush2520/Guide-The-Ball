@@ -71,7 +71,7 @@ export const GLOSSARY: GlossaryEntry[] = [
           'and never affects winning. Your best count per level is remembered.' },
   { cls: 'bx', has: lv => lv.boxes.length > 0, name: 'Mystery box',
     long: 'A chest. Touch it with the ball mid-drop and it pays out something random - coins, ' +
-          'balls, a spare ramp, sometimes a spring or a free spin of the wheel. Like a star it ' +
+          'a spare ramp, sometimes a spring or a free spin of the wheel. Like a star it ' +
           'never changes where the ball goes, and each one can only be opened ONCE: after that ' +
           'the board shows the empty outline where it was.' },
   /* Straight after the chest, because it is the same prize out of a different

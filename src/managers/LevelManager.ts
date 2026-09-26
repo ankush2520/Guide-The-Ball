@@ -129,6 +129,12 @@ export class LevelManager {
 
   next(): void { if (!this.isLast) this.setLevel(this.index + 1); }
 
+  /** A fresh board on the SAME level - the free "Restart level": the drawn
+      ramps go (a spring on one goes back to the bag, since it was never
+      charged), broken blocks come back. Not a level change, so nothing that
+      listens for one hears it. */
+  restartBoard(): void { this.rebuild(); }
+
   private rebuild(): void {
     this.ramps = [];
     this.extraBudget = 0;

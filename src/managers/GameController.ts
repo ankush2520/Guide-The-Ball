@@ -14,7 +14,7 @@
    ============================================================ */
 import type { FlightKind, GameBus, Phase } from '../core/events';
 import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
-import { RewardManager, prizeLabel } from './RewardManager';
+import { RewardManager, prizeLabel, ballsFor, CONTINUE_BALLS } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
 import { TweenSystem, Ease } from '../render/Tweens';
@@ -101,7 +101,7 @@ export type TutStep = 'intro' | 'draw' | 'drop' | 'retry';
 
 /** What a finished level shows on the win card. */
 export interface WinCard {
-  stars: number; note: string; bonus: number; coins: number;
+  stars: number; note: string; coins: number;
   isLast: boolean; nextId: number | null;
   /** Springs this win actually spent. Zero on all but a handful of boards. */
   springs: number;
@@ -109,7 +109,23 @@ export interface WinCard {
 
 export class GameController {
   phase: Phase = 'plan';
+  /* ============================================================
+     TRIES, AND THIS LEVEL'S BALLS
+
+     `tries` is every drop since the player ENTERED this level -
+     across restarts and ad continues alike - and it is what the
+     star rating reads, so restarting cannot wash out a bad run.
+     It resets only on leaving the level (setLevel).
+
+     `ballsLeft` is this level's own supply (RewardManager.ballsFor).
+     A drop uses one; running out opens the choice to restart or
+     continue. `restarts` counts restarts in this entry, for the
+     "Stuck?" offer.
+     ============================================================ */
   tries = 0;
+  ballsLeft = 0;
+  ballsMax = 0;
+  restarts = 0;
   /* Whatever the engine produced. The controller never names a concrete
      ball class - see PhysicsEngine. */
   ball: BallState | null = null;
@@ -242,7 +258,7 @@ export class GameController {
        on screen somewhere. The counters are React reading this version
        number, so anything that moves a balance has to bump it, or the HUD
        and the shop go stale until something else happens to redraw them. */
-    for (const e of ['balls:changed', 'coins:changed', 'ramps:changed',
+    for (const e of ['coins:changed', 'ramps:changed',
                      'springs:changed', 'spin:granted'] as const)
       bus.on(e, () => this.changed());
   }
@@ -614,8 +630,8 @@ export class GameController {
     if (this.phase !== 'plan') return;
     /* Out of balls. Drop is deliberately left ENABLED for this: a dead grey
        button tells a player they are stuck without telling them what to do
-       about it, so the press opens the way to get more instead. */
-    if (this.rewards.balls <= 0) { this.bus.emit('balls:empty', {}); this.changed(); return; }
+       about it, so the press opens the restart / continue choice instead. */
+    if (this.ballsLeft <= 0) { this.bus.emit('balls:empty', {}); this.changed(); return; }
     // the walkthrough's last step is this very tap
     this.tutDropping = this.tutorialStep() === 'drop';
     if (this.tutDropping) this.tutorialDone();
@@ -643,10 +659,9 @@ export class GameController {
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.acc = 0;
 
-    /* one ball per press, win or lose: what costs is throwing it, not the
-       result. Committed before the drop runs, so an interrupted run still
-       paid. */
-    this.rewards.spendBall();
+    /* One of this level's balls per drop. A win ends the level, so in
+       practice it is the misses that use them up. */
+    this.ballsLeft = Math.max(0, this.ballsLeft - 1);
     this.tries++;
     this.setPhase('drop');
     this.bus.emit('drop:started', { level: this.levels.playLevel, seed, tries: this.tries });
@@ -717,6 +732,49 @@ export class GameController {
       : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);
+    /* That was the last ball: offer the way on straight away, rather than
+       waiting for a Drop press that can only lead there. */
+    if (this.ballsLeft <= 0) this.bus.emit('balls:empty', {});
+  }
+
+  /* ============================================================
+     OUT OF BALLS: THE TWO WAYS ON
+
+     continueLevel() - after a WATCHED rewarded ad (the panel only
+     calls it on true): more balls, and the board exactly as it
+     was, every ramp and spring where the player left them.
+
+     restartLevel() - free and instant: a fresh board and a full
+     set of balls. The drawn ramps are cleared; a spring fitted to
+     one goes back to the bag with it, because a spring is only
+     ever charged on a win. `tries` is NOT reset - see above.
+     Never followed by an ad.
+     ============================================================ */
+  continueLevel(): void {
+    if (this.phase !== 'plan') return;
+    this.ballsLeft += CONTINUE_BALLS;
+    this.ballsMax = Math.max(this.ballsMax, this.ballsLeft);
+    this.showFlash(`+${CONTINUE_BALLS} balls - your ramps are right where you left them.`);
+    this.changed();
+  }
+
+  restartLevel(): void {
+    this.releaseBall();
+    this.capture = null;
+    this.winCard = null; this.pendingCard = null; this.gift = null;
+    this.selected = -1; this.dragging = null; this.armedSpring = false; this.draft = null;
+    this.levels.restartBoard();
+    this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
+    this.boxSeen = []; this.springFired = [];
+    this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
+    this.renderer.particles.clear(); this.renderer.trail.clear();
+    this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
+    this.ballsMax = ballsFor(this.levels.level.id);
+    this.ballsLeft = this.ballsMax;
+    this.restarts++;
+    this.lastResult = null;
+    this.hideFlash();
+    this.setPhase('plan');
   }
 
   /* Only a win reaches here - it is the one moment that still earns a
@@ -730,12 +788,12 @@ export class GameController {
     const springsUsed = this.commitSprings();
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
-    const { stars, bonus, coins, note, firstClear } = this.rewards.recordClear(
+    const { stars, coins, note, firstClear } = this.rewards.recordClear(
       this.levels.levelIndex, lv.id, this.levels.isLast,
       this.tries, this.levels.rampsUsed, this.levels.levelBudget);
 
     const card: WinCard = {
-      stars, note, bonus, coins, isLast: this.levels.isLast,
+      stars, note, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
       springs: springsUsed,
     };
@@ -814,6 +872,9 @@ export class GameController {
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.renderer.invalidateBackdrop();
     this.tries = 0;
+    this.restarts = 0;
+    this.ballsMax = ballsFor(this.levels.level.id);
+    this.ballsLeft = this.ballsMax;
     // every visit starts the patrol (and the storm) from the same phase
     this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
     this.hideFlash();
@@ -837,10 +898,13 @@ export class GameController {
 
   nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
 
-  /** Replay: drop the same layout again, which costs a ball like any drop -
-      and at the same patrol phase, so it is the same drop, not a new roll. */
+  /** Replay: drop the same layout again, at the same patrol phase, so it is
+      the same drop, not a new roll. A replay of a cleared board follows the
+      same few-balls rule as any visit, so it starts a fresh supply. */
   retry(): void {
     this.patrolClock = this.lastT0;
+    this.ballsMax = ballsFor(this.levels.level.id);
+    this.ballsLeft = this.ballsMax;
     this.setPhase('plan');
     this.winCard = null; this.pendingCard = null; this.gift = null;
     this.drop();

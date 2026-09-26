@@ -68,7 +68,7 @@ export function SettingsPanel({ onClose, onOpenInfo, onOpenShop, onOpenSpin }: P
             <i className="coin" />
             <span className="setlabel">
               <b>Shop</b>
-              <span className="d">Buy balls and spare ramps</span>
+              <span className="d">Buy spare ramps and springs</span>
             </span>
             <em><i className="coin" />{rewards.coins}</em>
           </button>

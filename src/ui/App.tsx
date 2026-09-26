@@ -24,7 +24,7 @@ import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
 import { GiftPanel } from './GiftPanel';
 import { LevelSelect } from './LevelSelect';
-import { NoBallsPanel } from './NoBallsPanel';
+import { OutOfBallsPanel } from './OutOfBallsPanel';
 import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -55,8 +55,8 @@ function Game() {
   const close = () => setStack(s => s.slice(0, -1));
   const has = (p: Panel) => stack.includes(p);
 
-  /* The out-of-balls screen is opened by the GAME, not by a button - pressing
-     Drop with an empty tank has to lead somewhere. */
+  /* The out-of-balls screen is opened by the GAME, not by a button: the last
+     ball of a level missing, or Drop pressed with none left, leads here. */
   useEffect(() => bus.on('balls:empty', () => open('noballs')), [bus]);
 
   /* ============================================================
@@ -182,8 +182,7 @@ function Game() {
       {/* Above every panel: it flies from the win card to the HUD, so it has
           to paint over both of them. */}
       <CoinFlight />
-      {has('noballs') && <NoBallsPanel onClose={close} onSpin={() => open('spin')}
-                                       onShop={() => open('shop')} />}
+      {has('noballs') && <OutOfBallsPanel onClose={close} />}
       {has('levels')  && <LevelSelect  onClose={close} />}
       {has('settings') && <SettingsPanel onClose={close}
                                          onOpenInfo={() => open('info')}

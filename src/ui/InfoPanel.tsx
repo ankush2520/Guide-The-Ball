@@ -2,8 +2,8 @@
    currently looking at called out. */
 import { useGame, useGameVersion } from '../core/GameContext';
 import { GLOSSARY } from './glossary';
-import { STARTING_BALLS, CLEAR_BONUS, AD_REWARD, STARTING_COINS,
-         BALL_PRICE, RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
+import { BALLS_PER_LEVEL, BALLS_EXAM, CONTINUE_BALLS, STARTING_COINS,
+         RAMP_PRICE, SPRING_PRICE, SPRING_UNLOCK_LEVEL,
          COIN_CLEAR } from '../managers/RewardManager';
 
 export function InfoPanel({ onClose }: { onClose: () => void }) {
@@ -41,13 +41,12 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
           ))}
 
           <h4>Balls</h4>
-          <p>Every drop costs one ball, whether it wins or loses. Moving between
-             levels is free.</p>
-          <p>You start with <b>{STARTING_BALLS}</b>. Clearing a level for the first
-             time ever pays a bonus that grows through the game
-             (+{CLEAR_BONUS[0]} early, up to +{CLEAR_BONUS[CLEAR_BONUS.length - 1]} late),
-             the ad button on the out-of-balls screen pays +{AD_REWARD}, and you can
-             buy more with coins.</p>
+          <p>Every level gives you <b>{BALLS_PER_LEVEL}</b> balls ({BALLS_EXAM} on the
+             last four levels of each world). A miss uses one; a win ends the level.</p>
+          <p>Out of balls? <b>Restart the level</b> for free with a clean board, or
+             watch an ad for <b>+{CONTINUE_BALLS}</b> and keep your ramps where they are.
+             Your star rating counts every drop since you entered the level, restarts
+             included.</p>
 
           <h4>Coins</h4>
           <p>Clearing a level pays coins the <b>first time you beat it</b> &mdash;
@@ -55,12 +54,12 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              ({COIN_CLEAR[0][0]}&ndash;{COIN_CLEAR[0][2]} early, up to
              {COIN_CLEAR[COIN_CLEAR.length - 1][0]}&ndash;
              {COIN_CLEAR[COIN_CLEAR.length - 1][2]} late). Replaying a board you have
-             already cleared pays nothing: a drop costs a ball, so a board you can
+             already cleared pays nothing: replays are free, so a board you can
              already beat would otherwise print money. Replays are for a better
              star rating. You start with <b>{STARTING_COINS}</b>, and the daily
              wheel pays coins too.</p>
           <p>Coins are spent in the <b>shop</b>, behind the gear:
-             <b>{BALL_PRICE}</b> coins a ball, <b>{RAMP_PRICE}</b> coins a spare ramp,
+             <b>{RAMP_PRICE}</b> coins a spare ramp, <b>{SPRING_PRICE}</b> a spring,
              and both come cheaper by the bundle. Nothing converts back the
              other way.</p>
 
@@ -96,7 +95,7 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
 
           <h4>Mystery boxes</h4>
           <p>Some boards carry a <b>chest</b>. Hit it with the ball on the way
-             past and it pays out something random: coins, balls, a spare ramp,
+             past and it pays out something random: coins, a spare ramp,
              occasionally a spring or a free spin of the wheel. It never
              changes where the ball goes, so it is always worth routing through
              if you can.</p>
