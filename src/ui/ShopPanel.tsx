@@ -94,9 +94,9 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
               <h4 id="shop-springs-head">Springs</h4>
               <p className="shopnote">
                 A brass coil that fits onto a ramp <b>you</b> drew and makes it
-                throw <b>four times harder</b>. You are only charged when a drop
-                that actually <b>bounces off</b> one goes on to win - misses are
-                free, and so is a win it had no part in.
+                throw <b>four times harder</b>. A spring stays in your bag until a
+                drop that actually <b>bounces off</b> it goes on to win - misses
+                don't use it up, and neither does a win it had no part in.
                 {' '}{SPRING_PRICE} coins each, and fewer the more you take.
               </p>
               <div className="buyrow">

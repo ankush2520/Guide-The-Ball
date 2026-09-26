@@ -12,8 +12,8 @@
 import type { Hint } from './types';
 
 export const HINTS: Record<number, Hint> = {
-  1: { ramps: [{ x1: 61, y1: 89, x2: 163, y2: 151 }] },
-  2: { ramps: [{ x1: 404, y1: 60, x2: 408, y2: 180 }] },
+  1: { ramps: [{ x1: 89, y1: 65, x2: 135, y2: 175 }] },
+  2: { ramps: [{ x1: 428, y1: 64, x2: 384, y2: 176 }] },
   3: { ramps: [{ x1: 117, y1: 65, x2: 163, y2: 175 }] },
   4: { ramps: [{ x1: 356, y1: 80, x2: 348, y2: 200 }] },
   5: { ramps: [{ x1: 74, y1: 112, x2: 180, y2: 168 }] },
@@ -28,7 +28,7 @@ export const HINTS: Record<number, Hint> = {
   14: { ramps: [{ x1: 339, y1: 120, x2: 325, y2: 240 }] },
   15: { ramps: [{ x1: 13, y1: 92, x2: 119, y2: 148 }] },
   16: { ramps: [{ x1: 28, y1: 75, x2: 106, y2: 165 }] },
-  17: { ramps: [{ x1: 13, y1: 561, x2: 105, y2: 639, spring: true }], t0: 10 },
+  17: { ramps: [{ x1: 6, y1: 592, x2: 112, y2: 648, spring: true }], t0: 10 },
   18: { ramps: [{ x1: 6, y1: 635, x2: 114, y2: 685, spring: true }], t0: 0 },
   19: { ramps: [{ x1: 470, y1: 558, x2: 384, y2: 642, spring: true }], t0: 100 },
   20: { ramps: [{ x1: 434, y1: 311, x2: 414, y2: 429 }, { x1: 265, y1: 680, x2: 364, y2: 662, spring: true }], t0: 100 },

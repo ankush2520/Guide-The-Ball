@@ -83,12 +83,37 @@ for (let id = A; id <= B; id++){
     const T = cycles.length ? Math.min(360, Math.max(...cycles)) : 0;
     const t0s = T ? Array.from({ length: Math.ceil(T / 10) }, (_, k) => k * 10) : [0];
     const springs = lv.needsSpring;
+    /* A hint is WRITTEN in whole pixels, so it is PROVED in whole pixels: a
+       plan found at fractional coordinates can miss once rounded (the path is
+       chaotic - that is exactly how level 17's first hint failed in play).
+
+       And a person traces a dashed line, they do not paste coordinates: a
+       ROBUST plan still wins with the whole layout nudged NUDGE px any way
+       and, on a timed board, dropped TSLOP steps early or late. Robust plans
+       are what the search wants; an exact-only one is kept as a fallback in
+       case no robust one turns up before the budget runs out. */
+    const NUDGE = 3, TSLOP = 2;
+    const round = cfg => cfg.map(s => ({ x1: Math.round(s.x1), y1: Math.round(s.y1),
+                                         x2: Math.round(s.x2), y2: Math.round(s.y2),
+                                         ...(s.spring ? { spring: true } : {}) }));
+    const wins = (v, t0) => simulate(v, seed, li, null, Math.max(0, t0)).result === 'win';
+    const shift = (v, dx, dy) => v.map(s => ({ ...s, x1: s.x1 + dx, x2: s.x2 + dx, y1: s.y1 + dy, y2: s.y2 + dy }));
+    const robust = (v, t0) =>
+      [[NUDGE, 0], [-NUDGE, 0], [0, NUDGE], [0, -NUDGE]].every(([dx, dy]) => wins(shift(v, dx, dy), t0)) &&
+      (!T || (wins(v, t0 - TSLOP) && wins(v, t0 + TSLOP)));
+    let fallback = null;
     /* one layout: every spring placement (if needed) at every drop moment */
     const tryCfg = cfg => {
       const variants = springs ? cfg.map((_, k) => cfg.map((s, j) => ({ ...s, spring: j === k }))) : [cfg];
-      for (const v of variants)
-        for (const t0 of t0s)
-          if (simulate(v, seed, li, null, t0).result === 'win') return { ramps: v, t0: T ? t0 : undefined };
+      for (const raw of variants) {
+        const v = round(raw);
+        for (const t0 of t0s) {
+          if (!wins(v, t0)) continue;
+          const plan = { ramps: v, t0: T ? t0 : undefined, robust: false };
+          if (robust(v, t0)) return { ...plan, robust: true };
+          fallback ??= plan;
+        }
+      }
       return null;
     };
     const out = () => performance.now() > deadline;
@@ -97,18 +122,18 @@ for (let id = A; id <= B; id++){
     // 1. one ramp
     for (let ry = lv.spawn.y + 80; ry <= H - 130; ry += 20)
       for (let th = 25; th <= 155; th += 3){
-        if (out()) return null;
+        if (out()) return fallback;
         const p = tryCfg([ramp(sx, ry, th)]);
         if (p) return p;
       }
-    if (lv.maxBlocks < 2) return null;
+    if (lv.maxBlocks < 2) return fallback;
     // 2. two ramps, the second on the first's reflected line
     const tc = lv.target;
     for (let ry = lv.spawn.y + 90; ry <= H - 170; ry += 30)
       for (let t1 = 28; t1 <= 152; t1 += 8){
         const phi1 = (2 * t1 - 90) * R;
         for (let L = 80; L <= 440; L += 40){
-          if (out()) return null;
+          if (out()) return fallback;
           const p2 = { x: sx + Math.cos(phi1) * L, y: ry + Math.sin(phi1) * L };
           if (p2.x < 25 || p2.x > W - 25 || p2.y < 25 || p2.y > H - 55) continue;
           const aim = ((Math.atan2(tc.y - p2.y, tc.x - p2.x) + phi1) / 2) / R;
@@ -121,20 +146,21 @@ for (let id = A; id <= B; id++){
     // 3. two ramps, the second where the ball actually goes
     for (let ry = lv.spawn.y + 70; ry <= lv.spawn.y + 260; ry += 16)
       for (let t1 = 22; t1 <= 158; t1 += 6){
-        if (out()) return null;
+        if (out()) return fallback;
         const r1 = ramp(sx, ry, t1);
         const pts = trace([r1], seed, li).samples.filter(q => q.y > ry + 20);
         for (let k = 0; k < pts.length; k += 8)
           for (let t2 = 20; t2 <= 160; t2 += 10){
-            if (out()) return null;
+            if (out()) return fallback;
             const p = tryCfg([r1, ramp(pts[k].x + Math.sign(pts[k].vx) * 6, pts[k].y + 6, t2, 100)]);
             if (p) return p;
           }
       }
-    return null;
+    return fallback;
   }, [id, BUDGET * 1000]);
   const secs = ((Date.now() - t) / 1000).toFixed(1);
-  if (plan){ hints[id] = plan; found++; console.log(`${id}: hint (${plan.ramps.length} ramp${plan.ramps.length > 1 ? 's' : ''}${plan.t0 !== undefined ? `, drop at step ${plan.t0}` : ''}${plan.ramps.some(r => r.spring) ? ', spring' : ''}) in ${secs}s`); }
+  if (plan){ hints[id] = { ramps: plan.ramps, t0: plan.t0 }; found++;
+    console.log(`${id}: hint (${plan.ramps.length} ramp${plan.ramps.length > 1 ? 's' : ''}${plan.t0 !== undefined ? `, drop at step ${plan.t0}` : ''}${plan.ramps.some(r => r.spring) ? ', spring' : ''}${plan.robust ? '' : ', EXACT ONLY - not forgiving'}) in ${secs}s`); }
   else { delete hints[id]; missed.push(id); console.log(`${id}: no plan found in ${secs}s`); }
   writeHints(hints);
 }

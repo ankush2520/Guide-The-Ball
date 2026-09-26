@@ -47,7 +47,7 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
     const hint = controller.hintAvailable, spare = controller.sparesAllowed;
     if (!hint && !spare) return null;
     return (
-      <div className="offerstrip" id="stuck-offer">
+      <div data-ui className="offerstrip" id="stuck-offer">
         <button className="offerclose" id="btn-stuck-close" aria-label="Dismiss"
                 onClick={() => controller.dismissStuck()}>&times;</button>
         <span className="offertext">Stuck?</span>
@@ -69,7 +69,7 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
   const watch = ad('spring', () => rewards.grantSprings(1, 'grant'));
 
   return (
-    <div className="offerstrip" id="spring-offer">
+    <div data-ui className="offerstrip" id="spring-offer">
       <span className="offertext">This one needs a spring.</span>
       <div className="row pair">
         <button id="btn-offer-shop" onClick={onShop}>Shop</button>

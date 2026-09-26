@@ -216,6 +216,11 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    /* A press that starts on UI laid over the board - a button, or a panel
+       marked data-ui (the offer strips) - belongs to that UI, never to the
+       board: it must not draw, select, or drop the ball. Checked first, so
+       no gesture is even armed and the release cannot turn it into a drop. */
+    if ((e.target as Element).closest?.('button, a, input, select, textarea, [data-ui]')) return;
     if (controller.phase !== 'plan') return;
     rect.current = null;                // a fresh measure for this gesture
     armTouchGuard();
