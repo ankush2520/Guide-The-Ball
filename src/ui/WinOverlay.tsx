@@ -26,6 +26,7 @@
 import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
+import { ChestBar } from './ChestPanel';
 
 export function WinOverlay() {
   const { controller } = useGame();
@@ -96,6 +97,7 @@ export function WinOverlay() {
             level" and the difference between them - one re-drops for you, the
             other hands the board back to edit first - was too fine to be
             worth a third button on a card this short. */}
+        <ChestBar small />
         {owed ? (
           <div className="row pair">
             <button id="btn-collect" disabled={waiting} onClick={() => controller.collectWin(false)}>

@@ -2,8 +2,9 @@
    player's high-water mark is locked. */
 import { useGame } from '../core/GameContext';
 import { LEVELS, cityOf } from '../levels';
+import { ChestBar } from './ChestPanel';
 
-export function LevelSelect({ onClose }: { onClose: () => void }) {
+export function LevelSelect({ onClose, onChest }: { onClose: () => void; onChest: () => void }) {
   const { controller, levels, rewards } = useGame();
 
   return (
@@ -12,6 +13,13 @@ export function LevelSelect({ onClose }: { onClose: () => void }) {
         <div className="big">Levels</div>
         <div className="sub" id="sel-sub">
           Unlocked {rewards.highest + 1} of {LEVELS.length}. Clear a level to open the next.
+        </div>
+        {/* star chest progress, and the chest itself once it is earned */}
+        <div className="chestrow">
+          <ChestBar />
+          {rewards.chestReady() && (
+            <button id="btn-open-chest" className="primary" onClick={onChest}>Open chest</button>
+          )}
         </div>
         <div className="grid scroll" id="lvgrid">
           {LEVELS.map((lv, i) => {

@@ -115,6 +115,35 @@ export const STUCK_AFTER_RESTARTS = 2;
 /** What helped a clear, if anything. */
 export type Help = 'spare' | 'hint' | null;
 
+/* ============================================================
+   STAR CHESTS
+
+   Every STARS_PER_CHEST rating stars (the 1-3 per level, summed
+   over the player's BEST on each level) unlocks a chest. Stars
+   are capped at three a level, so this rewards replaying for
+   three stars without being farmable.
+
+   What each chest holds is FIXED by its number, not rolled -
+   the same player opening chest 4 always gets chest 4 - so there
+   is nothing to re-roll: coins growing from CHEST_COINS_BASE to
+   CHEST_COINS_MAX, a spring (odd chests) or spare ramps (even),
+   and every COSMETIC_EVERY-th chest a cosmetic (Part I).
+   ============================================================ */
+export const STARS_PER_CHEST = 30;
+export const CHEST_COINS_BASE = 100;
+export const CHEST_COINS_STEP = 25;
+export const CHEST_COINS_MAX = 300;
+export const COSMETIC_EVERY = 3;
+
+export interface ChestContents {
+  n: number;
+  coins: number;
+  springs: number;
+  ramps: number;
+  /** A chest-only cosmetic's id (Part I), or null. */
+  cosmetic: string | null;
+}
+
 /* ---- what the shop sells ---- */
 
 /* BUNDLES, not straight multiples. A bulk row priced at exactly ten times the
@@ -371,6 +400,9 @@ function unlockAll(): boolean {
   }
 }
 
+/** The chest-only cosmetic for chest `n` - filled in by Part I. */
+function chestCosmetic(_n: number): string | null { return null; }
+
 export class RewardManager {
   coins = STARTING_COINS;
   /** Coins a player's old ball tank was converted into on this load, once -
@@ -474,6 +506,8 @@ export class RewardManager {
   freeHintUsed = false;
   /** See SaveData.wheelAdSpinDay. */
   wheelAdSpinDay = "";
+  /** Star chests opened so far. */
+  chestsClaimed = 0;
 
   /** Has this level's mystery box already been taken? */
   boxClaimed(levelIndex: number): boolean {
@@ -563,6 +597,7 @@ export class RewardManager {
     this.springUnlockSeen = !!s.springUnlockSeen;
     this.freeHintUsed = !!s.freeHintUsed;
     this.wheelAdSpinDay = typeof s.wheelAdSpinDay === "string" ? s.wheelAdSpinDay : "";
+    this.chestsClaimed = Math.max(0, (s.chestsClaimed as number) | 0);
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
     this.claimedGifts = s.gifts && typeof s.gifts === "object" ? s.gifts : {};
 
@@ -660,6 +695,7 @@ export class RewardManager {
     this.springUnlockSeen = false;
     this.freeHintUsed = false;
     this.wheelAdSpinDay = "";
+    this.chestsClaimed = 0;
     this.claimedBoxes = {};
     this.claimedGifts = {};
     this.spinLast = 0;
@@ -707,6 +743,7 @@ export class RewardManager {
       springUnlockSeen: this.springUnlockSeen,
       freeHintUsed: this.freeHintUsed,
       wheelAdSpinDay: this.wheelAdSpinDay,
+      chestsClaimed: this.chestsClaimed,
     });
   }
 
@@ -912,6 +949,47 @@ export class RewardManager {
     this.wheelAdSpinDay = RewardManager.today();
     this.saveProgress();
     this.grantBonusSpin(1);
+  }
+
+  /** Part I: add a cosmetic to what the player owns. */
+  unlockCosmetic(_id: string): void { /* Part I */ }
+
+  /* ---------------- star chests ---------------- */
+
+  /** Every level's best rating, summed. */
+  get totalStars(): number {
+    let n = 0;
+    for (const k in this.bestStars) n += this.bestStars[k] | 0;
+    return n;
+  }
+  get chestsEarned(): number { return Math.floor(this.totalStars / STARS_PER_CHEST); }
+  chestReady(): boolean { return this.chestsEarned > this.chestsClaimed; }
+  /** Stars toward the next chest not yet earned: 0..STARS_PER_CHEST. */
+  get chestProgress(): number {
+    return this.chestReady() ? STARS_PER_CHEST : this.totalStars - this.chestsEarned * STARS_PER_CHEST;
+  }
+
+  /** What chest number `n` (1-based) holds - fixed, never rolled. */
+  chestContents(n: number): ChestContents {
+    const coins = Math.min(CHEST_COINS_MAX, CHEST_COINS_BASE + CHEST_COINS_STEP * (n - 1));
+    const odd = n % 2 === 1;
+    /* a spring only once springs exist; before that the same value in ramps */
+    const springs = odd && this.springsUnlocked ? 1 : 0;
+    const ramps = odd ? (springs ? 0 : 2) : n % 4 === 0 ? 2 : 1;
+    return { n, coins, springs, ramps, cosmetic: n % COSMETIC_EVERY === 0 ? chestCosmetic(n) : null };
+  }
+
+  /** Open the next earned chest: pay it and record it. Null if none is due. */
+  claimChest(): ChestContents | null {
+    if (!this.chestReady()) return null;
+    const c = this.chestContents(this.chestsClaimed + 1);
+    this.chestsClaimed++;
+    this.saveProgress();
+    this.grantCoins(c.coins, "chest");
+    if (c.springs) this.grantSprings(c.springs, "chest");
+    if (c.ramps) this.grantRamps(c.ramps, "chest");
+    if (c.cosmetic) this.unlockCosmetic(c.cosmetic);
+    return c;
   }
 
   recordPickups(levelIndex: number, stars: number): void {

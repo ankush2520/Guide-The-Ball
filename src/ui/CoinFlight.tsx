@@ -183,7 +183,7 @@ export function CoinFlight() {
      balance the moment a player spends.
      ============================================================ */
   useEffect(() => bus.on('coins:changed', ({ delta, reason }) => {
-    if (delta > 0 && (reason === 'clear' || reason === 'spin' || reason === 'box'))
+    if (delta > 0 && (reason === 'clear' || reason === 'spin' || reason === 'box' || reason === 'chest'))
       holdCoins(delta);
     else flushCoins();
   }), [bus]);

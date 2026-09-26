@@ -55,6 +55,8 @@ export interface SaveData {
   /** The local day (YYYY-MM-DD) the wheel's "Watch ad: spin again" was last
       used - once a day. */
   wheelAdSpinDay?: string;
+  /** How many star chests have been opened. */
+  chestsClaimed?: number;
 }
 
 /** What a spin owes but has not yet paid - see RewardManager.loadSpin(). */

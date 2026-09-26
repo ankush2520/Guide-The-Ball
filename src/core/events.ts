@@ -71,8 +71,8 @@ export interface GameEvents extends Record<string, unknown> {
   'tip:shown':       { key: string; text: string };
 }
 
-export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box';
-export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box';
+export type CoinChangeReason = 'clear' | 'spin' | 'grant' | 'load' | 'buy' | 'box' | 'chest';
+export type RampChangeReason = 'spin' | 'grant' | 'load' | 'buy' | 'use' | 'box' | 'chest';
 
 /** What the player can OWN, and therefore what a payout can land in. The
     wheel pays the first two; a mystery box can also pay a spring. */

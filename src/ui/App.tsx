@@ -25,6 +25,7 @@ import { WinOverlay } from './WinOverlay';
 import { GiftPanel } from './GiftPanel';
 import { LevelSelect } from './LevelSelect';
 import { OutOfBallsPanel } from './OutOfBallsPanel';
+import { ChestPanel } from './ChestPanel';
 import { IntroCard } from './IntroCard';
 import { OfferStrip } from './OfferStrip';
 import { flyReward } from './CoinFlight';
@@ -39,7 +40,7 @@ import { Coach } from './Coach';
 import { Sound } from '../audio/Sound';
 import { Ads } from '../ads/Ads';
 
-type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items';
+type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items' | 'chest';
 
 function Game() {
   const { bus, levels, controller, rewards } = useGame();
@@ -194,7 +195,8 @@ function Game() {
           to paint over both of them. */}
       <CoinFlight />
       {has('noballs') && <OutOfBallsPanel onClose={close} />}
-      {has('levels')  && <LevelSelect  onClose={close} />}
+      {has('levels')  && <LevelSelect  onClose={close} onChest={() => open('chest')} />}
+      {has('chest')   && <ChestPanel   onClose={close} />}
       {has('settings') && <SettingsPanel onClose={close}
                                          onOpenInfo={() => open('info')}
                                          onOpenShop={() => open('shop')}
