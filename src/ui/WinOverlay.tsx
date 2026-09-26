@@ -27,6 +27,7 @@ import { useState } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { Ads } from '../ads/Ads';
 import { ChestBar } from './ChestPanel';
+import { MIDGAME_FROM_LEVEL } from '../managers/RewardManager';
 
 export function WinOverlay() {
   const { controller } = useGame();
@@ -39,6 +40,16 @@ export function WinOverlay() {
      two equal buttons. Replays pay nothing, so they go straight to the usual
      Replay / Next. */
   const owed = !card.collected && card.coins > 0;
+  /* NEXT: the one natural break an interstitial may use (Ads.midgame stops
+     gameplay around it; the phase change after it starts gameplay again). */
+  const next = async () => {
+    if (controller.levels.level.id >= MIDGAME_FROM_LEVEL) {
+      setWaiting(true);
+      await Ads.midgame();
+      setWaiting(false);
+    }
+    controller.nextLevel();
+  };
   const double = async () => {
     setWaiting(true);
     const ok = await Ads.rewarded('double');
@@ -113,7 +124,7 @@ export function WinOverlay() {
         <div className="row">
           <button id="btn-retry" onClick={() => controller.retry()}>Replay</button>
           {!card.isLast && (
-            <button id="btn-next" className="primary" onClick={() => controller.nextLevel()}>Next</button>
+            <button id="btn-next" className="primary" disabled={waiting} onClick={next}>Next</button>
           )}
         </div>
         )}

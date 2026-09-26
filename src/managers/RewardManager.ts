@@ -66,6 +66,14 @@ export function ballsFor(levelId: number): number {
   return pos >= EXAM_FROM ? BALLS_EXAM : BALLS_PER_LEVEL;
 }
 
+/* ---- midgame (interstitial) ads ----
+
+   Only at a natural break - the Next tap after a win - and never on the
+   first levels, where a player is still deciding whether to stay. The
+   platform SDK throttles how often one actually plays. Never after a fail or
+   a restart: failing must never cost a forced ad. */
+export const MIDGAME_FROM_LEVEL = 4;
+
 /* ---- coins ---- */
 
 /* The one currency, and the only thing the player ever converts FROM: coins
