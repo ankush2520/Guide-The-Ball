@@ -110,6 +110,12 @@ export const GLOSSARY: GlossaryEntry[] = [
           'the way to the target is around it.',
     title: 'Giant rock', icon: 'oval', intro: 'Too big to go through. Find the way around.',
     highlight: lv => lv.ovals.map(o => ({ x: o.x, y: o.y, r: Math.min(o.rx, 140) })) },
+  { key: 'pillar', cls: 'ov', has: lv => lv.pillars.length > 0, name: 'Pillar', covers: ['pillar'],
+    long: 'A solid column hanging from the sky. Nothing goes through it or over it - the ball ' +
+          'bounces off it like a wall - so the only way to the other side is DOWN and round ' +
+          'its foot, then back up. That is what the spring is for.',
+    title: 'Pillar', icon: 'pillar', intro: 'Nothing goes over it. Go down, round its foot, and spring back up!',
+    highlight: lv => lv.pillars.map(p => ({ x: p.x, y: p.bottom - 40, r: Math.max(46, p.w) })) },
   /* The player's own item. Its card normally comes with the level-10 gift;
      this entry catches a player who reaches a need-spring board without it. */
   { key: 'spring', cls: 'sp', has: lv => !!lv.needsSpring, onBoard: false, name: 'Spring',

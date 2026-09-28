@@ -5,6 +5,7 @@ import { RAW_LEVELS } from './levels.data';
 import { COUNTRIES } from './countries.data';
 import { buildWalls } from './walls';
 import { ovalSegments } from './ovals';
+import { pillarSegments } from './pillars';
 import { validatePatrol } from './patrol';
 import { WIND_CAP, W } from '../physics/constants';
 import { clamp } from '../physics/math';
@@ -21,6 +22,7 @@ export function initLevel(raw: RawLevel): Level {
     fires: raw.fires ?? [],
     boxes: raw.boxes ?? [],
     ovals: raw.ovals ?? [],
+    pillars: raw.pillars ?? [],
     walls: [],
   };
   /* A patrol that breaks the moving target's authoring rules - walled, off
@@ -49,7 +51,8 @@ export function initLevel(raw: RawLevel): Level {
     w.look = lv.storm ? 'rain' : lv.crabs && lv.crabs.length ? 'current' : 'air';
     return w;
   });
-  lv.walls = [...buildWalls(lv, lv.target), ...lv.ovals.flatMap(o => ovalSegments(o))];
+  lv.walls = [...buildWalls(lv, lv.target), ...lv.ovals.flatMap(o => ovalSegments(o)),
+             ...lv.pillars.flatMap(p => pillarSegments(p))];
   return lv;
 }
 

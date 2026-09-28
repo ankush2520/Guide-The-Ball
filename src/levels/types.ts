@@ -59,6 +59,15 @@ export type BoxDef = Vec;
     obstacle that scatters it. */
 export interface OvalDef extends Vec { rx: number; ry: number; angle?: number; }
 
+/** A PILLAR: a solid column hanging from ABOVE the top of the board down to
+    `bottom`, `w` wide, with a rounded foot, centred on `x`. It splits the
+    board into two lanes joined only underneath it, so the ball has to go
+    down one side, round the foot and back up the other - the loop the
+    world's exam boards are built on. It collides as wall segments (see
+    levels/pillars.ts) and is painted in its world's own material. */
+export type PillarLook = 'tree' | 'basalt' | 'mint' | 'slate' | 'coral' | 'stone';
+export interface PillarDef { x: number; bottom: number; w: number; look?: PillarLook; }
+
 /** A THUNDERSTORM: lightning strikes `points` in order, `gaps[i]` steps
     after point i (the last gap wraps back to point 0), and loops forever.
     See levels/storm.ts for the clock and what a strike does. */
@@ -133,6 +142,7 @@ export interface RawLevel {
   stars?: StarDef[];
   fires?: FireDef[];
   ovals?: OvalDef[];
+  pillars?: PillarDef[];
   storm?: StormDef;
   crabs?: CrabDef[];
   /** Optional bonus pickups. Scenery to the physics, like stars: a box can
@@ -181,6 +191,7 @@ export interface Level extends RawLevel {
   fires: FireDef[];
   boxes: BoxDef[];
   ovals: OvalDef[];
+  pillars: PillarDef[];
   walls: Segment[];
 }
 

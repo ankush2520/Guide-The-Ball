@@ -45,7 +45,7 @@ export interface DrawContext {
 export type EntityKind =
   | 'slippery' | 'wind' | 'rain' | 'sea' | 'volcano'  // ground
   | 'target'
-  | 'wall' | 'oval'
+  | 'wall' | 'oval' | 'pillar'
   | 'obstacle' | 'fire' | 'crab'
   | 'breakable' | 'booster' | 'star' | 'box' | 'storm'
   /* the two the PLAYER makes */
@@ -57,7 +57,7 @@ export type EntityKind =
 export const LAYER: Record<EntityKind, number> = {
   slippery: 0, wind: 0, rain: 0, sea: 0, volcano: 0,
   target: 1,
-  wall: 2, oval: 2,
+  wall: 2, oval: 2, pillar: 2,
   /* Fire shares the obstacle's layer: they are the same class of furniture
      and are read against each other, so neither may cover the other. */
   obstacle: 3, fire: 3,

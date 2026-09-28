@@ -28,6 +28,7 @@ import { MovingTarget } from './MovingTarget';
 import { isMoving } from '../levels/target';
 import { Wall } from './Wall';
 import { Oval } from './Oval';
+import { Pillar } from './Pillar';
 import { Rain } from './Rain';
 import { Storm } from './Storm';
 import { Crab } from './Crab';
@@ -35,6 +36,8 @@ import { Sea } from './Sea';
 import { Volcano } from './Volcano';
 import { countryOf } from '../levels';
 import { OVAL_SEGS } from '../levels/ovals';
+import { PILLAR_SEGS } from '../levels/pillars';
+import type { PillarLook } from '../levels/types';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
 
@@ -65,8 +68,10 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
                ctorFor: lv => (isMoving(lv) ? MovingTarget : Target) },
   /* an oval's rim segments are walls to the physics, but the Oval entity
      paints the whole shape, so the wall painter skips them */
-  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !OVAL_SEGS.has(s)) },
+  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !OVAL_SEGS.has(s) && !PILLAR_SEGS.has(s)) },
   oval:      { ctor: Oval,         pick: lv => lv.ovals ?? [] },
+  /* dressed in the material of the world it stands in - see PILLAR_LOOK */
+  pillar:    { ctor: Pillar,       pick: lv => (lv.pillars ?? []).map(p => ({ ...p, look: p.look ?? pillarLook(lv.id) })) },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },
   fire:      { ctor: FireObstacle, pick: lv => lv.fires },
   crab:      { ctor: Crab,         pick: lv => lv.crabs ?? [] },
@@ -78,6 +83,12 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   // 'ramp' is deliberately absent: it is player-made, not level data, and is
   // built one at a time by createRamp().
 };
+
+/* A pillar wears its WORLD, by country id: a tree trunk in the meadows,
+   basalt by the volcano, wind-worn mint stone in the breezes, rain-dark
+   slate in the storm, reef rock under the sea. Any other world gets stone. */
+const PILLAR_LOOK: Record<number, PillarLook> = { 1: 'tree', 6: 'basalt', 3: 'mint', 4: 'slate', 9: 'coral' };
+const pillarLook = (id: number): PillarLook => PILLAR_LOOK[countryOf(id).id] ?? 'stone';
 
 export class EntityFactory {
   /** Build one entity of a kind from an explicit def. */
