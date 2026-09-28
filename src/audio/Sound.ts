@@ -488,13 +488,26 @@ class SoundEngine {
          small sine that bends upward, which is what the ear reads as "blip" */
       const hum = loop(40, 260, 0.012 * WATER_VOLUME);
       const timer = setInterval(() => {
-        if (!this.ctx || this.ctx.state !== "running" || this.isMuted || WATER_VOLUME <= 0)
+        if (
+          !this.ctx ||
+          this.ctx.state !== "running" ||
+          this.isMuted ||
+          WATER_VOLUME <= 0
+        )
           return;
         if (Math.random() < 0.18) {
           const t = this.ctx.currentTime + Math.random() * 0.05;
           const f = 300 + Math.random() * 500;
-          this.sweep(this.ambBus!, f, f * 1.8, f * 2.4, t, 0.07 + Math.random() * 0.05,
-                     (0.01 + Math.random() * 0.015) * WATER_VOLUME, "sine");
+          this.sweep(
+            this.ambBus!,
+            f,
+            f * 1.8,
+            f * 2.4,
+            t,
+            0.07 + Math.random() * 0.05,
+            (0.01 + Math.random() * 0.015) * WATER_VOLUME,
+            "sine",
+          );
         }
       }, 90);
       this.amb = { kind: "water", srcs: [hum.src], timer };
@@ -543,25 +556,38 @@ class SoundEngine {
   /** A lightning strike anywhere on the board: the rumble that rolls away. */
   thunder(): void {
     if (this.isMuted || THUNDER_VOLUME <= 0) return;
-    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
-    const c = this.ctx, t = c.currentTime;
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
+    const c = this.ctx,
+      t = c.currentTime;
     // dark noise that swells and then rolls off for two seconds
-    const src = c.createBufferSource(); src.buffer = this.longNoise;
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 170;
+    const src = c.createBufferSource();
+    src.buffer = this.longNoise;
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 170;
     const g = c.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.3 * THUNDER_VOLUME, t + 0.10);
+    g.gain.exponentialRampToValueAtTime(0.3 * THUNDER_VOLUME, t + 0.1);
     g.gain.exponentialRampToValueAtTime(0.15 * THUNDER_VOLUME, t + 0.6);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
-    src.connect(lp); lp.connect(g); g.connect(this.ambBus!);
-    src.start(t, Math.random() * 0.5); src.stop(t + 2.4);
-    this.sweep(this.ambBus!, 70, 55, 32, t, 1.4, 0.05 * THUNDER_VOLUME, 'sine');   // the weight under it
+    src.connect(lp);
+    lp.connect(g);
+    g.connect(this.ambBus!);
+    src.start(t, Math.random() * 0.5);
+    src.stop(t + 2.4);
+    this.sweep(this.ambBus!, 70, 55, 32, t, 1.4, 0.05 * THUNDER_VOLUME, "sine"); // the weight under it
   }
 
   /** A strike that HIT the ball: the sharp crack, on top of the rumble. */
   crack(): void {
     if (this.isMuted || CRACK_VOLUME <= 0) return;
-    if (!this.ctx || this.ctx.state !== 'running') { this.nudge(); return; }
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
     const t = this.ctx.currentTime;
     this.noise(this.sfx!, t, 0.18, 0.14 * CRACK_VOLUME, 1400);
     this.noise(this.sfx!, t + 0.04, 0.12, 0.08 * CRACK_VOLUME, 2600);
@@ -575,11 +601,13 @@ class SoundEngine {
       return;
     }
     const t = this.ctx.currentTime;
-    for (const d of [0, 0.09]) {                                            // snip, snip
+    // snip, snip
+    for (const d of [0, 0.09]) {
       this.noise(this.sfx!, t + d, 0.035, 0.24 * PINCH_VOLUME, 2600);
       this.tone(this.sfx!, 1850, t + d, 0.04, 0.08 * PINCH_VOLUME, "square");
     }
-    this.sweep(this.sfx!, 300, 520, 820, t + 0.2, 0.16, 0.14 * PINCH_VOLUME, "sine"); // plop
+    // plop
+    this.sweep(this.sfx!, 300, 520, 820, t + 0.2, 0.16, 0.14 * PINCH_VOLUME, "sine");
   }
 
   /** The ball touched fire: a whoosh up and a sizzle as it goes out. */

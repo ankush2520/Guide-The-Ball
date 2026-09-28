@@ -37,7 +37,7 @@
       Every level's trajectory is simulated with its box and
       again with the box removed, and the two must agree to the
       last decimal. That is what makes it safe to have added one
-      to all 150 levels - Verdholm's frozen twenty included -
+      to all 140 levels - Verdholm's frozen twenty included -
       without re-verifying a single solution.
 
       Plus the placement rules: on the board, off the target, off

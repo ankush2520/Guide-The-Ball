@@ -1,10 +1,9 @@
 /* ============================================================
    COUNTRIES
 
-   Ten countries spanning levels 1-150. Each owns a run of
+   Seven countries spanning levels 1-140. Each owns a run of
    levels ("cities"), one mechanic, and one backdrop palette.
-   Verdholm, Emberkeep, Windemere, Stormhold and Coralis Deep hold
-   twenty cities each; the rest ten.
+   EVERY world holds exactly twenty cities.
 
    The names are invented, inspired by real regions rather than
    naming any actual place.
@@ -22,7 +21,7 @@
    grid, used at low alpha. `accent` recolours the UI chrome.
 
    Every country is now a day sky. Verdholm was the prototype;
-   the other nine follow it, each keeping its old hue as a
+   the other six follow it, each keeping its old hue as a
    pastel. Every stop is pale enough that the wall grey and the
    target's dark green still clear 3:1 on it (the test suite
    checks every day sky), which is why none of them go deeper.
@@ -39,10 +38,11 @@ import type { Country } from './types';
 
    So the list below is ordered by from/to - the order the game is actually
    played in - and the ids run out of sequence down it. The five built
-   countries hold 1-100; the five still to be authored queue up behind them,
-   and each drops into the next free block as it lands. Countries 10
-   (Needlecrest), 5 (Zunmara Ruins) and 8 (Neonaka) no longer exist:
-   Windemere, Stormhold and Coralis Deep absorbed their blocks. */
+   countries hold 1-100; Nocturne Sands (101-120) and Ironvale (121-140) are
+   still to be rebuilt the same way. Countries 10 (Needlecrest), 5 (Zunmara
+   Ruins), 8 (Neonaka), 11 (Cascadia Falls), 13 (Aerith Heights) and
+   14 (The Zenith) no longer exist: their blocks were absorbed so that every
+   world is twenty levels. */
 export const COUNTRIES: Country[] = [
   /* Verdholm's levels are frozen and hand-designed. Its palette was the
      night navy the game's contrast was first tuned against; it is now the
@@ -73,6 +73,8 @@ export const COUNTRIES: Country[] = [
      SHAPE and MOTION, never by hue alone - see FireObstacle.
      ============================================================ */
   { id: 6, name: 'Emberkeep', from: 21,  to: 40,  mechanic: 'fire - the hazard that ends the run',
+    /* the fire world looks like one: volcanoes, lava, embers (entities/Volcano) */
+    scene: 'volcano',
     sky: ['#ffe4de', '#ffe9e2', '#fff3ea'], wash: '230,100,70', accent: '#ff5a2e' },
 
   /* ============================================================
@@ -122,34 +124,21 @@ export const COUNTRIES: Country[] = [
      fish and bubbles are scenery. It absorbed Neonaka, and Nocturne Sands moved on
      to 101-110.
 
-     Shallow-water turquoise, pushed bluer than Cascadia so the
-     two never read alike.
+     Shallow-water turquoise.
      ============================================================ */
   { id: 9, name: 'Coralis Deep', from: 81, to: 100, mechanic: 'underwater - crabs',
     sky: ['#cff3f3', '#dff8f6', '#effcfa'], wash: '40,175,185', accent: '#16aebf' },
 
   /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,
-     strongest thing on screen. */
-  { id: 7, name: 'Nocturne Sands', from: 101, to: 110,  mechanic: 'collectible stars',
+     strongest thing on screen. Twenty cities, like every world; it absorbed
+     Cascadia Falls' block. */
+  { id: 7, name: 'Nocturne Sands', from: 101, to: 120, mechanic: 'collectible stars',
     sky: ['#e8e8fb', '#ece8f7', '#fbf0dc'], wash: '120,110,215', accent: '#7c6cf0' },
-
-  /* Fresh leaf-green mist, kept greener than Coralis Deep. */
-  { id: 11, name: 'Cascadia Falls', from: 111, to: 120, mechanic: 'long chained boards',
-    sky: ['#d9f3dc', '#e7f8e6', '#f3fbef'], wash: '75,175,105', accent: '#35b865' },
 
   /* Brushed steel warming at the floor, with a single orange spark. Dense
      boards and few ramps, so the palette stays flat and lets the geometry
-     carry it. */
-  { id: 12, name: 'Ironvale', from: 121, to: 130, mechanic: 'high density, fewer ramps',
+     carry it. The last world: twenty cities, and it absorbed Aerith Heights'
+     block; The Zenith's old 141-150 are gone with it. */
+  { id: 12, name: 'Ironvale', from: 121, to: 140, mechanic: 'high density, fewer ramps',
     sky: ['#e9eaec', '#eceef1', '#f6f1ea'], wash: '125,135,150', accent: '#ff7a2a' },
-
-  /* Sunrise pink-lavender under a gold accent - the last country before the
-     finale, and the only warm-on-cool pairing in the set. */
-  { id: 13, name: 'Aerith Heights', from: 131, to: 140, mechanic: 'master combos',
-    sky: ['#f7e4f7', '#f7e8f5', '#fff4ea'], wash: '195,125,205', accent: '#e0a82e' },
-
-  /* Golden hour: the only all-gold sky, reserved so that arriving here looks
-     like arriving somewhere. */
-  { id: 14, name: 'The Zenith', from: 141, to: 150, mechanic: 'finale',
-    sky: ['#fbecc4', '#fdf3d8', '#fffaee'], wash: '225,175,85', accent: '#eba800' },
 ];

@@ -199,6 +199,9 @@ export interface Country {
   /** "r,g,b" for the overhead wash and the grid - alpha is applied per use. */
   wash: string;
   accent: string;
+  /** A world with its own painted backdrop (entities/Volcano) instead of
+      the day sky's clouds. */
+  scene?: 'volcano';
   /** What this country teaches. Documentation only; nothing reads it. */
   mechanic: string;
 }

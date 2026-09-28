@@ -65,7 +65,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   /* Directly after the obstacle, because the ONE thing a player has to learn
      here is the difference between the two, and a list that separates them
      makes that comparison harder than it needs to be. */
-  { key: 'fire', cls: 'fr', has: lv => lv.fires.length > 0, name: 'Fire', covers: ['fire'],
+  { key: 'fire', cls: 'fr', has: lv => lv.fires.length > 0, name: 'Fire', covers: ['fire', 'volcano'],
     long: 'ENDS YOUR DROP THE INSTANT YOU TOUCH IT. It does not bounce you like the red ' +
           'obstacle does - there is no recovering from it, so the route has to miss it ' +
           'completely. It is the flickering one with flames; the plain red circle only ' +

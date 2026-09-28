@@ -308,17 +308,13 @@ const geo = await page.evaluate(() => {
   };
 });
 console.log(`  cities: ${geo.sample.join(', ')}`);
-check(geo.n === 13, 'thirteen countries are declared', `${geo.n}`);
+check(geo.n === 7, 'seven countries are declared', `${geo.n}`);
 check(geo.gaps.length === 0, 'their level ranges are contiguous with no gaps',
   geo.gaps.join('; ') || `${geo.first}-${geo.last}`);
-check(geo.first === 1 && geo.last === 150, 'and they span levels 1-150',
+check(geo.first === 1 && geo.last === 140, 'and they span levels 1-140',
   `${geo.first}-${geo.last}`);
-/* TWO twenty-city countries now: Verdholm, and Emberkeep since it absorbed
-   Solmesa's ten into one fire world at 21-40. Everything after it is still
-   ten, and the total is still 150. */
-check(geo.sizes[0] === 20 && geo.sizes[1] === 20 &&
-      geo.sizes.slice(2).every(n => n === 10),
-  'the two built worlds hold twenty cities each and the rest ten', geo.sizes.join(','));
+/* EVERY world is twenty cities, and there are seven: 140 levels. */
+check(geo.sizes.every(n => n === 20), 'every world holds exactly twenty cities', geo.sizes.join(','));
 check(geo.uniqueNames === geo.n, 'every country name is distinct');
 check(geo.uniquePalettes === geo.n, 'every country has its own palette',
   `${geo.uniquePalettes} of ${geo.n}`);

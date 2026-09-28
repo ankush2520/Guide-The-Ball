@@ -549,7 +549,7 @@ export class MatterEngine implements PhysicsEngine {
 
     /* Mystery boxes: scenery too, and for the same reason - a bonus pickup
        that nudged the ball would change the solution of every level it was
-       added to, and these are added to all 150.
+       added to, and these are added to all 140.
 
        Tested against the SWEPT segment rather than the point, unlike the
        stars above. A boosted ball covers over 20 units in a step and a box is

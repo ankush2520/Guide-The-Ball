@@ -307,41 +307,9 @@ const SPECS = {
      with crabs) and tools/ovalLevels.mjs --only=97-100 the oval exam.
      No spec, so `genlevels 9 --write` refuses instead of overwriting. */
 
-  11: {
-    name: 'Cascadia Falls',
-    /* No new mechanic - the idea is LENGTH. Three ramps, and a target in the
-       far corner at the bottom of the board, so the route is a chain rather
-       than a single deflection. */
-    gate: i => ({ minTol: 3, maxTol: 24 - i * 1.0, maxBlind: 0.05, maxObHits: 1.4 }),
-    make(r, i, n, taken){
-      const last = i === n - 1;
-      const leftSpawn = i % 2 === 0;
-      const spawn = { x: leftSpawn ? rint(r, 55, 120) : rint(r, 360, 425), y: 40 };
-      let target = null;
-      for (let a = 0; a < 200 && !target; a++){
-        const tx = leftSpawn ? rint(r, 330, 440) : rint(r, 40, 150);
-        const ty = rint(r, 660, 755);
-        if (Math.abs(tx - spawn.x) < 230) continue;          // the long diagonal
-        if (taken.some(t => Math.hypot(t.x - tx, t.y - ty) < 44)) continue;
-        target = { x: tx, y: ty, r: last ? rint(r, 26, 30) : rint(r, 30, 36) };
-      }
-      if (!target) return null;
-      const obstacles = [];
-      const want = last ? 4 : 2 + (i > 4 ? 1 : 0);
-      let guard = 0;
-      while (obstacles.length < want && guard++ < 220){
-        const o = { x: rint(r, 55, 425), y: rint(r, 240, 640), r: rint(r, 24, 32) };
-        if (!clear(o, o.r, [{ x: target.x, y: target.y, r: target.r + 26 }], 14)) continue;
-        if (Math.abs(o.x - spawn.x) < o.r + 20 && o.y < 200) continue;
-        if (!spaced(o, obstacles)) continue;
-        obstacles.push(o);
-      }
-      return { name: pick(r, last ? ['The Cataract'] : FALL_NAMES), maxBlocks: 3,
-               targetType: last ? 'POCKET' : 'OPEN',
-               wallSide: leftSpawn ? 'right' : 'left',
-               spawn, obstacles, target };
-    }
-  },
+  /* 11 - Cascadia Falls, 13 - Aerith Heights and 14 - The Zenith are gone:
+     every world is twenty levels now, and Nocturne Sands (101-120) and
+     Ironvale (121-140) absorbed their blocks. */
 
   12: {
     name: 'Ironvale',
@@ -379,21 +347,6 @@ const SPECS = {
     }
   },
 
-  13: {
-    name: 'Aerith Heights',
-    gate: i => ({ minTol: 2.5, maxTol: 19 - i * 0.9, maxBlind: 0.04,
-                  minMechanics: 2, maxObHits: 1.2 }),
-    make(r, i, n, taken){ return combo(r, i, n, taken, 2, SKY_NAMES, 'The Summit Gate'); }
-  },
-
-  14: {
-    name: 'The Zenith',
-    /* The finale. Three mechanics, the tightest bands in the game, and a
-       target small enough that arriving is not the same as landing. */
-    gate: i => ({ minTol: 2, maxTol: 15 - i * 0.7, maxBlind: 0.03,
-                  minMechanics: 3, maxObHits: 1.0 }),
-    make(r, i, n, taken){ return combo(r, i, n, taken, 3, ZENITH_NAMES, 'The Zenith', true); }
-  }
 };
 
 /* ---------------------------------------------------------------- */

@@ -2,9 +2,8 @@
    THE LEVEL PICKER - a carousel of worlds
 
    One WORLD per page: its name on a banner in its own sky, its
-   levels (20, or 10 for the worlds still to be rebuilt) and
-   nothing else - so a player always knows which world they are
-   looking at, and the grid is never a wall of 150 numbers.
+   twenty levels and nothing else - so a player always knows which world they are
+   looking at, and the grid is never a wall of 140 numbers.
 
    Arrows either side of the banner and a swipe across the page
    move between worlds; the dots underneath say where you are.

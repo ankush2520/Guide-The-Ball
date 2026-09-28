@@ -32,6 +32,8 @@ import { Rain } from './Rain';
 import { Storm } from './Storm';
 import { Crab } from './Crab';
 import { Sea } from './Sea';
+import { Volcano } from './Volcano';
+import { countryOf } from '../levels';
 import { OVAL_SEGS } from '../levels/ovals';
 import { MysteryBox } from './MysteryBox';
 import { Ramp } from './Ramp';
@@ -55,6 +57,8 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   wind:      { ctor: WindZone,     pick: lv => lv.wind },
   rain:      { ctor: Rain,         pick: lv => (lv.storm ? [lv.storm] : []) },
   sea:       { ctor: Sea,          pick: lv => (lv.crabs && lv.crabs.length ? [lv.crabs] : []) },
+  /* a world's painted backdrop, by the world it is in (Country.scene) */
+  volcano:   { ctor: Volcano,      pick: lv => (countryOf(lv.id).scene === 'volcano' ? [lv] : []) },
   /* One target per level; a patrolling one is the same kind with its lane
      drawn under it - see MovingTarget. */
   target:    { ctor: Target,       pick: lv => [lv.target],

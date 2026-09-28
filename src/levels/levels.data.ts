@@ -419,7 +419,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetGift: true,
   },
 
-  /* ---- Country 6: Emberkeep (levels 21-40) ---- */
+  /* ---- Country 6: Emberkeep (levels 21-40) - fire ---- */
   {
     id: 21,
     name: "Firebreak",
@@ -1386,7 +1386,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetMove: { x0: 41, x1: 41, y0: 454, y1: 507, period: 129 },
   },
 
-  /* ---- Country 4: Frostvale (levels 61-70) ---- */
+  /* ---- Country 4: Stormhold (levels 61-80) - thunderstorm ---- */
   {
     id: 61,
     name: "First Rain",
@@ -1645,7 +1645,6 @@ export const RAW_LEVELS: RawLevel[] = [
     target: { x: 414, y: 699, r: 33 },
   },
 
-  /* ---- Country 5: Zunmara Ruins (levels 71-80) ---- */
   {
     id: 71,
     name: "Deluge",
@@ -2037,7 +2036,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetMove: { x0: 37, x1: 37, y0: 455, y1: 505, period: 140 },
   },
 
-  /* ---- Country 7: Nocturne Sands (levels 81-90) ---- */
+  /* ---- Country 9: Coralis Deep (levels 81-100) - underwater, crabs ---- */
   {
     id: 81,
     name: "The Shallows",
@@ -2441,7 +2440,6 @@ export const RAW_LEVELS: RawLevel[] = [
     target: { x: 434, y: 678, r: 33 },
   },
 
-  /* ---- Country 8: Neonaka (levels 91-100) ---- */
   {
     id: 91,
     name: "Shipwreck",
@@ -3062,7 +3060,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetMove: { x0: 43, x1: 43, y0: 501, y1: 551, period: 125 },
   },
 
-  /* ---- Country 9: Coralis Deep (levels 101-110) ---- */
+  /* ---- Country 7: Nocturne Sands (levels 101-120) ---- */
   {
     id: 101,
     name: "Reef Run",
@@ -3238,7 +3236,6 @@ export const RAW_LEVELS: RawLevel[] = [
     target: { x: 170, y: 613, r: 29 },
   },
 
-  /* ---- Country 11: Cascadia Falls (levels 111-120) ---- */
   {
     id: 111,
     name: "Spillway",
@@ -3377,7 +3374,7 @@ export const RAW_LEVELS: RawLevel[] = [
     target: { x: 103, y: 662, r: 30 },
   },
 
-  /* ---- Country 12: Ironvale (levels 121-130) ---- */
+  /* ---- Country 12: Ironvale (levels 121-140) ---- */
   {
     id: 121,
     name: "Foundry",
@@ -3532,7 +3529,6 @@ export const RAW_LEVELS: RawLevel[] = [
     target: { x: 163, y: 633, r: 28 },
   },
 
-  /* ---- Country 13: Aerith Heights (levels 131-140) ---- */
   {
     id: 131,
     name: "High Altar",
@@ -3689,181 +3685,6 @@ export const RAW_LEVELS: RawLevel[] = [
     target: { x: 152, y: 745, r: 29 },
   },
 
-  /* ---- Country 14: The Zenith (levels 141-150) ---- */
-  {
-    id: 141,
-    name: "Terminus",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 127, y: 40 },
-    obstacles: [{ x: 281, y: 421, r: 28 }],
-    wind: [{ x: 0, y: 358, w: 480, h: 193, ax: 0.73, ay: 0 }],
-    slippery: [{ x: 0, y: 456, w: 480, h: 177 }],
-    breakables: [{ x: 169, y: 506, r: 33 }],
-    boxes: [{ x: 397, y: 292 }],
-    target: { x: 290, y: 641, r: 24 },
-  },
-  {
-    id: 142,
-    name: "Crown",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 319, y: 40 },
-    obstacles: [{ x: 124, y: 390, r: 28 }],
-    slippery: [{ x: 0, y: 475, w: 480, h: 152 }],
-    breakables: [{ x: 228, y: 497, r: 29 }],
-    stars: [
-      { x: 213, y: 237 },
-      { x: 134, y: 408 },
-    ],
-    boxes: [{ x: 57, y: 354 }],
-    target: { x: 79, y: 614, r: 26 },
-  },
-  {
-    id: 143,
-    name: "The Last Mile",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 92, y: 40 },
-    obstacles: [{ x: 249, y: 314, r: 30 }],
-    wind: [{ x: 0, y: 307, w: 480, h: 172, ax: 0.39, ay: 0 }],
-    breakables: [{ x: 229, y: 516, r: 30 }],
-    stars: [
-      { x: 179, y: 232 },
-      { x: 266, y: 438 },
-    ],
-    boxes: [{ x: 413, y: 399 }],
-    target: { x: 348, y: 650, r: 25 },
-  },
-  {
-    id: 144,
-    name: "Culmination",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 347, y: 40 },
-    obstacles: [
-      { x: 110, y: 437, r: 30 },
-      { x: 255, y: 448, r: 31 },
-    ],
-    wind: [{ x: 0, y: 322, w: 480, h: 218, ax: -0.56, ay: 0 }],
-    slippery: [{ x: 0, y: 442, w: 480, h: 190 }],
-    stars: [
-      { x: 235, y: 273 },
-      { x: 128, y: 467 },
-    ],
-    boxes: [{ x: 46, y: 392 }],
-    target: { x: 61, y: 707, r: 26 },
-  },
-  {
-    id: 145,
-    name: "Terminus",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 146, y: 40 },
-    obstacles: [
-      { x: 340, y: 585, r: 25 },
-      { x: 112, y: 575, r: 28 },
-    ],
-    wind: [{ x: 0, y: 319, w: 480, h: 207, ax: 0.66, ay: 0 }],
-    slippery: [{ x: 0, y: 452, w: 480, h: 169 }],
-    breakables: [{ x: 381, y: 376, r: 28 }],
-    boxes: [{ x: 426, y: 255 }],
-    target: { x: 394, y: 688, r: 26 },
-  },
-  {
-    id: 146,
-    name: "Apex",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 395, y: 40 },
-    obstacles: [
-      { x: 410, y: 329, r: 28 },
-      { x: 375, y: 530, r: 30 },
-    ],
-    slippery: [{ x: 0, y: 480, w: 480, h: 156 }],
-    breakables: [{ x: 174, y: 480, r: 32 }],
-    stars: [
-      { x: 317, y: 256 },
-      { x: 222, y: 436 },
-    ],
-    boxes: [{ x: 52, y: 544 }],
-    target: { x: 123, y: 666, r: 23 },
-  },
-  {
-    id: 147,
-    name: "Crown",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 119, y: 40 },
-    obstacles: [
-      { x: 84, y: 402, r: 27 },
-      { x: 149, y: 600, r: 24 },
-    ],
-    wind: [{ x: 0, y: 314, w: 480, h: 170, ax: 0.36, ay: 0 }],
-    breakables: [{ x: 319, y: 538, r: 28 }],
-    stars: [
-      { x: 192, y: 283 },
-      { x: 211, y: 514 },
-    ],
-    boxes: [{ x: 415, y: 404 }],
-    target: { x: 301, y: 737, r: 24 },
-  },
-  {
-    id: 148,
-    name: "Crown",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 382, y: 40 },
-    obstacles: [
-      { x: 342, y: 386, r: 25 },
-      { x: 256, y: 458, r: 32 },
-    ],
-    wind: [{ x: 0, y: 331, w: 480, h: 157, ax: -0.31, ay: 0 }],
-    slippery: [{ x: 0, y: 483, w: 480, h: 165 }],
-    stars: [
-      { x: 264, y: 274 },
-      { x: 171, y: 463 },
-    ],
-    boxes: [{ x: 126, y: 399 }],
-    target: { x: 108, y: 711, r: 23 },
-  },
-  {
-    id: 149,
-    name: "Terminus",
-    maxBlocks: 2,
-    targetType: "OPEN",
-    spawn: { x: 120, y: 40 },
-    obstacles: [
-      { x: 286, y: 275, r: 29 },
-      { x: 299, y: 379, r: 26 },
-    ],
-    wind: [{ x: 0, y: 361, w: 480, h: 168, ax: 0.66, ay: 0 }],
-    slippery: [{ x: 0, y: 452, w: 480, h: 171 }],
-    breakables: [{ x: 281, y: 508, r: 31 }],
-    boxes: [{ x: 420, y: 401 }],
-    target: { x: 420, y: 626, r: 22 },
-  },
-  {
-    id: 150,
-    name: "The Zenith",
-    maxBlocks: 2,
-    targetType: "SIDE_WALL",
-    wallSide: "left",
-    spawn: { x: 377, y: 40 },
-    obstacles: [
-      { x: 340, y: 309, r: 30 },
-      { x: 65, y: 263, r: 30 },
-      { x: 205, y: 491, r: 30 },
-    ],
-    slippery: [{ x: 0, y: 486, w: 480, h: 202 }],
-    breakables: [{ x: 275, y: 541, r: 31 }],
-    stars: [
-      { x: 305, y: 243 },
-      { x: 232, y: 472 },
-    ],
-    boxes: [{ x: 126, y: 400 }],
-    target: { x: 188, y: 658, r: 25 },
-  },
   /* GEN:END */
 ];
 //

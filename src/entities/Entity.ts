@@ -43,7 +43,7 @@ export interface DrawContext {
 }
 
 export type EntityKind =
-  | 'slippery' | 'wind' | 'rain' | 'sea'  // ground
+  | 'slippery' | 'wind' | 'rain' | 'sea' | 'volcano'  // ground
   | 'target'
   | 'wall' | 'oval'
   | 'obstacle' | 'fire' | 'crab'
@@ -55,7 +55,7 @@ export type EntityKind =
    the ball, the ramps and the obstacles all read as being ON the board
    rather than behind it. */
 export const LAYER: Record<EntityKind, number> = {
-  slippery: 0, wind: 0, rain: 0, sea: 0,
+  slippery: 0, wind: 0, rain: 0, sea: 0, volcano: 0,
   target: 1,
   wall: 2, oval: 2,
   /* Fire shares the obstacle's layer: they are the same class of furniture
