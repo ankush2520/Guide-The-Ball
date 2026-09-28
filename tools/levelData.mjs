@@ -1,6 +1,6 @@
 /**
  * Read and write src/levels/levels.data.ts by LEVEL, whatever it is formatted
- * like. The level tools (windLevels, stormLevels, ovalLevels) used to find a
+ * like. The level tools (windLevels, stormLevels, pillarLevels) used to find a
  * level with regexes written for one layout, and a format-on-save broke them;
  * this reads the data through esbuild - exactly what the game loads - and
  * writes a level back by locating its object with brace matching.

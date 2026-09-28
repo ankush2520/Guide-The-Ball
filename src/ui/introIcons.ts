@@ -20,7 +20,6 @@ import { MovingTarget } from '../entities/MovingTarget';
 import { WindZone } from '../entities/WindZone';
 import { Storm } from '../entities/Storm';
 import { Crab } from '../entities/Crab';
-import { Oval } from '../entities/Oval';
 import { Pillar } from '../entities/Pillar';
 import { MysteryBox } from '../entities/MysteryBox';
 import { StarPickup } from '../entities/StarPickup';
@@ -68,7 +67,6 @@ const ICONS: Record<string, Draw> = {
   wind: (ctx, c) => new WindZone({ x: 0, y: 8, w: 120, h: 64, ax: 0.7, look: 'air' }, 0).draw(g(ctx, c)),
   thunder: (ctx, c) => new Storm({ points: [{ x: 60, y: 44 }], gaps: [70] }, 0).draw(g(ctx, c)),
   crab: (ctx, c) => new Crab({ cx: 60, cy: 46, rx: 30, ry: 10, pattern: 'orbit', period: 240, r: 15 }, 0).draw(g(ctx, c)),
-  oval: (ctx, c) => new Oval({ x: 60, y: 40, rx: 50, ry: 24, angle: -15 }, 0).draw(g(ctx, c)),
   pillar: (ctx, c) => new Pillar({ x: 60, bottom: 62, w: 32, look: 'tree' }, 0).draw(g(ctx, c)),
   box: (ctx, c) => {
     const d = { ...g(ctx, c), gotBox: [false] };

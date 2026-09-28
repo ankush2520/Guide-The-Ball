@@ -245,13 +245,13 @@ const SPECS = {
 
   /* 3 - Windemere (41-60) is NOT generated here. Its cities are placed
      directly by tools/windLevels.mjs (41-56, Emberkeep's layouts with wind)
-     and tools/ovalLevels.mjs --only=57-60 (the oval exam), and play-tested by
+     and tools/pillarLevels.mjs (the pillar exam), and play-tested by
      hand. There is deliberately no spec, so `genlevels 3 --write` refuses
      rather than splicing ten old boards over the twenty that ship. */
 
   /* 4 - Stormhold (61-80) and the old 5 - Zunmara Ruins are NOT generated
      here either: tools/stormLevels.mjs places 61-76 (Emberkeep's layouts
-     with a thunderstorm) and tools/ovalLevels.mjs --only=77-80 the oval
+     with a thunderstorm) and tools/pillarLevels.mjs the pillar
      exam. No spec, so `genlevels 4 --write` refuses instead of overwriting. */
 
   7: {
@@ -304,7 +304,7 @@ const SPECS = {
 
   /* 8 - Neonaka is gone, and 9 - Coralis Deep (81-100) is NOT generated
      here: tools/crabLevels.mjs places 81-96 (Emberkeep's layouts, underwater,
-     with crabs) and tools/ovalLevels.mjs --only=97-100 the oval exam.
+     with crabs) and tools/pillarLevels.mjs the pillar exam.
      No spec, so `genlevels 9 --write` refuses instead of overwriting. */
 
   /* 11 - Cascadia Falls, 13 - Aerith Heights and 14 - The Zenith are gone:

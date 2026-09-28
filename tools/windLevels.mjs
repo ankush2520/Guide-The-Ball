@@ -16,7 +16,7 @@
  *     blows AWAY from the target's side, so it pushes the ball off the easy
  *     line rather than delivering it.
  *
- * 57-60 are the oval exam: tools/ovalLevels.mjs --only=57-60.
+ * 57-60 are the pillar exam: tools/pillarLevels.mjs.
  * Levels 1-40 and 61+ are never touched.
  *
  * The same builder makes Stormhold (tools/stormLevels.mjs) with a
@@ -120,7 +120,7 @@ function windFor(r, n, oppose, spawnX, lo, hi){
 /** A THUNDERSTORM: `n` strike points spread over the board (best-candidate),
     each clear of the spawn and never reaching the target anywhere on its
     patrol, and a gap of 0.8s (48 steps) after each strike. `ok` can
-    veto a point (the oval levels keep points out of the oval). */
+    veto a point (e.g. to keep points out of a solid). */
 const STRIKE_GAP = 48;
 export function stormFor(r, n, spawn, lane, ok = () => true){
   const points = [];
@@ -157,7 +157,7 @@ export function stormFor(r, n, spawn, lane, ok = () => true){
    The WHOLE loop is held clear: MIN_GAP from every hazard and
    box in `blockers`, 40px from the target anywhere on its patrol,
    clear of the drop point and of every other crab's loop, and
-   inside the board. `ok` can veto a point (the oval levels keep
+   inside the board. `ok` can veto a point (e.g. to keep
    loops off the rock). Null if they cannot all fit.
    ============================================================ */
 export function crabPath(c, n = 128){

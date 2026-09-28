@@ -53,12 +53,6 @@ export type StarDef = Vec;
     level's data having to change when the prize table is retuned. */
 export type BoxDef = Vec;
 
-/** A big solid OVAL. Centre, the two semi-axes, and a tilt in degrees
-    (clockwise on screen). It collides as a closed ring of wall segments -
-    see levels/ovals.ts - so it is a wall the ball goes round, not a red
-    obstacle that scatters it. */
-export interface OvalDef extends Vec { rx: number; ry: number; angle?: number; }
-
 /** A PILLAR: a solid column hanging from ABOVE the top of the board down to
     `bottom`, `w` wide, with a rounded foot, centred on `x`. It splits the
     board into two lanes joined only underneath it, so the ball has to go
@@ -141,7 +135,6 @@ export interface RawLevel {
   breakables?: BreakableDef[];
   stars?: StarDef[];
   fires?: FireDef[];
-  ovals?: OvalDef[];
   pillars?: PillarDef[];
   storm?: StormDef;
   crabs?: CrabDef[];
@@ -190,7 +183,6 @@ export interface Level extends RawLevel {
   stars: StarDef[];
   fires: FireDef[];
   boxes: BoxDef[];
-  ovals: OvalDef[];
   pillars: PillarDef[];
   walls: Segment[];
 }

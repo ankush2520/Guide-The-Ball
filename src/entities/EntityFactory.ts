@@ -27,7 +27,6 @@ import { Target } from './Target';
 import { MovingTarget } from './MovingTarget';
 import { isMoving } from '../levels/target';
 import { Wall } from './Wall';
-import { Oval } from './Oval';
 import { Pillar } from './Pillar';
 import { Rain } from './Rain';
 import { Storm } from './Storm';
@@ -35,7 +34,6 @@ import { Crab } from './Crab';
 import { Sea } from './Sea';
 import { Volcano } from './Volcano';
 import { countryOf } from '../levels';
-import { OVAL_SEGS } from '../levels/ovals';
 import { PILLAR_SEGS } from '../levels/pillars';
 import type { PillarLook } from '../levels/types';
 import { MysteryBox } from './MysteryBox';
@@ -66,10 +64,9 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
      drawn under it - see MovingTarget. */
   target:    { ctor: Target,       pick: lv => [lv.target],
                ctorFor: lv => (isMoving(lv) ? MovingTarget : Target) },
-  /* an oval's rim segments are walls to the physics, but the Oval entity
-     paints the whole shape, so the wall painter skips them */
-  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !OVAL_SEGS.has(s) && !PILLAR_SEGS.has(s)) },
-  oval:      { ctor: Oval,         pick: lv => lv.ovals ?? [] },
+  /* a pillar's segments are walls to the physics, but the Pillar entity
+     paints the whole column, so the wall painter skips them */
+  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !PILLAR_SEGS.has(s)) },
   /* dressed in the material of the world it stands in - see PILLAR_LOOK */
   pillar:    { ctor: Pillar,       pick: lv => (lv.pillars ?? []).map(p => ({ ...p, look: p.look ?? pillarLook(lv.id) })) },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },

@@ -52,6 +52,8 @@ export interface RenderState {
   country: Country;
   entities: readonly Entity[];
   ramps: readonly Segment[];
+  /** When each bouncy ramp last threw the ball (render clock) - its squash. */
+  springHitAt: readonly number[];
   /** The ramp being drawn right now, if any - not a ramp yet. */
   draft: Segment | null;
   /** Below this length a draft will be thrown away rather than placed. */
@@ -265,7 +267,11 @@ export class Renderer {
        selection halo and the armed-spring halo redraw the ramp they pick out,
        so a coil painted with the ramps would be buried the moment its own
        ramp was selected - which is exactly when the player is looking at it. */
-    for (const r of s.ramps) if (r.spring) drawSpring(ctx, r, s.clock);
+    s.ramps.forEach((r, i) => {
+      if (!r.spring) return;
+      const since = s.clock - (s.springHitAt[i] ?? -9);
+      drawSpring(ctx, r, s.clock, since >= 0 && since < 0.3 ? 1 - since / 0.3 : 0);
+    });
 
     if (s.phase === 'plan') this.drawSpawnMarker(s.level);
     // a timed board's hint: the drop point pulses at the proven moment
@@ -342,7 +348,7 @@ export class Renderer {
     const pulse = 0.55 + 0.45 * Math.sin(s.clock * 5);
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.strokeStyle = `rgba(214,158,46,${(0.35 + 0.35 * pulse).toFixed(3)})`;
+    ctx.strokeStyle = `rgba(240,122,18,${(0.35 + 0.35 * pulse).toFixed(3)})`;
     ctx.lineWidth = RAMP_HT * 2 + 14;
     for (const r of s.ramps) {
       ctx.beginPath(); ctx.moveTo(r.x1, r.y1); ctx.lineTo(r.x2, r.y2); ctx.stroke();

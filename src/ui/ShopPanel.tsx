@@ -91,11 +91,11 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
 
           {rewards.springsUnlocked && (
             <>
-              <h4 id="shop-springs-head">Springs</h4>
+              <h4 id="shop-springs-head">Bouncy ramps</h4>
               <p className="shopnote">
-                A brass coil that fits onto a ramp <b>you</b> drew and makes it
-                throw <b>four times harder</b>. A spring stays in your bag until a
-                drop that actually <b>bounces off</b> it goes on to win - misses
+                A trampoline ramp that throws the ball <b>four times harder</b>.
+                Tap <b>Bouncy</b>, then draw it. It's only used up when a drop
+                that actually <b>bounces off</b> it goes on to win - misses
                 don't use it up, and neither does a win it had no part in.
                 {' '}{SPRING_PRICE} coins each, and fewer the more you take.
               </p>
@@ -116,13 +116,13 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
               </div>
               <p className="shopnote" id="shop-springcount">
                 In your bag: <b>{rewards.springs}</b>
-                {' '}spring{rewards.springs === 1 ? '' : 's'}.
+                {' '}Bouncy ramp{rewards.springs === 1 ? '' : 's'}.
               </p>
             </>
           )}
           {!rewards.springsUnlocked && (
             <p className="shopnote" id="shop-springs-locked">
-              Springs unlock at level {SPRING_UNLOCK_LEVEL}.
+              Bouncy ramps unlock at level {SPRING_UNLOCK_LEVEL}.
             </p>
           )}
         </div>

@@ -12,7 +12,7 @@
  * No fire - it does not belong in the rain: every fire the twin has becomes
  * a red obstacle of the same size in the same place.
  *
- * 77-80 are the oval exam: tools/ovalLevels.mjs --only=77-80.
+ * 77-80 are the pillar exam: tools/pillarLevels.mjs.
  * Placed directly and play-tested by hand; nothing here runs the solver.
  */
 import { fileURLToPath } from 'node:url';

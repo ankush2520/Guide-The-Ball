@@ -1,124 +1,98 @@
 /* ============================================================
-   THE SPRING
+   THE BOUNCY RAMP
 
-   Drawn ON a ramp the player drew, which is the one thing about
-   this item that has to read instantly: it is not a second piece
-   of board, it is something FITTED to a line they already made.
+   A ramp the player drew with a Bouncy on it - the item the
+   code still calls a `spring` (Segment.spring): the physics is
+   unchanged, the ramp throws the ball SPRING_GAIN times harder.
 
-   So it is painted along the ramp's own axis, standing off the
-   ramp's upper face, and it moves with the ramp because it is
-   read straight off the same four numbers the ramp is drawn
-   from. There is nothing stored here at all.
+   What changed is how it LOOKS, because the old coil fitted on
+   top of a blue ramp had to be explained. This is a TRAMPOLINE,
+   which nobody has to be told about: the whole ramp becomes an
+   orange rubber mat, with two little legs and coil springs under
+   it. Orange, not the goal's green, the obstacle's red or the
+   plain ramp's blue - so which of your ramps is the bouncy one
+   is never a question.
 
-   THE SHAPE IS A COIL, and a coil is the whole reason this
-   works at a glance: a zig-zag says "this compresses", which is
-   a promise about FORCE rather than about direction. The old
-   item was a bar with chevrons on it, and chevrons had to work
-   twice as hard because a bar looks exactly like a ramp - the
-   coil has no such problem, because nothing else on the board
-   is springy.
-
-   BRASS, not the goal's green and not the ramp's blue. Green is
-   the target and nothing else may wear it; blue is "an ordinary
-   line that turns you", and the whole point of this thing is
-   that the line is no longer ordinary. Brass reads as machinery
-   against every sky in the game and against the blue it sits on.
-
-   It breathes - the coil compresses and releases on a slow cycle
-   - because a spring that never moves is a drawing of a spring.
-   It is the only thing on a planning board that is alive, which
-   is also what stops a fitted spring being missed.
+   When it throws the ball the mat SQUASHES down onto its coils
+   and springs back (`squash`, 1 at the hit easing to 0), which
+   is the "boing" the sound plays over.
    ============================================================ */
 import type { Segment } from '../levels/types';
 import { RAMP_HT } from '../physics/constants';
 import { INK } from './palette';
 
-/** The coil's brass, light through dark - the same three-stop shape every
-    other piece on the board is built from. */
-export const SPRING = { light: '#ffd98a', base: '#d69e2e', dark: '#8a5f12' };
-
-/** Turns in the coil. Three, not four: the board is 480 units shown at ~370
-    CSS px and then scaled again by the view, so a turn is only a couple of
-    real pixels wide - four of them read as a scribble rather than as a coil. */
-const TURNS = 3;
-/** How far the coil stands off the ramp's face, fully extended. Sized against
-    the BALL (radius 9) rather than against the ramp: the thing the player is
-    being told is "this throws the ball", so the spring has to be a ball-sized
-    object, not a texture on a line. */
-const RISE = 17;
-/** Along the ramp, how much of it the coil occupies. Kept well inside the
-    ends so the grips a selected ramp puts there are never buried. */
-const SPAN = 0.58;
+/** The mat's rubber, light through dark. */
+export const SPRING = { light: '#ffb14a', base: '#f07a12', dark: '#b8430a' };
 
 /**
- * Paint the spring fitted to `seg`. `clock` is the render clock in seconds,
- * which drives the breathing; pass a constant for a still frame.
+ * Paint the bouncy ramp over `seg`. `clock` is the render clock in seconds;
+ * `squash` (0..1) presses the mat down onto its coils just after a bounce.
  */
-export function drawSpring(ctx: CanvasRenderingContext2D,
-                           seg: Segment, clock: number): void {
+export function drawSpring(ctx: CanvasRenderingContext2D, seg: Segment,
+                           clock: number, squash = 0): void {
   const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1;
   const len = Math.hypot(dx, dy);
   if (len < 1e-6) return;
-  const ux = dx / len, uy = dy / len;      // along the ramp
-  /* The face the coil stands on. A ramp has two, and the ball may arrive at
-     either - but a spring drawn on both sides would be twice the clutter for
-     no extra truth, so it goes on the UPPER one, which is the side the ball
-     comes from on all but a handful of layouts. */
+  const ux = dx / len, uy = dy / len;
+  // the face pointing DOWN-board: the legs and coils hang off it
   let nx = -uy, ny = ux;
-  if (ny > 0) { nx = -nx; ny = -ny; }      // always the side pointing up-board
+  if (ny < 0) { nx = -nx; ny = -ny; }
 
-  /* Breathing. 0 is fully compressed, 1 fully extended - never all the way to
-     either, so it always reads as a spring under load rather than as one that
-     has gone slack or bottomed out. */
-  const t = 0.72 + 0.28 * Math.sin(clock * 2.4);
-  const rise = RISE * t;
-
-  const span = Math.min(len * SPAN, 62);
-  const mx = (seg.x1 + seg.x2) / 2, my = (seg.y1 + seg.y2) / 2;
-  const x0 = mx - ux * span / 2, y0 = my - uy * span / 2;
-
-  /* The coil itself: a zig-zag walked along the ramp, alternating between the
-     face and the top plate. Drawn as ONE path so the outline pass below rings
-     the whole thing rather than each leg. */
-  const pts: [number, number][] = [];
-  const legs = TURNS * 2;
-  for (let i = 0; i <= legs; i++) {
-    const along = span * (i / legs);
-    const up = (i % 2 === 0 ? 0 : rise);
-    pts.push([x0 + ux * along + nx * (up + RAMP_HT), y0 + uy * along + ny * (up + RAMP_HT)]);
-  }
+  const sq = Math.max(0, Math.min(1, squash));
+  const press = sq * 5;                        // how far the mat dips
+  const legLen = 11 - sq * 4;
+  const mx = nx * press, my = ny * press;
 
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  // the ink outline, laid down first and over-drawn, exactly as every shape
-  // on this board is built
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 8.5;
-  ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (const [x, y] of pts.slice(1)) ctx.lineTo(x, y);
-  ctx.stroke();
+  /* LEGS, near each end */
+  for (const f of [0.14, 0.86]) {
+    const bx = seg.x1 + dx * f + nx * RAMP_HT, by = seg.y1 + dy * f + ny * RAMP_HT;
+    ctx.strokeStyle = INK; ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(bx + mx, by + my);
+    ctx.lineTo(bx + nx * (legLen + press) - ux * 3 * (f < 0.5 ? 1 : -1),
+               by + ny * (legLen + press) - uy * 3 * (f < 0.5 ? 1 : -1));
+    ctx.stroke();
+  }
 
-  ctx.strokeStyle = SPRING.base;
-  ctx.lineWidth = 4.6;
-  ctx.stroke();
+  /* COILS under the mat: two short zig-zags, squeezed flat on a bounce */
+  const coilH = 8 - sq * 5;
+  for (const f of [0.34, 0.66]) {
+    const cx = seg.x1 + dx * f, cy = seg.y1 + dy * f;
+    const span = Math.min(18, len * 0.14);
+    ctx.strokeStyle = '#8a8fb0'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= 4; i++) {
+      const along = -span / 2 + span * (i / 4);
+      const down = RAMP_HT + press + (i % 2 ? coilH : 0);
+      const px = cx + ux * along + nx * down, py = cy + uy * along + ny * down;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
 
-  /* THE TOP PLATE - the flat the ball would meet if it landed square on the
-     coil. It is what stops the zig-zag reading as a torn edge, and it moves
-     with the breathing, which is what makes the motion legible as compression
-     rather than as a wobble. */
-  const px = x0 + nx * (rise + RAMP_HT + 1.5), py = y0 + ny * (rise + RAMP_HT + 1.5);
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 9.5;
+  /* THE MAT: the whole ramp, in rubber - drawn over the blue */
+  const x1 = seg.x1 + mx, y1 = seg.y1 + my, x2 = seg.x2 + mx, y2 = seg.y2 + my;
+  ctx.strokeStyle = 'rgba(42,35,80,.22)'; ctx.lineWidth = RAMP_HT * 2 + 6;
+  ctx.beginPath(); ctx.moveTo(x1, y1 + 3); ctx.lineTo(x2, y2 + 3); ctx.stroke();
+  ctx.strokeStyle = INK; ctx.lineWidth = RAMP_HT * 2 + 5;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.strokeStyle = SPRING.base; ctx.lineWidth = RAMP_HT * 2;
+  ctx.stroke();
+  // the lit top edge of the rubber
+  ctx.strokeStyle = SPRING.light; ctx.lineWidth = RAMP_HT * 0.8;
   ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + ux * span, py + uy * span);
+  ctx.moveTo(x1 - nx * RAMP_HT * 0.45, y1 - ny * RAMP_HT * 0.45);
+  ctx.lineTo(x2 - nx * RAMP_HT * 0.45, y2 - ny * RAMP_HT * 0.45);
   ctx.stroke();
-  ctx.strokeStyle = SPRING.light;
-  ctx.lineWidth = 5.5;
-  ctx.stroke();
+  // white stitching dashes that drift slowly, so it reads as alive
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
+  ctx.setLineDash([6, 7]);
+  ctx.lineDashOffset = -clock * 6;
+  ctx.beginPath(); ctx.moveTo(x1 + ux * 6, y1 + uy * 6); ctx.lineTo(x2 - ux * 6, y2 - uy * 6); ctx.stroke();
+  ctx.setLineDash([]);
 
   ctx.restore();
 }

@@ -19,20 +19,6 @@
 
 export type ItemKind = 'spring';
 
-export interface ItemDef {
-  kind: ItemKind;
-  name: string;
-  /** One line in the popup: what it does and how to handle it. */
-  blurb: string;
-}
-
-export const ITEMS: readonly ItemDef[] = [
-  { kind: 'spring', name: 'Spring',
-    blurb: 'Fits onto a ramp YOU drew and makes it throw four times harder. ' +
-           'Tap Use, then tap the ramp you want it on. ' +
-           'Only spent if the ball bounces off it and you win.' },
-];
-
 /** The length the SOLVER draws with. A player's ramp is whatever length they
     drag, between MIN_RAMP and MAX_RAMP; this is the single canonical length
     the generator and the sweeps prove each board winnable at, so "this level

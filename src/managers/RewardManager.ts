@@ -49,7 +49,7 @@ import { CHEST_COSMETICS, DEFAULT_STYLE, cosmeticById, applyStyle, challengeSkin
    is never money, and nothing in the economy can be spent on
    one or paid in one.
 
-   The last four cities of a world (positions 17-20 - the oval
+   The last four cities of a world (positions 17-20 - the pillar
    exams) are the hardest boards in it, and get more. Read off
    the level's place in its COUNTRY, never its id, so a world
    that moves keeps the rule.
@@ -331,7 +331,7 @@ export function prizeValue(p: SpinPrize): number {
 export const PRIZE_UNIT: Record<FlightKind, string> = {
   coins: "coin",
   ramps: "ramp",
-  springs: "spring",
+  springs: "Bouncy ramp",
   spin: "free spin",
 };
 

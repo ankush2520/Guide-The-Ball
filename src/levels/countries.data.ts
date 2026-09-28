@@ -82,7 +82,7 @@ export const COUNTRIES: Country[] = [
 
      The third TWENTY-level world. It follows Emberkeep city for
      city - the same fire, breakable and obstacle mix, the same
-     targets, the same oval-and-spring exam at 57-60 - with WIND
+     targets, the same pillar-and-spring exam at 57-60 - with WIND
      on top: one constant zone early, two from 49, and two that
      oppose each other from 53. It absorbed Needlecrest, whose
      ten patrol boards were the old 41-50.
@@ -99,7 +99,7 @@ export const COUNTRIES: Country[] = [
      The fourth TWENTY-level world. It follows Emberkeep city for
      city - the same hazard counts (its fire turned to red
      obstacles: fire does not belong in the rain), the same
-     targets, the same oval-and-spring exam at 77-80 - with a
+     targets, the same pillar-and-spring exam at 77-80 - with a
      THUNDERSTORM on top: rain always falling, and lightning that
      strikes a fixed ring of points in a fixed order, over and
      over, knocking the ball off its line (levels/storm.ts). It
@@ -117,7 +117,7 @@ export const COUNTRIES: Country[] = [
      The fifth TWENTY-level world, and it is under water. It
      follows Emberkeep city for city - the same hazard counts
      (its fire turned to red obstacles: nothing burns down
-     here), the same targets, the same oval-and-spring exam at
+     here), the same targets, the same pillar-and-spring exam at
      97-100 - with CRABS on top: each walks the same looping
      pattern (orbit, figure-8, flower, scuttle) forever, and
      pinches the ball on contact (levels/crab.ts). Background

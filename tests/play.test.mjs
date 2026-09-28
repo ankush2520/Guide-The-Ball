@@ -258,7 +258,7 @@ const lvinfo = await page.evaluate(() => {
    way: build a country and forget to give it the next free block and the
    numbering splits, which is exactly what it used to do. */
 const PLAN_ID_GAPS = '';
-/* Every oval exam patrols up and down (17-20, 37-40, 57-60). Emberkeep's
+/* Every pillar exam patrols up and down (17-20, 37-40, 57-60). Emberkeep's
    middle cities patrol side to side (28, 31, 34, 36), and Windemere mirrors
    them in each later world (48, 51, 54, 56 / 68, 71, 74, 76 / 88, 91, 94, 96). */
 const PLAN_MOVING  = '17,18,19,20,28,31,34,36,37,38,39,40,48,51,54,56,57,58,59,60,68,71,74,76,77,78,79,80,88,91,94,96,97,98,99,100';
@@ -545,8 +545,8 @@ const stat = await page.evaluate(async () => {
   let wallsStale = 0;
   LEVELS.forEach(lv => {
     const fresh = buildWalls(lv, lv.target);
-    /* an oval's rim is appended after the target's own walls (levels/ovals.ts) */
-    if (fresh.length + (lv.ovals || []).length * 64 !== lv.walls.length) { wallsStale++; return; }
+    /* a pillar's segments are appended after the target's own walls (levels/pillars.ts) */
+    if (lv.walls.length < fresh.length) { wallsStale++; return; }
     for (let i = 0; i < fresh.length; i++){
       const f = fresh[i], w = lv.walls[i];
       if (f.x1!==w.x1 || f.y1!==w.y1 || f.x2!==w.x2 || f.y2!==w.y2) wallsStale++;

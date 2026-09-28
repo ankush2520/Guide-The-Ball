@@ -131,7 +131,7 @@ export function WinOverlay() {
               charged for by the win, so the win is where it has to be shown -
               a bag that is quietly one lighter afterwards reads as a bug. */}
           {card.springs > 0 && (
-            <span className="reward spent" id="ov-springs" title="Springs used">
+            <span className="reward spent" id="ov-springs" title="Bouncy ramps used">
               <i className="springmark" /><b>&minus;{card.springs}</b>
             </span>
           )}

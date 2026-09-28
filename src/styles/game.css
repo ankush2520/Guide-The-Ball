@@ -146,8 +146,6 @@
   }
 
   /* the bag: the full inventory, as a plain round icon beside the gear */
-  .iconbtn.bag{width:29px;height:29px}
-  .iconbtn.bag .bagicon{margin-top:4px}
 
   /* ============================================================
      THE LEVEL CHIP - in the bar, right of the +
@@ -269,31 +267,15 @@
      the board draws the same thing bigger, and the promise both are making is
      about FORCE, not about direction. Built from a repeating gradient rather
      than an SVG so it costs nothing and scales with the row it is in. */
-  .springmark{width:18px;height:9px;flex:none;
-              display:inline-block;position:relative;border-radius:2px;
-              background:
-                repeating-linear-gradient(60deg,
-                  var(--spring) 0 2px, var(--spring-ink) 2px 3.4px,
-                  transparent 3.4px 5.4px),
-                linear-gradient(var(--spring-lit),var(--spring));
+  .springmark{width:18px;height:6px;flex:none;margin-bottom:4px;
+              display:inline-block;position:relative;border-radius:4px;
+              background:linear-gradient(#ffb14a,#f07a12);
               box-shadow:0 0 0 1.5px var(--edge)}
-  /* the plate the ball would meet, which is what stops the zig-zag reading as
-     a torn edge - the board draws this too */
-  .springmark::after{content:'';position:absolute;left:0;right:0;top:-2px;
-                     height:2.5px;border-radius:1.5px;
-                     background:var(--spring-lit);
-                     box-shadow:0 0 0 1.2px var(--edge)}
+  /* its two little legs */
+  .springmark::after{content:'';position:absolute;left:2px;right:2px;top:6px;
+                     height:4px;border-left:2px solid var(--edge);border-right:2px solid var(--edge)}
   .counter.coins{display:inline-flex;align-items:center;gap:5px;padding-left:7px}
   .counter.coins b{color:var(--gold-ink)}
-
-  /* a satchel: a body and a handle, in the one ink pen */
-  .bagicon{position:relative;width:13px;height:10px;margin-top:3px;flex:none;
-           display:inline-block;border-radius:3px 3px 4px 4px;
-           background:linear-gradient(#ffb95c,#e0801c);
-           box-shadow:0 0 0 1.5px var(--edge)}
-  .bagicon::before{content:'';position:absolute;left:3px;top:-5px;width:4px;height:4px;
-                   border:1.5px solid var(--edge);border-bottom:none;
-                   border-radius:4px 4px 0 0}
 
   /* a used ball: the same pip, hollow */
   .counter.balls .pip.used{background:transparent;box-shadow:inset 0 0 0 2px #b9b6cc}
@@ -581,7 +563,7 @@
   #select{z-index:50} #overlay{z-index:55} #giftpanel{z-index:57} #noballs{z-index:60}
   /* settings sits UNDER the two panels it opens, so closing either of them
      lands back on it rather than dismissing both */
-  #settingspanel{z-index:65} #inventorypanel{z-index:66} #shoppanel{z-index:68}
+  #settingspanel{z-index:65} #shoppanel{z-index:68}
   #spinpanel{z-index:70} #infopanel{z-index:80}
 
   /* ============================================================
@@ -813,16 +795,11 @@
   .flyramp{width:26px;height:8px;border-radius:4px;background:var(--ramp);
            box-shadow:0 0 0 2px var(--edge)}
   /* a spring in flight: the chip mark's coil, bigger */
-  .flyspring{width:24px;height:12px;border-radius:2px;position:relative;
-             background:
-               repeating-linear-gradient(60deg,
-                 var(--spring) 0 2.6px, var(--spring-ink) 2.6px 4.2px,
-                 transparent 4.2px 7px),
-               linear-gradient(var(--spring-lit),var(--spring));
+  .flyspring{width:26px;height:8px;border-radius:5px;position:relative;
+             background:linear-gradient(#ffb14a,#f07a12);
              box-shadow:0 0 0 2px var(--edge)}
-  .flyspring::after{content:'';position:absolute;left:0;right:0;top:-3px;
-                    height:3px;border-radius:2px;background:var(--spring-lit);
-                    box-shadow:0 0 0 1.6px var(--edge)}
+  .flyspring::after{content:'';position:absolute;left:3px;right:3px;top:8px;
+                    height:5px;border-left:2px solid var(--edge);border-right:2px solid var(--edge)}
   /* a free spin: the wheel's own gold, quartered like a wedge */
   .flyspin{width:19px;height:19px;border-radius:50%;
            background:conic-gradient(#ffd76b 0 25%,#d98b0c 0 50%,#ffd76b 0 75%,#d98b0c 0);
@@ -867,51 +844,6 @@
   .spincard{max-width:270px}
   .setcard{max-width:320px}
   .shopcard{max-width:330px;text-align:left}
-  /* ---- the inventory ---- */
-  .invcard{max-width:330px}
-  .invcard .sub{margin-bottom:12px}
-  .itemgrid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:14px}
-  .itemtile{display:grid;grid-template-columns:auto 1fr auto;align-items:center;
-            column-gap:10px;row-gap:2px;text-align:left;
-            padding:10px 12px;border-radius:18px;
-            background:var(--panel-2);
-            border:var(--line) solid var(--edge);box-shadow:var(--lift);
-            color:var(--ink);font:inherit;cursor:pointer}
-  .itemtile:hover:not(:disabled){filter:brightness(.97)}
-  .itemtile:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--edge)}
-  .itemtile:disabled{opacity:.4;cursor:not-allowed}
-  .itemtile .itemart{grid-row:1 / span 3}
-  .itemname{font-size:16px;font-weight:900}
-  .itemcount{font-size:16px;font-weight:900;color:var(--ink)}
-  .itemspare{grid-column:3;justify-self:end;font-size:10.5px;font-weight:900;
-             color:var(--gold-ink);background:#ffe7a3;border-radius:999px;padding:1px 6px}
-  .itemblurb{grid-column:2 / span 2;font-size:11.5px;line-height:1.35;color:var(--muted)}
-  .emptytray{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:var(--muted)}
-  .itemart{width:52px;height:52px;border-radius:14px;display:block;position:relative;
-           background:#e4f3ff;box-shadow:inset 0 0 0 2px rgba(42,35,80,.12)}
-  /* the ramp as the board draws it: a candy-blue bar in the ink pen */
-  .rampart::after{content:'';position:absolute;left:7px;right:7px;top:21px;height:10px;
-                  border-radius:6px;background:linear-gradient(#5aaaff,var(--ramp));
-                  box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
-                  transform:rotate(-20deg)}
-  /* THE SPRING AS THE BOARD DRAWS IT, which means drawing the RAMP too: the
-     whole item is "this goes on a line you drew", and a coil floating on its
-     own in the bag would be the one picture that fails to say so. Blue bar,
-     brass coil standing on it, exactly the stack the board paints. */
-  .springart{background:#fff6e3}
-  .springart::after{content:'';position:absolute;left:6px;right:6px;top:26px;height:9px;
-                    border-radius:5px;background:var(--ramp);
-                    box-shadow:0 0 0 2.5px var(--edge), 0 3px 0 rgba(42,35,80,.2);
-                    transform:rotate(-14deg)}
-  .springart::before{content:'';position:absolute;left:15px;top:13px;z-index:1;
-                     width:22px;height:11px;border-radius:2px;
-                     background:
-                       repeating-linear-gradient(60deg,
-                         var(--spring) 0 2.4px, var(--spring-ink) 2.4px 3.8px,
-                         transparent 3.8px 6.4px),
-                       linear-gradient(var(--spring-lit),var(--spring));
-                     box-shadow:0 0 0 2px var(--edge);
-                     transform:rotate(-14deg)}
   .shopcard .big,.shopcard .sub{text-align:center}
   .shopcard .sub{margin-bottom:10px}
   .coinamt{color:var(--gold-ink);font-weight:900;white-space:nowrap}
@@ -1236,7 +1168,6 @@
     .levelpill .lvid{font-size:12px}
     .flash,.drop-cue{height:16px;line-height:16px;font-size:11px}
     .hud{gap:6px}
-    .iconbtn.bag{width:26px;height:26px}
     /* the gap here is 6px, not 8: a little more room so the board's ring
        does not touch the chips' drop shadow */
     .board-slot{margin-top:7px}
@@ -1305,7 +1236,7 @@
 .swatch.trail{width:44px;height:10px;border-radius:5px}
 .swatch.ramp{width:44px;height:10px;border-radius:5px;box-shadow:0 0 0 2px var(--ink);transform:rotate(-12deg)}
 
-/* thunder: a bolt on storm-grey; the giant rock: the wall's stone, oval */
+/* thunder: a bolt on storm-grey; the pillar: the wall's stone */
 .sw.th{border-radius:50%;background:radial-gradient(circle,#fff6b0 0 28%,#8a96b8 30%);
        box-shadow:0 0 0 2px var(--edge)}
 .sw.ov{border-radius:50%/40%;width:22px;background:linear-gradient(#b4b9d4,#5b6188);
@@ -1365,3 +1296,15 @@
 /* the general button style sets a min size - dots are dots */
 .worlddots button{flex:none;min-width:0;min-height:0;height:9px;line-height:0;font-size:0}
 .worlddots button:not(.on){width:9px}
+
+/* THE BOUNCY BUTTON in the top bar: the trampoline mark and how many you
+   own. Armed, it glows orange until a ramp is drawn or tapped. */
+.bouncybtn{flex:none;display:inline-flex;align-items:center;gap:5px;height:29px;padding:0 9px 0 8px;
+           border-radius:999px;background:var(--panel);border:var(--line) solid var(--edge);
+           box-shadow:var(--lift);font:inherit;font-weight:900;color:#b8430a;cursor:pointer}
+.bouncybtn b{font-size:13px}
+.bouncybtn.armed{background:#ffe2bf;box-shadow:0 0 0 3px rgba(240,122,18,.55), var(--lift);
+                 animation:bouncyglow 1s ease-in-out infinite alternate}
+.bouncybtn:disabled{opacity:.45;cursor:not-allowed}
+@keyframes bouncyglow{to{box-shadow:0 0 0 6px rgba(240,122,18,.25), var(--lift)}}
+@media (prefers-reduced-motion: reduce){.bouncybtn.armed{animation:none}}

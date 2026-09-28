@@ -71,12 +71,12 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
 
   return (
     <div data-ui className="offerstrip" id="spring-offer">
-      <span className="offertext">This one needs a spring.</span>
+      <span className="offertext">This one needs a Bouncy ramp.</span>
       <div className="row pair">
         <button id="btn-offer-shop" onClick={onShop}>Shop</button>
         {adsReady && (
           <button id="btn-offer-spring-ad" disabled={waiting} onClick={watch}>
-            {waiting ? 'Loading ad…' : 'Watch ad: get 1 spring'}
+            {waiting ? 'Loading ad…' : 'Watch ad: get 1 Bouncy ramp'}
           </button>
         )}
       </div>

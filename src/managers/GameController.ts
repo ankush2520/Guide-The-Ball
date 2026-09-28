@@ -175,6 +175,8 @@ export class GameController {
       spring fires on a real Matter contact, and a contact is not something
       this side can re-derive from a position. */
   private springFired: boolean[] = [];
+  /** When each bouncy ramp last threw the ball (render clock), for its squash. */
+  springHitAt: number[] = [];
   private tutIntroDone = false;
   private tutRetry = false;
   /** Set on the walkthrough's own drop, so a miss knows to coach a retry. */
@@ -353,7 +355,7 @@ export class GameController {
     track('hint_used', { level: this.levels.level.id });
     // short: the caption is one line on a phone
     this.showFlash('Trace the dashed ramp' + (h.ramps.length > 1 ? 's' : '')
-      + (h.ramps.some(r => r.spring) ? ' + spring' : '')
+      + (h.ramps.some(r => r.spring) ? ' (make it Bouncy)' : '')
       + (h.t0 !== undefined ? ', drop on the pulse' : '') + '. Max 2★');
     this.changed();
   }
@@ -408,6 +410,13 @@ export class GameController {
     if (!this.levels.rampAllowed(d)) { this.showFlash(LANE_TIP); return false; }
     if (!this.levels.canPlaceRamp && !this.useExtraRamp()) { this.changed(); return false; }
     const ok = this.levels.addRamp(d);
+    /* BOUNCY ARMED: the ramp just drawn IS the bouncy ramp */
+    if (ok && this.armedSpring) {
+      this.armedSpring = false;
+      this.levels.springRamp(this.levels.rampsUsed - 1);
+      this.showFlash('Bouncy ramp! It throws the ball 4x harder. Only used up if you win.');
+      if (this.springCoach) this.endSpringCoach();
+    }
     this.notifyRampsChanged();
     return ok;
   }
@@ -476,10 +485,6 @@ export class GameController {
       case 'spring': {
         if (!this.itemUnlocked('spring')) return false;
         if (this.itemCount('spring').left <= 0) return false;
-        if (this.levels.rampsUsed === 0) {
-          this.showFlash('Draw a ramp first - a spring goes on one of yours.');
-          return false;
-        }
         this.armedSpring = true;
         this.selected = -1;
         this.dragging = null;
@@ -490,17 +495,26 @@ export class GameController {
     }
   }
 
+  /** The top bar's Bouncy button: arm the next ramp drawn (or a tap on one
+      already drawn) as a bouncy ramp - or, pressed again, put it back. */
+  toggleBouncy(): void {
+    if (this.armedSpring) { this.disarmSpring(); return; }
+    if (!this.placeItem('spring')) return;
+    this.showFlash(this.canDraw ? 'Draw your bouncy ramp - or tap a ramp to make it bouncy.'
+                                : 'Tap one of your ramps to make it bouncy.');
+  }
+
   /** The armed spring meets a ramp. Returns true if it went on. */
   fitSpring(rampIx: number): boolean {
     if (!this.armedSpring) return false;
     this.armedSpring = false;
     if (!this.levels.springRamp(rampIx)) {
-      this.showFlash('That ramp already has a spring.');
+      this.showFlash('That ramp is already bouncy.');
       this.notifyRampsChanged();
       return false;
     }
     this.selected = rampIx;
-    this.showFlash('Spring fitted - that ramp now throws four times harder.');
+    this.showFlash('Bouncy! That ramp now throws the ball 4x harder.');
     if (this.springCoach) this.endSpringCoach();
     this.notifyRampsChanged();
     return true;
@@ -625,7 +639,14 @@ export class GameController {
     /* Which sprung ramps have actually thrown the ball. Indexed by RAMP, and
        read straight off the engine for the reason above. */
     for (let k = 0; k < b.firedSpring.length; k++)
-      if (b.firedSpring[k]) this.springFired[k] = true;
+      if (b.firedSpring[k] && !this.springFired[k]) {
+        this.springFired[k] = true;
+        /* BOING: the mat squashes (Renderer reads springHitAt), a big bendy
+           sound, and an orange burst where it threw the ball */
+        this.springHitAt[k] = this.clock;
+        Sound.bouncy();
+        this.renderer.particles.burst(b.x, b.y, 0, -1, '#f07a12', 14, 4.2, Math.PI, 600, 2.6);
+      }
 
     /* a box the ball opened this step. Before the hit reaction, so a box sat
        against a wall pops on the frame it is touched rather than the one
@@ -770,7 +791,7 @@ export class GameController {
        again, so the run starts with those already accounted for. */
     this.boxSeen = this.levels.sessionBoxes.slice();
     // whether a spring fired is a fact about THIS drop, not the board
-    this.springFired = [];
+    this.springFired = []; this.springHitAt = [];
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.acc = 0;
 
@@ -891,7 +912,7 @@ export class GameController {
     this.selected = -1; this.dragging = null; this.armedSpring = false; this.draft = null;
     this.levels.restartBoard();
     this.levels.setBoxesClaimed(this.rewards.boxClaimed(this.levels.levelIndex));
-    this.boxSeen = []; this.springFired = [];
+    this.boxSeen = []; this.springFired = []; this.springHitAt = [];
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
     this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
@@ -1047,7 +1068,7 @@ export class GameController {
     this.capture = null;
     this.selected = -1; this.dragging = null; this.lastResult = null;
     this.armedSpring = false; this.draft = null;
-    this.boxSeen = []; this.springFired = [];
+    this.boxSeen = []; this.springFired = []; this.springHitAt = [];
     this.winCard = null; this.pendingCard = null; this.gift = null;
     this.seenHit = 0; this.seenBroke = 0; this.squash.amt = 0;
     this.renderer.particles.clear(); this.renderer.trail.clear();
@@ -1083,8 +1104,8 @@ export class GameController {
        the walkthrough shows how to use one. */
     if (this.rewards.springGiftDue(this.levels.level.id)) {
       this.queueIntro({
-        key: 'spring', icon: 'spring', title: 'New power: Spring!',
-        text: 'Put it on a ramp you drew and the ball launches 4x harder. Only used up if you win.',
+        key: 'spring', icon: 'spring', title: 'New power: Bouncy Ramp!',
+        text: 'Tap Bouncy, then draw a ramp: a trampoline that throws the ball 4x harder. Only used up if you win.',
         onDone: () => {
           this.markSeen('spring');
           const n = this.rewards.claimSpringGift();
@@ -1324,8 +1345,8 @@ export class GameController {
   private teachSpringBoard(): void {
     if (!this.levels.level.needsSpring) return;
     this.showFlash(this.rewards.springs > 0
-      ? 'A plain ramp cannot reach this one - put a spring on yours.'
-      : 'A plain ramp cannot reach this one - the shop has springs.');
+      ? 'A plain ramp cannot reach this one - use a Bouncy ramp.'
+      : 'A plain ramp cannot reach this one - the shop has Bouncy ramps.');
   }
 
   /** Say so when the board's target holds a gift, every visit, until it has
@@ -1397,6 +1418,7 @@ export class GameController {
       /* Whether a spring is armed and waiting for a ramp to land on, so the
          board can say so while it is. */
       armedSpring: this.armedSpring,
+      springHitAt: this.springHitAt,
       /* read from the same constants the hit-test uses: these were once
          literals, and the × was resized for the finger while still being
          painted at its old size */
@@ -1463,7 +1485,7 @@ export class GameController {
     if (step === 'drop') return 'Tap anywhere to drop the ball.';
     if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
     if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
-    if (this.armedSpring) return 'Tap one of your ramps to fit the spring.';
+    if (this.armedSpring) return 'Draw your bouncy ramp, or tap a ramp to make it bouncy.';
     if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
     if (this.levels.rampsLeft <= 0 && !this.spareAvailable)
       return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';

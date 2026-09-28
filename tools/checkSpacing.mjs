@@ -11,8 +11,7 @@
  *
  * so every gap on the board is one the ball can be routed through. An eater
  * crab's whole loop is held to the same gap from every hazard. The same
- * gap is held between every hazard and the rim of a solid OVAL - measured to
- * its collidable surface, the rim grown by the wall half-thickness. Every
+ * gap is held between every hazard and the surface of a PILLAR. Every
  * pair on every level is measured; a level FAILS if any one pair is short,
  * and the script exits non-zero if any level fails.
  *
@@ -28,11 +27,10 @@ const [A, B] = (process.argv[2] || '1-100').split('-').map(Number);
 const out = await esbuild.build({
   stdin: { contents: `export { LEVELS } from './src/levels/index';
                       export { BALL_R, WALL_HT } from './src/physics/constants';
-                      export { ovalPoint } from './src/levels/ovals';
                       export { crabPathAt } from './src/levels/crab';`, resolveDir: root, loader: 'ts' },
   bundle: true, write: false, format: 'esm', platform: 'node',
 });
-const { LEVELS, BALL_R, WALL_HT, ovalPoint, crabPathAt } = await import('data:text/javascript;base64,' +
+const { LEVELS, BALL_R, crabPathAt } = await import('data:text/javascript;base64,' +
   Buffer.from(out.outputFiles[0].text).toString('base64'));
 const MIN_GAP = 2 * BALL_R;
 
@@ -55,19 +53,13 @@ for (const L of LEVELS.filter(l => l.id >= A && l.id <= B)){
       if (gap < MIN_GAP)
         bad.push(`${a.k}(${a.x},${a.y},r${a.r}) - ${b.k}(${b.x},${b.y},r${b.r}) gap ${gap.toFixed(1)}px`);
     }
-  /* hazard to oval rim: outside it, and MIN_GAP clear of its surface */
-  for (const [k, ov] of (L.ovals || []).entries()){
-    const rim = Array.from({ length: 720 }, (_, i) => ovalPoint(ov, i / 720 * Math.PI * 2));
-    const a = -(ov.angle ?? 0) * Math.PI / 180;
+  /* hazard to pillar: MIN_GAP clear of its surface (a column with a round foot) */
+  for (const [k, p] of (L.pillars || []).entries()){
+    const hw = p.w / 2, cy = p.bottom - hw;
     for (const h of hz){
-      const dx = h.x - ov.x, dy = h.y - ov.y;
-      const u = dx * Math.cos(a) - dy * Math.sin(a), v = dx * Math.sin(a) + dy * Math.cos(a);
-      const inside = (u / ov.rx) ** 2 + (v / ov.ry) ** 2 <= 1;
-      const gap = inside ? -Infinity
-        : Math.min(...rim.map(p => Math.hypot(p.x - h.x, p.y - h.y))) - h.r - WALL_HT;
+      const gap = Math.hypot(h.x - p.x, h.y < cy ? 0 : h.y - cy) - hw - h.r;
       min = Math.min(min, gap);
-      if (gap < MIN_GAP)
-        bad.push(`${h.k}(${h.x},${h.y},r${h.r}) - oval ${k} ${inside ? 'INSIDE the oval' : `gap ${gap.toFixed(1)}px`}`);
+      if (gap < MIN_GAP) bad.push(`${h.k}(${h.x},${h.y},r${h.r}) - pillar ${k} gap ${gap.toFixed(1)}px`);
     }
   }
   /* a crab's WHOLE loop keeps the same gap from every hazard */

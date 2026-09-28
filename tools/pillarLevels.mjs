@@ -2,7 +2,7 @@
  * The exam boards' PILLAR - replaces the giant oval on every level that had
  * one (positions 17-20 of each world).
  *
- *   node tools/pillarLevels.mjs              # every oval level
+ *   node tools/pillarLevels.mjs              # every pillar level
  *   node tools/pillarLevels.mjs 17 38 99     # just these
  *
  * The idea the oval was standing in for is a LOOP: the ball drops down one
@@ -55,7 +55,6 @@ const clearOfPillar = (p, c) => pillarDist(p, c) - c.r >= GAP;
 function build(raw, cfg, seed){
   const r = rng(seed);
   const L = structuredClone(raw);
-  delete L.ovals;
   const t = L.target, tm = L.targetMove;
   const right = (tm ? tm.x0 : t.x) > W / 2;
   const tx = tm ? tm.x0 : t.x;
@@ -232,7 +231,7 @@ async function prove(ids, budgetMs){
 /* ---------------- driver ---------------- */
 const raws = await loadRaw();
 const want = process.argv.slice(2).filter(a => /^\d+$/.test(a)).map(Number);
-const ids = (want.length ? want : raws.filter(l => l.ovals && l.ovals.length).map(l => l.id));
+const ids = (want.length ? want : raws.filter(l => l.pillars && l.pillars.length).map(l => l.id));
 const orig = Object.fromEntries(ids.map(id => [id, structuredClone(raws.find(l => l.id === id))]));
 const crabPathAt = await crabPath();
 
@@ -298,5 +297,5 @@ const body = Object.keys(all).map(Number).sort((a, b) => a - b).map(id => {
 fs.writeFileSync(HINTS, src.replace(/HINTS: Record<number, Hint> = \{[\s\S]*\};/, `HINTS: Record<number, Hint> = {\n${body}\n};`));
 
 console.log(`\npillars: ${Object.keys(done).length} of ${ids.length}` +
-            (pending.length ? `; still an oval (no placement passed): ${pending.join(', ')}` : ''));
+            (pending.length ? `; left as they were (no placement passed): ${pending.join(', ')}` : ''));
 void spawnSync;

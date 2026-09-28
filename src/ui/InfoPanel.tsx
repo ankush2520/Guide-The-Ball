@@ -67,7 +67,7 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              star rating. You start with <b>{STARTING_COINS}</b>, and the daily
              wheel pays coins too.</p>
           <p>Coins are spent in the <b>shop</b>, behind the gear:
-             <b>{RAMP_PRICE}</b> coins a spare ramp, <b>{SPRING_PRICE}</b> a spring,
+             <b>{RAMP_PRICE}</b> coins a spare ramp, <b>{SPRING_PRICE}</b> a Bouncy ramp,
              and both come cheaper by the bundle. Nothing converts back the
              other way.</p>
 
@@ -82,23 +82,20 @@ export function InfoPanel({ onClose }: { onClose: () => void }) {
              needed one earns at most <b>{HELPED_MAX_STARS} stars</b>: solve it without
              help for three.</p>
 
-          <h4>Springs</h4>
-          <p>From level <b>{SPRING_UNLOCK_LEVEL}</b> you can carry your own
-             <b> springs</b>, and the first one is free. A spring does not go on
-             the board &mdash; it goes on a <b>ramp you drew</b>. Draw the ramp
-             first, then open the bag, tap the spring, and tap that ramp.</p>
-          <p>It is a <b>brass coil</b>, and the ramp still bounces the ball
-             exactly the way it always did &mdash; the angle you drew it at is
-             the angle the ball mirrors off. What the spring adds is
-             <b>speed</b>: the ball comes off that ramp <b>four times faster</b>
-             than it went in, which no ordinary ramp can do, since every normal
-             bounce loses a little. That is the one thing it is for, and it is
-             why a few boards late in the game cannot be solved without one.</p>
-          <p>A spring is only taken out of your bag if the ball actually
-             <b> bounces off</b> it and that drop <b>wins</b>. Fit it, miss,
-             move the ramp, drop again as often as you like &mdash; it costs
-             nothing until it works. More are <b>{SPRING_PRICE}</b> coins each
-             in the shop.</p>
+          <h4>Bouncy ramps</h4>
+          <p>From level <b>{SPRING_UNLOCK_LEVEL}</b> you get <b>Bouncy ramps</b>,
+             and the first two are free. Tap the orange <b>Bouncy</b> button at
+             the top, then draw a ramp: it comes out as an orange
+             <b> trampoline</b>. (With Bouncy on you can also tap a ramp you
+             already drew to make it bouncy.)</p>
+          <p>It bounces the ball the way any ramp does &mdash; the angle you
+             drew is the angle the ball mirrors off &mdash; but the ball comes
+             off <b>four times faster</b>, which no ordinary ramp can do. That
+             is why a few boards late in the game need one.</p>
+          <p>A Bouncy ramp is only used up if the ball actually
+             <b> bounces off</b> it and that drop <b>wins</b>. Miss, move it,
+             drop again as often as you like &mdash; it costs nothing until it
+             works. More are <b>{SPRING_PRICE}</b> coins each in the shop.</p>
 
           <h4>Mystery boxes</h4>
           <p>Some boards carry a <b>chest</b>. Hit it with the ball on the way

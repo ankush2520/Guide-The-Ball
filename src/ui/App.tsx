@@ -33,7 +33,6 @@ import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { ShopPanel } from './ShopPanel';
-import { InventoryPanel } from './InventoryPanel';
 import { CoinFlight } from './CoinFlight';
 import { Confetti } from './Confetti';
 import { Coach } from './Coach';
@@ -41,7 +40,7 @@ import { Sound } from '../audio/Sound';
 import { Ads } from '../ads/Ads';
 import { track, sessionMs } from '../analytics/track';
 
-type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'items' | 'chest';
+type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'chest';
 /** The bottom of the panel layers: above the win card (55), the gift (57) and
     the intro card (54), below the confetti (90) and the coin flight (95). */
 const PANEL_Z = 60;
@@ -173,7 +172,6 @@ function Game() {
                                              onOpenInfo={() => open('info')}
                                              onOpenShop={() => open('shop')}
                                              onOpenSpin={() => open('spin')} />;
-      case 'items':    return <InventoryPanel onClose={done} onShop={() => open('shop')} />;
       case 'shop':     return <ShopPanel onClose={done} />;
       case 'spin':     return <SpinPanel onClose={done} />;
       case 'info':     return <InfoPanel onClose={done} />;
@@ -201,7 +199,6 @@ function Game() {
       <div className="app"
            onPointerDown={e => { if (e.target === e.currentTarget && !controller.boardInputHeld) controller.drop(); }}>
         <Hud onOpenSettings={() => open('settings')}
-             onOpenItems={() => open('items')}
              onOpenLevels={() => open('levels')} />
         <GameCanvas>
           <Status />

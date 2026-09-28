@@ -1,6 +1,5 @@
-/* A PILLAR, built for the physics as wall segments - the same trick as the
-   oval (levels/ovals.ts): a wall already collides with honest normals, so a
-   column needs nothing new from the engine.
+/* A PILLAR, built for the physics as wall segments: a wall already collides
+   with honest normals, so a column needs nothing new from the engine.
 
    The segments are inset by the wall half-thickness, because a wall's
    surface is WALL_HT out from its centre line: that way the surface the

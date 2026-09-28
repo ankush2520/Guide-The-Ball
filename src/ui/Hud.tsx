@@ -29,11 +29,10 @@ import { useAdOffer, useAdsReady } from '../ads/useAdOffer';
 
 interface Props {
   onOpenSettings: () => void;
-  onOpenItems: () => void;
   onOpenLevels: () => void;
 }
 
-export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
+export function Hud({ onOpenSettings, onOpenLevels }: Props) {
   const { levels, rewards, controller } = useGame();
   useGameVersion();
   const adsReady = useAdsReady();
@@ -61,6 +60,7 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
   /* The walkthrough is asking for a ramp to be drawn: the counter is what
      says how many the board will take, so it is what leans in. */
   const coached = controller.tutorialStep() === 'draw';
+  const bouncyLeft = controller.itemCount('spring').left;
   /* THE HINT BUTTON: only on a board that has a proven hint, not yet shown.
      The first hint in the game is free - it teaches the feature - and every
      one after that is a watched ad. With no ad to show, only the free one. */
@@ -126,11 +126,17 @@ export function Hud({ onOpenSettings, onOpenItems, onOpenLevels }: Props) {
             {hintFree && <i className="dot" />}
           </button>
         )}
-        <button id="btn-inventory" className="iconbtn bag"
-                title="Items you own" aria-label="Items you own"
-                disabled={!planning} onClick={onOpenItems}>
-          <i className="bagicon" />
-        </button>
+        {/* BOUNCY: tap, then draw - that ramp is a trampoline. Glows while
+            armed; tap again to put it back. From level 10 on. */}
+        {controller.itemUnlocked('spring') && (
+          <button id="btn-bouncy" className={'bouncybtn' + (controller.armedSpring ? ' armed' : '')}
+                  title="Bouncy ramp - tap, then draw a ramp. It throws the ball 4x harder."
+                  aria-label="Bouncy ramp" aria-pressed={controller.armedSpring}
+                  disabled={!planning || (!controller.armedSpring && bouncyLeft <= 0)}
+                  onClick={() => controller.toggleBouncy()}>
+            <i className="springmark" /><b id="bouncy-count">{bouncyLeft}</b>
+          </button>
+        )}
         <button id="btn-settings" className={'iconbtn gear' + (ready ? ' ready' : ' locked')}
                 title={ready ? 'Settings — a daily spin is ready' : 'Settings'}
                 aria-label="Settings" onClick={onOpenSettings}>

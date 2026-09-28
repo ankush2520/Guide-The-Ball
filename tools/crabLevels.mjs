@@ -13,7 +13,7 @@
  * shared by a dancing pair) whose whole loop is kept clear of every hazard,
  * the target and the drop.
  *
- * 97-100 are the oval exam: tools/ovalLevels.mjs --only=97-100.
+ * 97-100 are the pillar exam: tools/pillarLevels.mjs.
  * Placed directly and play-tested by hand; nothing here runs the solver.
  */
 import { fileURLToPath } from 'node:url';

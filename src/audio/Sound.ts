@@ -418,6 +418,17 @@ class SoundEngine {
     }
   }
 
+  /** A BOUNCY RAMP throwing the ball: a big, bendy trampoline "boing",
+      bigger than an obstacle's, so the moment the speed arrives is heard. */
+  bouncy(): void {
+    if (this.isMuted) return;
+    if (!this.ctx || this.ctx.state !== "running") { this.nudge(); return; }
+    const t = this.ctx.currentTime;
+    this.sweep(this.sfx!, 160, 620, 300, t, 0.22, 0.34, "triangle");
+    this.sweep(this.sfx!, 80, 310, 150, t, 0.2, 0.08, "square");
+    this.sweep(this.sfx!, 110, 110, 50, t, 0.12, 0.24, "sine"); // the thump under it
+  }
+
   /* ============================================================
      WEATHER
 

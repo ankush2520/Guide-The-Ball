@@ -232,15 +232,14 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
 
-    /* 0. A SPRING IS ARMED. It beats every other reading of a tap, including
-          the controls of whatever happens to be selected: the player has just
-          said "this one goes on a ramp", and the next thing they touch is the
-          answer. On a ramp it fits; anywhere else it goes back in the bag. */
+    /* 0. BOUNCY IS ARMED. A tap on one of the player's ramps makes THAT
+          ramp bouncy. Anything else carries on below: a drag draws the
+          bouncy ramp (see commitDraft), and a plain tap puts it back rather
+          than dropping the ball (see endGesture). */
     if (controller.armedSpring) {
       const onRamp = levels.pickRamp(p.x, p.y);
-      if (onRamp >= 0) controller.fitSpring(onRamp);
-      else controller.disarmSpring();
-      return;
+      if (onRamp >= 0) { controller.fitSpring(onRamp); return; }
+      controller.selected = -1;
     }
 
     /* 1. the selected ramp's own controls win over everything else */
@@ -333,6 +332,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       if (drew) { t?.ripple?.remove(); return; }
     }
     if (!t) return;
+    /* a tap with Bouncy armed and nothing drawn: put it back, don't drop */
+    if (controller.armedSpring) { t.ripple?.remove(); controller.disarmSpring(); return; }
     t.ripple?.classList.add('go');
     controller.drop();
   };

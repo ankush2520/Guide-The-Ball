@@ -105,28 +105,22 @@ export const GLOSSARY: GlossaryEntry[] = [
           'drop for when the crabs are out of the way.',
     title: 'Crab', icon: 'crab', intro: 'Walks the same loop every time. Get pinched and your drop is over!',
     highlight: (lv, t) => (lv.crabs ?? []).map(c => { const p = crabAt(c, t); return { x: p.x, y: p.y, r: c.r + 8 }; }) },
-  { key: 'oval', cls: 'ov', has: lv => lv.ovals.length > 0, name: 'Giant rock', covers: ['oval'],
-    long: 'A huge solid rock. Nothing goes through it - the ball bounces off it like a wall - so ' +
-          'the way to the target is around it.',
-    title: 'Giant rock', icon: 'oval', intro: 'Too big to go through. Find the way around.',
-    highlight: lv => lv.ovals.map(o => ({ x: o.x, y: o.y, r: Math.min(o.rx, 140) })) },
   { key: 'pillar', cls: 'ov', has: lv => lv.pillars.length > 0, name: 'Pillar', covers: ['pillar'],
     long: 'A solid column hanging from the sky. Nothing goes through it or over it - the ball ' +
           'bounces off it like a wall - so the only way to the other side is DOWN and round ' +
-          'its foot, then back up. That is what the spring is for.',
-    title: 'Pillar', icon: 'pillar', intro: 'Nothing goes over it. Go down, round its foot, and spring back up!',
+          'its foot, then back up. That is what the Bouncy ramp is for.',
+    title: 'Pillar', icon: 'pillar', intro: 'Nothing goes over it. Go down, round its foot, and bounce back up!',
     highlight: lv => lv.pillars.map(p => ({ x: p.x, y: p.bottom - 40, r: Math.max(46, p.w) })) },
   /* The player's own item. Its card normally comes with the level-10 gift;
      this entry catches a player who reaches a need-spring board without it. */
-  { key: 'spring', cls: 'sp', has: lv => !!lv.needsSpring, onBoard: false, name: 'Spring',
-    long: 'The brass COIL out of your bag, and the only thing in the game that can give the ' +
-          'ball back speed it has lost - every ordinary bounce loses a little. It does not go ' +
-          'on the board: it goes on a RAMP YOU DREW, and makes that ramp throw FOUR TIMES ' +
-          'harder. Open the bag, tap Use, then tap the ramp you want it on. It only leaves ' +
-          'your bag if the ball really bounces off it AND that drop wins - a spring that sat ' +
-          'on a ramp the ball never touched costs you nothing.',
-    title: 'New power: Spring!', icon: 'spring',
-    intro: 'Put it on your ramp to launch 4x harder. Only used if you win.' },
+  { key: 'spring', cls: 'sp', has: lv => !!lv.needsSpring, onBoard: false, name: 'Bouncy ramp',
+    long: 'An orange TRAMPOLINE ramp, and the only thing in the game that can give the ball ' +
+          'back speed it has lost - every ordinary bounce loses a little. Tap the Bouncy ' +
+          'button at the top, then draw a ramp: that ramp is bouncy, and throws the ball ' +
+          'FOUR TIMES harder. (With Bouncy on you can also tap a ramp you already drew.) It ' +
+          'is only used up if the ball really bounces off it AND that drop wins.',
+    title: 'New power: Bouncy Ramp!', icon: 'spring',
+    intro: 'Tap Bouncy, then draw a ramp. Boing - 4x faster! Only used if you win.' },
   { key: 'spareRamp', cls: 'rp', onBoard: false, name: 'Spare ramp',
     has: (lv, ctx) => lv.id >= SPARE_FROM && !!ctx && ctx.spares > 0,
     long: 'One extra ramp from your bag, for a level you are stuck on - at most one per level. ' +
@@ -139,7 +133,7 @@ export const GLOSSARY: GlossaryEntry[] = [
     title: 'Hint', icon: 'hint', intro: 'Shows one ramp that wins. Max 2 stars when used.' },
   { key: 'box', cls: 'bx', has: lv => lv.boxes.length > 0, name: 'Mystery box', covers: ['box'],
     long: 'A chest. Touch it with the ball mid-drop and it pays out something random - coins, ' +
-          'a spare ramp, sometimes a spring or a free spin of the wheel. Like a star it ' +
+          'a spare ramp, sometimes a Bouncy ramp or a free spin of the wheel. Like a star it ' +
           'never changes where the ball goes, and each one can only be opened ONCE: after that ' +
           'the board shows the empty outline where it was.',
     title: 'Mystery box', icon: 'box', intro: 'Hit it with the ball for a surprise reward!',

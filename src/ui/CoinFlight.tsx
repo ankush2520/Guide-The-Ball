@@ -71,7 +71,7 @@ const FAN = 19;
 const LANDS: Record<FlightKind, { to: string; mark: string }> = {
   coins:    { to: '.counter.coins .coin', mark: 'flycoin' },
   ramps:    { to: '.counter.ramps',       mark: 'flyramp' },
-  springs:  { to: '#btn-inventory',       mark: 'flyspring' },
+  springs:  { to: '#btn-bouncy',       mark: 'flyspring' },
   spin:     { to: '#btn-settings',        mark: 'flyspin' },
 };
 
@@ -220,7 +220,7 @@ export function CoinFlight() {
 const TOOK: Record<FlightKind, string> = {
   coins: '.counter.coins',
   ramps: '.counter.ramps',
-  springs: '#btn-inventory',
+  springs: '#btn-bouncy',
   spin: '#btn-settings',
 };
 
