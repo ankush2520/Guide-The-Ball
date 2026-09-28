@@ -21,7 +21,7 @@
    ============================================================ */
 import type { Circle, Level } from '../levels/types';
 import type { EntityKind } from '../entities/Entity';
-import { fishAt } from '../levels/fish';
+import { crabAt } from '../levels/crab';
 import { SPARE_FROM } from '../managers/RewardManager';
 
 /** What an intro's `has` may ask besides the level: facts about the player. */
@@ -98,12 +98,13 @@ export const GLOSSARY: GlossaryEntry[] = [
     title: 'Thunder', icon: 'thunder',
     intro: 'A spot flickers, then lightning strikes and ends your drop. Same rhythm every time!',
     highlight: lv => (lv.storm ? lv.storm.points.map(p => ({ x: p.x, y: p.y, r: 45 })) : []) },
-  { key: 'fish', cls: 'fs', has: lv => !!(lv.fish && lv.fish.length), name: 'Eater fish', covers: ['fish', 'sea'],
-    long: 'The purple fish with teeth. It EATS THE BALL - touching it ends your drop, like fire. ' +
-          'It swims back and forth along the same wavy path every time, shown faintly under it, ' +
-          'so time your drop for when it is out of the way.',
-    title: 'Eater fish', icon: 'fish', intro: 'Swims the same wavy path. Touch it and your ball gets eaten!',
-    highlight: (lv, t) => (lv.fish ?? []).map(f => { const c = fishAt(f, t); return { x: c.x, y: c.y, r: f.r + 6 }; }) },
+  { key: 'crab', cls: 'cr', has: lv => !!(lv.crabs && lv.crabs.length), name: 'Crab', covers: ['crab', 'sea'],
+    long: 'The violet crab with the snapping claws. It PINCHES THE BALL - touching it ends your drop, ' +
+          'like fire. Every crab walks its own loop - a circle, a figure-8, a flower or a hop from side ' +
+          'to side - the same way every time, and the loop is drawn faintly under it, so time your ' +
+          'drop for when the crabs are out of the way.',
+    title: 'Crab', icon: 'crab', intro: 'Walks the same loop every time. Get pinched and your drop is over!',
+    highlight: (lv, t) => (lv.crabs ?? []).map(c => { const p = crabAt(c, t); return { x: p.x, y: p.y, r: c.r + 8 }; }) },
   { key: 'oval', cls: 'ov', has: lv => lv.ovals.length > 0, name: 'Giant rock', covers: ['oval'],
     long: 'A huge solid rock. Nothing goes through it - the ball bounces off it like a wall - so ' +
           'the way to the target is around it.',

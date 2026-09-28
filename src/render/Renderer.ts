@@ -202,7 +202,7 @@ export class Renderer {
     /* the ambient layer follows the sky: clouds on a daytime board, the old
        drifting stars on the countries that are still night */
     /* ...and nothing at all under water: the sea (entities/Sea) is the sky there */
-    const underwater = !!(s.level.fish && s.level.fish.length);
+    const underwater = !!(s.level.crabs && s.level.crabs.length);
     if (underwater) { /* no clouds, no stars */ }
     else if (isLightSky(s.country.sky[1])) drawClouds(ctx, s.clock);
     else drawStarfield(ctx, s.clock);

@@ -24,7 +24,7 @@ const CRACK_VOLUME = 0.3; // the crack when a strike hits the ball
 const FIRE_VOLUME = 0.2; // the fire crackle on fire levels (21-60)
 const BURN_VOLUME = 0.4; // the whoosh when the ball touches fire
 const WATER_VOLUME = 0.3; // the underwater bubbling on levels 81-100
-const CHOMP_VOLUME = 0.5; // the bite when an eater fish gets the ball
+const PINCH_VOLUME = 0.5; // the snip when a crab gets the ball
 
 const BPM = 112;
 const STEP = 60 / BPM / 2; // one eighth note, in seconds
@@ -567,17 +567,19 @@ class SoundEngine {
     this.noise(this.sfx!, t + 0.04, 0.12, 0.08 * CRACK_VOLUME, 2600);
   }
 
-  /** An eater fish got the ball: a quick snap of jaws, then a gulp. */
-  chomp(): void {
-    if (this.isMuted || CHOMP_VOLUME <= 0) return;
+  /** A crab got the ball: two quick claw snips, then a soft bubbly plop. */
+  pinch(): void {
+    if (this.isMuted || PINCH_VOLUME <= 0) return;
     if (!this.ctx || this.ctx.state !== "running") {
       this.nudge();
       return;
     }
     const t = this.ctx.currentTime;
-    this.noise(this.sfx!, t, 0.05, 0.22 * CHOMP_VOLUME, 900);            // the snap
-    this.sweep(this.sfx!, 520, 300, 140, t + 0.03, 0.16, 0.18 * CHOMP_VOLUME, "square");
-    this.sweep(this.sfx!, 260, 180, 70, t + 0.12, 0.22, 0.2 * CHOMP_VOLUME, "sine"); // the gulp
+    for (const d of [0, 0.09]) {                                            // snip, snip
+      this.noise(this.sfx!, t + d, 0.035, 0.24 * PINCH_VOLUME, 2600);
+      this.tone(this.sfx!, 1850, t + d, 0.04, 0.08 * PINCH_VOLUME, "square");
+    }
+    this.sweep(this.sfx!, 300, 520, 820, t + 0.2, 0.16, 0.14 * PINCH_VOLUME, "sine"); // plop
   }
 
   /** The ball touched fire: a whoosh up and a sizzle as it goes out. */

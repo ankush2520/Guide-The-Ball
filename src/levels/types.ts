@@ -64,15 +64,19 @@ export interface OvalDef extends Vec { rx: number; ry: number; angle?: number; }
     See levels/storm.ts for the clock and what a strike does. */
 export interface StormDef { points: Vec[]; gaps: number[]; }
 
-/** An EATER FISH: swims x0 -> x1 -> x0 at a steady pace over `period`
-    steps, bobbing `amp` px on a wave around `y`, and eats the ball on
-    contact. See levels/fish.ts. */
-export interface FishDef { x0: number; x1: number; y: number; amp: number; period: number; r: number; }
+/** A CRAB: walks a closed `pattern` round (cx, cy) - rx / ry are its
+    reach - one lap every `period` steps, starting `phase` (0..1) of the
+    way round, and pinches the ball on contact. See levels/crab.ts. */
+export type CrabPattern = 'orbit' | 'eight' | 'flower' | 'scuttle';
+export interface CrabDef {
+  cx: number; cy: number; rx: number; ry: number;
+  pattern: CrabPattern; period: number; phase?: number; r: number;
+}
 
 /** A HINT: one proven winning plan for a level, found by tools/genhints.mjs
     in the real simulator on the level's own seed. `ramps` are the ramps to
     draw (one may carry `spring`); `t0`, on a timed board (moving target,
-    fish, thunder), is the patrol-clock step to drop at. */
+    crabs, thunder), is the patrol-clock step to drop at. */
 export interface Hint { ramps: Segment[]; t0?: number; }
 
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
@@ -130,7 +134,7 @@ export interface RawLevel {
   fires?: FireDef[];
   ovals?: OvalDef[];
   storm?: StormDef;
-  fish?: FishDef[];
+  crabs?: CrabDef[];
   /** Optional bonus pickups. Scenery to the physics, like stars: a box can
       never change where the ball goes, which is what makes it safe to add to
       a level whose solution is already proved. */

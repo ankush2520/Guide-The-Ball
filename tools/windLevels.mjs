@@ -28,10 +28,11 @@ import esbuild from 'esbuild';
 import { loadRaw, writeLevels } from './levelData.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { FIRE_GLOW, TARGET_GLOW, BOX_GLOW, GLOW_PAD, BALL_R, BOX_R, STORM_R } = await (async () => {
+const { FIRE_GLOW, TARGET_GLOW, BOX_GLOW, GLOW_PAD, BALL_R, BOX_R, STORM_R, crabPathAt } = await (async () => {
   const out = await esbuild.build({ stdin: { contents: `export * from './src/render/glow';
                                                         export { BALL_R, BOX_R } from './src/physics/constants';
-                                                        export { STORM_R } from './src/levels/storm';`,
+                                                        export { STORM_R } from './src/levels/storm';
+                                                        export { crabPathAt } from './src/levels/crab';`,
                                              resolveDir: root, loader: 'ts' },
                                     bundle: true, write: false, format: 'esm', platform: 'node' });
   return import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
@@ -144,40 +145,73 @@ export function stormFor(r, n, spawn, lane, ok = () => true){
   return { points, gaps: points.map(() => (rint(r, 60, 108), STRIKE_GAP)) };
 }
 
-/** EATER FISH: `n` fish, each on a wavy lane (levels/fish.ts) whose WHOLE
-    path stays MIN_GAP clear of every hazard and box in `blockers`, 40px clear
-    of the target anywhere on its patrol, clear of the drop point, and of
-    every other fish's path. `ok` can veto a point of a path (the oval). */
-export function fishPath(f){
-  const waves = Math.max(1, Math.round(Math.abs(f.x1 - f.x0) / 110)), out = [];
-  for (let i = 0; i <= 40; i++){
-    const u = i / 40;
-    out.push({ x: f.x0 + (f.x1 - f.x0) * u, y: f.y + f.amp * Math.sin(u * waves * Math.PI * 2), r: f.r });
-  }
+/* ============================================================
+   CRABS
+
+   `n` crabs, each walking a looping pattern (levels/crab.ts -
+   its shapes are read from there, never copied): an orbit, a
+   figure-8, a three-petal flower or a side-to-side scuttle. An
+   orbit is sometimes shared by TWO crabs half a lap apart, which
+   reads as a little dance and can never collide.
+
+   The WHOLE loop is held clear: MIN_GAP from every hazard and
+   box in `blockers`, 40px from the target anywhere on its patrol,
+   clear of the drop point and of every other crab's loop, and
+   inside the board. `ok` can veto a point (the oval levels keep
+   loops off the rock). Null if they cannot all fit.
+   ============================================================ */
+export function crabPath(c, n = 128){
+  const out = [];
+  for (let i = 0; i < n; i++){ const p = crabPathAt(c, i / n); out.push({ x: p.x, y: p.y, r: c.r }); }
   return out;
 }
-export function fishFor(rr, n, spawn, lane, blockers, ok = () => true){
-  const fish = [];
-  for (let k = 0; k < n; k++){
+const PATTERNS = ['orbit', 'eight', 'flower', 'scuttle'];
+/* `k` scales the loop down (1 = full size) when the board is tight. */
+function crabShape(rr, pattern, k = 1){
+  const r = rint(rr, 13, 16);
+  const s = n => Math.max(12, Math.round(n * k));
+  switch (pattern){
+    case 'eight':   return { r, rx: s(rint(rr, 55, 100)), ry: s(rint(rr, 25, 45)), period: rint(rr, 260, 380) };
+    case 'flower':  { const rx = s(rint(rr, 50, 80)); return { r, rx, ry: Math.round(rx * (0.8 + rr() * 0.2)), period: rint(rr, 300, 420) }; }
+    case 'scuttle': return { r, rx: s(rint(rr, 60, 120)), ry: s(rint(rr, 18, 30)), period: rint(rr, 180, 260) };
+    default:        return { r, rx: s(rint(rr, 45, 90)), ry: s(rint(rr, 30, 70)), period: rint(rr, 220, 340) };
+  }
+}
+/* Variety first: a pattern this board does not have yet is tried before a
+   repeat. Loops shrink as the tries go on, so a crowded board gets smaller
+   loops rather than none; and if even the smallest will not fit, the board
+   gets one crab fewer - never fewer than MIN_CRABS. */
+const MIN_CRABS = 2, CRAB_TRIES = 900;
+export function crabFor(rr, n, spawn, lane, blockers, ok = () => true){
+  const crabs = [], loops = [];                    // loops: one sampled path per GROUP
+  while (crabs.length < n){
     let got = null;
-    for (let c = 0; c < 500 && !got; c++){
-      const fr = rint(rr, 16, 20), len = rint(rr, 130, 260), amp = rint(rr, 14, 30);
-      const x0 = rint(rr, fr + 10, W - fr - 10 - len), y = rint(rr, 170, H - 90);
-      const f = { x0, x1: x0 + len, y, amp, period: rint(rr, 160, 260), r: fr };
-      if (rr() < 0.5) [f.x0, f.x1] = [f.x1, f.x0];
-      const pts = fishPath(f);
-      if (!pts.every(p => p.y - p.r > 120 && p.y + p.r < H - 20)) continue;
+    const used = new Set(crabs.map(c => c.pattern));
+    const fresh = PATTERNS.filter(p => !used.has(p));
+    for (let c = 0; c < CRAB_TRIES && !got; c++){
+      const pool = fresh.length && rr() < 0.75 ? fresh : PATTERNS;
+      const pattern = pool[rint(rr, 0, pool.length - 1)];
+      const pair = pattern === 'orbit' && n - crabs.length >= 2 && rr() < 0.5;
+      const sh = crabShape(rr, pattern, 1 - 0.55 * (c / CRAB_TRIES));
+      const cx = rint(rr, sh.rx + sh.r + 12, W - sh.rx - sh.r - 12);
+      const cy = rint(rr, 170 + sh.ry + sh.r, H - 90 - sh.ry - sh.r);
+      const base = { cx, cy, rx: rr() < 0.5 ? sh.rx : -sh.rx, ry: sh.ry, pattern, period: sh.period, r: sh.r };
+      const pts = crabPath(base);
+      if (!pts.every(p => p.y - p.r > 120 && p.y + p.r < H - 20 && p.x - p.r > 6 && p.x + p.r < W - 6)) continue;
       if (!pts.every(p => Math.hypot(p.x - spawn.x, p.y - spawn.y) >= p.r + 70)) continue;
       if (!pts.every(p => lane.every(t => Math.hypot(p.x - t.x, p.y - t.y) >= p.r + t.r + 40))) continue;
       if (!pts.every(p => blockers.every(q => Math.hypot(p.x - q.x, p.y - q.y) >= p.r + q.r + MIN_GAP))) continue;
-      if (!fish.every(g => fishPath(g).every(q => pts.every(p => Math.hypot(p.x - q.x, p.y - q.y) >= p.r + q.r + MIN_GAP)))) continue;
+      if (!loops.every(L => L.every(q => pts.every(p => Math.hypot(p.x - q.x, p.y - q.y) >= p.r + q.r + MIN_GAP)))) continue;
       if (!pts.every(ok)) continue;
-      got = f;
+      const phase = Math.round(rr() * 100) / 100;
+      got = pair ? [{ ...base, phase }, { ...base, phase: Math.round(((phase + 0.5) % 1) * 100) / 100 }]
+                 : [{ ...base, phase }];
+      loops.push(pts);
     }
-    if (!got) return null;
-    fish.push(got);
+    if (!got) break;
+    crabs.push(...got);
   }
-  return fish;
+  return crabs.length >= Math.min(MIN_CRABS, n) ? crabs : null;
 }
 
 /** Re-rolls a city until the spread audit (tools/spread-metrics.mjs) has
@@ -248,21 +282,21 @@ function build(id, tpl, oldGift, attempt, world){
 
   /* the world's own mechanic, on top of the twin's layout */
   const pos = id - world.from + 1;                      // 1..16
-  let wind, storm, fish;
+  let wind, storm, crabs;
   if (world.addOn === 'wind'){
     const lo = targetMove ? { ...target, x: (x0 + x1) / 2 } : target;
     wind = windFor(r, pos <= 8 ? 1 : 2, pos >= 13, spawn.x, lo, lo);
   } else if (world.addOn === 'storm'){
     storm = stormFor(r, pos <= 8 ? 4 : pos <= 12 ? 5 : 6, spawn, lane);
     if (!storm) throw new Error('no room for the storm');
-  } else if (world.addOn === 'fish'){
-    fish = fishFor(r, pos <= 8 ? 1 : pos <= 12 ? 2 : 3, spawn, lane, [...placed, ...(box ? [box] : [])]);
-    if (!fish) throw new Error('no room for the fish');
+  } else if (world.addOn === 'crabs'){
+    crabs = crabFor(r, pos <= 8 ? 2 : pos <= 12 ? 3 : 4, spawn, lane, [...placed, ...(box ? [box] : [])]);
+    if (!crabs) throw new Error('no room for the crabs');
   }
 
   const pick = k => placed.filter(o => o.kind === k).map(({ x, y, r }) => ({ x, y, r }));
   return { id, name: world.names[id], maxBlocks: tpl.maxBlocks, targetType: tpl.targetType, wallSide,
-           spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm, fish,
+           spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm, crabs,
            box: box && { x: box.x, y: box.y }, target, targetMove, gift: oldGift };
 }
 
@@ -273,7 +307,7 @@ function toRaw(L){
            spawn: L.spawn, obstacles: L.obstacles,
            breakables: L.breakables.length ? L.breakables : undefined,
            fires: L.fires.length ? L.fires : undefined,
-           wind: L.wind, storm: L.storm, fish: L.fish,
+           wind: L.wind, storm: L.storm, crabs: L.crabs,
            boxes: L.box ? [L.box] : undefined,
            target: L.target, targetMove: L.targetMove || undefined,
            targetGift: L.gift || undefined };
@@ -304,7 +338,7 @@ export async function runWorld(world){
     }
     out.push(toRaw(L));
     const n = L.fires.length + L.breakables.length + L.obstacles.length;
-    const extra = [L.storm && `storm ${L.storm.points.length} points`, L.fish && `${L.fish.length} eater fish`,
+    const extra = [L.storm && `storm ${L.storm.points.length} points`, L.crabs && `${L.crabs.length} crabs (${L.crabs.map(c => c.pattern).join(', ')})`,
                    L.wind && 'wind ' + L.wind.map(z => (z.ax > 0 ? '+' : '') + z.ax).join(' ')]
                   .filter(Boolean).join(', ');
     console.log(`${id} ${L.name.padEnd(15)} ${String(n).padStart(2)} hazards (f${L.fires.length} b${L.breakables.length} o${L.obstacles.length})` +

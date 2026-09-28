@@ -35,7 +35,7 @@ import {
 import type { Level, Segment, Circle } from '../../levels/types';
 import { targetAt } from '../../levels/target';
 import { strikeAt, STORM_R } from '../../levels/storm';
-import { fishAt } from '../../levels/fish';
+import { crabAt } from '../../levels/crab';
 import type { BallState, PhysicsEngine } from '../PhysicsEngine';
 import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '../types';
 import { mulberry32, falses, closestOnSeg } from '../math';
@@ -604,11 +604,11 @@ export class MatterEngine implements PhysicsEngine {
       }
     }
 
-    /* ---- eater fish: one that reaches the ball swallows it - the run ends,
-       like fire. Where the fish is comes off the step clock (levels/fish). */
-    if (lv.fish) for (const f of lv.fish) {
-      const at = fishAt(f, b.t0 + b.steps);
-      if (reached(at, f.r + BALL_R)) { b.result = 'eaten'; return; }
+    /* ---- crabs: one that reaches the ball pinches it - the run ends, like
+       fire. Where the crab is comes off the step clock (levels/crab). */
+    if (lv.crabs) for (const c of lv.crabs) {
+      const at = crabAt(c, b.t0 + b.steps);
+      if (reached(at, c.r + BALL_R)) { b.result = 'pinched'; return; }
     }
 
     /* ---- lightning: a live strike that reaches the ball ENDS the run, like

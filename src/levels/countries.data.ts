@@ -116,16 +116,16 @@ export const COUNTRIES: Country[] = [
      follows Emberkeep city for city - the same hazard counts
      (its fire turned to red obstacles: nothing burns down
      here), the same targets, the same oval-and-spring exam at
-     97-100 - with EATER FISH on top: they swim the same wavy
-     lane back and forth, forever, and swallow the ball on
-     contact (levels/fish.ts). Background fish and bubbles are
-     scenery. It absorbed Neonaka, and Nocturne Sands moved on
+     97-100 - with CRABS on top: each walks the same looping
+     pattern (orbit, figure-8, flower, scuttle) forever, and
+     pinches the ball on contact (levels/crab.ts). Background
+     fish and bubbles are scenery. It absorbed Neonaka, and Nocturne Sands moved on
      to 101-110.
 
      Shallow-water turquoise, pushed bluer than Cascadia so the
      two never read alike.
      ============================================================ */
-  { id: 9, name: 'Coralis Deep', from: 81, to: 100, mechanic: 'underwater - eater fish',
+  { id: 9, name: 'Coralis Deep', from: 81, to: 100, mechanic: 'underwater - crabs',
     sky: ['#cff3f3', '#dff8f6', '#effcfa'], wash: '40,175,185', accent: '#16aebf' },
 
   /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,

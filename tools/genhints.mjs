@@ -16,7 +16,7 @@
  *   3. two ramps, the second placed on points the ball ACTUALLY passes.
  *
  * On a need-spring board every candidate is tried with a spring on each of
- * its ramps. On a timed board (moving target, eater fish, thunder) every
+ * its ramps. On a timed board (moving target, crabs, thunder) every
  * candidate is tried at a spread of drop moments, and the moment that wins
  * is written with it (t0).
  *
@@ -78,7 +78,7 @@ for (let id = A; id <= B; id++){
        across the longest cycle on it */
     const cycles = [];
     if (lv.targetMove) cycles.push(lv.targetMove.period);
-    if (lv.fish) for (const f of lv.fish) cycles.push(f.period);
+    if (lv.crabs) for (const c of lv.crabs) cycles.push(c.period);
     if (lv.storm) cycles.push(lv.storm.gaps.reduce((a, b) => a + b, 0));
     const T = cycles.length ? Math.min(360, Math.max(...cycles)) : 0;
     const t0s = T ? Array.from({ length: Math.ceil(T / 10) }, (_, k) => k * 10) : [0];

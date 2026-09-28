@@ -1,5 +1,5 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
-import type { FishDef } from '../levels/types';
+import type { CrabDef } from '../levels/types';
 import { PLAY, W, H } from '../physics/constants';
 
 /* ============================================================
@@ -20,14 +20,14 @@ import { PLAY, W, H } from '../physics/constants';
 const BUBBLES = 26;
 const SCHOOL = 6;
 
-export class Sea extends Entity<readonly FishDef[]> {
+export class Sea extends Entity<readonly CrabDef[]> {
   readonly kind: EntityKind = 'sea';
 
   draw({ ctx, clock }: DrawContext): void {
     const x0 = PLAY.x0, y0 = PLAY.y0, x1 = PLAY.x1, y1 = PLAY.y1;
     const w = x1 - x0, h = y1 - y0;
-    /* each level gets its own seabed, from its first fish */
-    const seed = this.def.length ? this.def[0].x0 * 7 + this.def[0].y : 1;
+    /* each level gets its own seabed, from its first crab */
+    const seed = this.def.length ? this.def[0].cx * 7 + this.def[0].cy : 1;
     const rnd = (i: number) => frac(Math.sin((i + 1) * 12.9898 + seed * 0.013) * 43758.5453);
     ctx.save();
 

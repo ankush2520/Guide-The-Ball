@@ -46,7 +46,7 @@ export type EntityKind =
   | 'slippery' | 'wind' | 'rain' | 'sea'  // ground
   | 'target'
   | 'wall' | 'oval'
-  | 'obstacle' | 'fire' | 'fish'
+  | 'obstacle' | 'fire' | 'crab'
   | 'breakable' | 'booster' | 'star' | 'box' | 'storm'
   /* the two the PLAYER makes */
   | 'ramp';
@@ -62,7 +62,7 @@ export const LAYER: Record<EntityKind, number> = {
      and are read against each other, so neither may cover the other. */
   obstacle: 3, fire: 3,
   /* over the other furniture: it swims past things */
-  fish: 4,
+  crab: 4,
   breakable: 4, booster: 4, star: 4,
   /* A mystery box rides with the other pickups, and after the star in
      registry order so two that overlap read box-over-star - the box is the

@@ -303,8 +303,8 @@ const SPECS = {
   },
 
   /* 8 - Neonaka is gone, and 9 - Coralis Deep (81-100) is NOT generated
-     here: tools/fishLevels.mjs places 81-96 (Emberkeep's layouts, underwater,
-     with eater fish) and tools/ovalLevels.mjs --only=97-100 the oval exam.
+     here: tools/crabLevels.mjs places 81-96 (Emberkeep's layouts, underwater,
+     with crabs) and tools/ovalLevels.mjs --only=97-100 the oval exam.
      No spec, so `genlevels 9 --write` refuses instead of overwriting. */
 
   11: {

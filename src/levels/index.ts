@@ -46,7 +46,7 @@ export function initLevel(raw: RawLevel): Level {
     if (left <= 0) left = -1000;
     if (right >= W) right = W + 1000;
     w.x = left; w.w = right - left;
-    w.look = lv.storm ? 'rain' : lv.fish && lv.fish.length ? 'current' : 'air';
+    w.look = lv.storm ? 'rain' : lv.crabs && lv.crabs.length ? 'current' : 'air';
     return w;
   });
   lv.walls = [...buildWalls(lv, lv.target), ...lv.ovals.flatMap(o => ovalSegments(o))];

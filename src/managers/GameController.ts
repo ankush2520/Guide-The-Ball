@@ -30,7 +30,7 @@ import { levelSeed, LEVELS, COUNTRIES } from '../levels';
 import { INTROS, GLOSSARY, type IntroCtx } from '../ui/glossary';
 import { track } from '../analytics/track';
 import { HINTS } from '../levels/hints.data';
-import { boardCycles } from '../levels/fish';
+import { boardCycles } from '../levels/crab';
 import type { Circle, Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
@@ -610,7 +610,7 @@ export class GameController {
   private lastRumble = -1;
   private weather(): void {
     const lv = this.levels.playLevel;
-    Sound.setAmbience(lv.storm ? 'rain' : lv.fish && lv.fish.length ? 'water' : lv.fires.length ? 'fire' : 'none');
+    Sound.setAmbience(lv.storm ? 'rain' : lv.crabs && lv.crabs.length ? 'water' : lv.fires.length ? 'fire' : 'none');
     if (!lv.storm) return;
     const simT = this.ball ? this.ball.t0 + this.ball.steps : this.patrolClock;
     const s = strikeAt(lv, simT);
@@ -815,7 +815,7 @@ export class GameController {
   private missed(result: DropResult): void {
     this.lastResult = result;
     if (result === 'burned') Sound.burn();
-    if (result === 'eaten') Sound.chomp();
+    if (result === 'pinched') Sound.pinch();
     // where the ball died, read before it is released
     const at = this.ball ? { x: this.ball.x, y: this.ball.y } : null;
     if (this.tutDropping) { this.tutRetry = true; this.tutDropping = false; }
@@ -829,8 +829,8 @@ export class GameController {
     if (at && result === 'burned') {
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#ff4a12', 16, 3.4, Math.PI, 700, 2.6);
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffa800', 12, 2.4, Math.PI * 0.6, 900, 2.2);
-    } else if (at && result === 'eaten') {
-      // a cloud of bubbles where it was swallowed
+    } else if (at && result === 'pinched') {
+      // a cloud of bubbles where it was snatched
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffffff', 14, 3.0, Math.PI, 700, 2.4);
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#3fb6e8', 12, 2.2, Math.PI, 800, 2.2);
     } else if (at && result === 'zapped') {
@@ -843,7 +843,7 @@ export class GameController {
     this.showFlash(
       result === 'burned' ? 'Burned up! Fire ends the drop - go around it.'
       : result === 'zapped' ? 'Zapped! Lightning ends the drop - time it or go around it.'
-      : result === 'eaten' ? 'Eaten! A fish got the ball - time your drop around it.'
+      : result === 'pinched' ? 'Pinched! A crab got the ball - time your drop around it.'
       : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);

@@ -20,12 +20,12 @@
  *   node tools/ovalLevels.mjs --only=57-60     # just those ids
  *
  * Stormhold (77-80) gets a six-point thunderstorm instead of the wind, and
- * Coralis Deep (97-100) two eater fish.
+ * Coralis Deep (97-100) three crabs.
  */
-import { NAMES as WIND_NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, stormFor, fishFor, fishPath, mix } from './windLevels.mjs';
+import { NAMES as WIND_NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, stormFor, crabFor, crabPath, mix } from './windLevels.mjs';
 import { loadRaw, writeLevels } from './levelData.mjs';
 import { NAMES as STORM_NAMES } from './stormLevels.mjs';
-import { NAMES as FISH_NAMES } from './fishLevels.mjs';
+import { NAMES as CRAB_NAMES } from './crabLevels.mjs';
 const W = 480, H = 800, GAP = 18;
 
 function rng(seed){ return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296); }
@@ -66,7 +66,7 @@ function build(id, seed, fire, opts = {}){
   throw new Error(`level ${id}: no layout found`);
 }
 
-function tryBuild(r, fire, { extraRed = 0, wind = false, storm = false, fish = false } = {}){
+function tryBuild(r, fire, { extraRed = 0, wind = false, storm = false, crabs = false } = {}){
   const spawn = { x: rint(r, 40, 65), y: 40 };
 
   /* THE OVAL: long, tilted up toward the far side, and running off the far
@@ -128,15 +128,19 @@ function tryBuild(r, fire, { extraRed = 0, wind = false, storm = false, fish = f
      box so they get the room first - wavy lanes clear of the oval, every
      hazard so far, the drop and the target's cave. Everything placed after
      keeps MIN_GAP from their whole paths. */
-  let fishes, fishPts = [];
-  if (fish){
+  /* CRABS (Coralis Deep): three, placed BEFORE the extra red and the box so
+     their loops get the room first - clear of the oval, every hazard so far,
+     the drop and the target's cave. Everything placed after keeps MIN_GAP
+     from their whole loops. */
+  let crabList, crabPts = [];
+  if (crabs){
     const lane = [];
     for (let k = 0; k <= 6; k++) lane.push({ x: tx, y: y0 + (y1 - y0) * k / 6, r: tr });
-    fishes = fishFor(r, 2, spawn, lane, placed, p => ovalGap(pts, oval, p) >= GAP);
-    if (!fishes) return null;
-    fishPts = fishes.flatMap(fishPath);
+    crabList = crabFor(r, 3, spawn, lane, placed, p => ovalGap(pts, oval, p) >= GAP);
+    if (!crabList) return null;
+    crabPts = crabList.flatMap(c => crabPath(c));
   }
-  const fishClear = o => fishPts.every(p => gapOf(o, p) >= GAP);
+  const crabClear = o => crabPts.every(p => gapOf(o, p) >= GAP);
 
   /* EXTRA RED, so the board does not read empty: the same rules, plus the
      column under the cave stays open - it is where the spring goes. */
@@ -151,7 +155,7 @@ function tryBuild(r, fire, { extraRed = 0, wind = false, storm = false, fish = f
       if (ovalGap(pts, oval, o) < GAP) continue;
       if (Math.hypot(o.x - spawn.x, o.y - spawn.y) < o.r + 90) continue;
       if (!placed.every(q => gapOf(o, q) >= GAP)) continue;
-      if (!fishClear(o)) continue;
+      if (!crabClear(o)) continue;
       let score = Math.min(o.x - o.r, W - o.x - o.r, ovalGap(pts, oval, o));
       for (const q of placed) score = Math.min(score, gapOf(o, q));
       if (score > bestScore){ bestScore = score; best = o; }
@@ -187,11 +191,11 @@ function tryBuild(r, fire, { extraRed = 0, wind = false, storm = false, fish = f
     /* its glow stays clear of every visible edge, fire's glow included */
     const glowClear = q => Math.hypot(q.x - b.x, q.y - b.y) >=
       BOX_R * BOX_GLOW + (q.kind === 'f' ? q.r * FIRE_GLOW : q.r) + GLOW_PAD;
-    if (ovalGap(pts, oval, b) >= GAP && laneGap(b) >= 30 && placed.every(q => gapOf(b, q) >= GAP && glowClear(q)) && fishClear(b)) box = b;
+    if (ovalGap(pts, oval, b) >= GAP && laneGap(b) >= 30 && placed.every(q => gapOf(b, q) >= GAP && glowClear(q)) && crabClear(b)) box = b;
   }
   if (!box) return null;
 
-  let L = { spawn, target, targetMove, oval, box: { x: box.x, y: box.y }, placed, zones, storm: st, fish: fishes };
+  let L = { spawn, target, targetMove, oval, box: { x: box.x, y: box.y }, placed, zones, storm: st, crabs: crabList };
   if (r() < 0.5){                      // random side
     const m = o => ({ ...o, x: W - o.x });
     L = { spawn: m(spawn), target: m(target), box: m(L.box), placed: placed.map(m),
@@ -199,7 +203,7 @@ function tryBuild(r, fire, { extraRed = 0, wind = false, storm = false, fish = f
           targetMove: { ...targetMove, x0: W - tx, x1: W - tx },
           zones: zones.map(z => ({ ...z, x: W - z.x - z.w, ax: -z.ax })),
           storm: st && { points: st.points.map(m), gaps: st.gaps },
-          fish: fishes && fishes.map(f => ({ ...f, x0: W - f.x0, x1: W - f.x1 })) };
+          crabs: crabList && crabList.map(c => ({ ...c, cx: W - c.cx, rx: -c.rx })) };
   }
   const strip = ({ x, y, r }) => ({ x, y, r });
   return { ...L,
@@ -219,7 +223,7 @@ function ovalLevel(old, L, newName){
            fires: L.fires.length ? L.fires : undefined,
            wind: L.zones && L.zones.length ? L.zones : undefined,
            storm: L.storm || undefined,
-           fish: L.fish || undefined,
+           crabs: L.crabs || undefined,
            ovals: [L.oval], boxes: [L.box], target: L.target,
            targetMove: { x0: m.x0, x1: m.x1, y0: m.y0, y1: m.y1, period: m.period },
            targetGift: old.targetGift || undefined };
@@ -290,13 +294,13 @@ for (const id of [77, 78, 79, 80]) if (want(id)){
   maybeWind(L, id, 0.4);
   out.push(ovalLevel(byId(id), L, STORM_NAMES[id]));
 }
-/* Coralis Deep's exam: Emberkeep's, under water - two eater fish, and no
+/* Coralis Deep's exam: Emberkeep's, under water - three crabs, and no
    fire: each fire becomes a red obstacle in the same place */
 for (const id of [97, 98, 99, 100]) if (want(id)){
-  const L = build(id, id * 7919, true, { extraRed: 8, fish: true });
+  const L = build(id, id * 7919, true, { extraRed: 8, crabs: true });
   L.obstacles = [...L.obstacles, ...L.fires]; L.fires = [];
   maybeWind(L, id, 0.4);
-  out.push(ovalLevel(byId(id), L, FISH_NAMES[id]));
+  out.push(ovalLevel(byId(id), L, CRAB_NAMES[id]));
 }
 writeLevels(out);
 console.log(`wrote levels ${out.map(l => l.id).join(', ')}`);
