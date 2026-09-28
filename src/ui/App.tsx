@@ -19,7 +19,6 @@ import { useEffect, useRef, useState } from 'react';
 import { GameProvider, useGame } from '../core/GameContext';
 import { GameCanvas } from './GameCanvas';
 import { Hud } from './Hud';
-import { Controls } from './Controls';
 import { Status } from './Status';
 import { WinOverlay } from './WinOverlay';
 import { GiftPanel } from './GiftPanel';
@@ -31,7 +30,8 @@ import { OfferStrip } from './OfferStrip';
 import { flyReward } from './CoinFlight';
 import { InfoPanel } from './InfoPanel';
 import { SpinPanel } from './SpinPanel';
-import { SettingsPanel } from './SettingsPanel';
+import { MenuPanel } from './MenuPanel';
+import { ToolButtons } from './ToolButtons';
 import { ShopPanel } from './ShopPanel';
 import { CoinFlight } from './CoinFlight';
 import { Confetti } from './Confetti';
@@ -40,7 +40,7 @@ import { Sound } from '../audio/Sound';
 import { Ads } from '../ads/Ads';
 import { track, sessionMs } from '../analytics/track';
 
-type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'settings' | 'shop' | 'chest';
+type Panel = 'levels' | 'info' | 'spin' | 'noballs' | 'menu' | 'shop' | 'chest';
 /** The bottom of the panel layers: above the win card (55), the gift (57) and
     the intro card (54), below the confetti (90) and the coin flight (95). */
 const PANEL_Z = 60;
@@ -132,8 +132,15 @@ function Game() {
 
   /* A country recolours the chrome accent. The entity palette never changes. */
   useEffect(() => {
-    const apply = () => document.documentElement.style
-      .setProperty('--accent', levels.country.accent);
+    const apply = () => {
+      const st = document.documentElement.style, c = levels.country;
+      st.setProperty('--accent', c.accent);
+      /* the page around the board wears the world's own sky, so the scene
+         reads as filling the screen rather than sitting in a frame */
+      st.setProperty('--sky0', c.sky[0]);
+      st.setProperty('--sky1', c.sky[1]);
+      st.setProperty('--sky2', c.sky[2]);
+    };
     apply();
     return bus.on('level:changed', apply);
   }, [bus, levels]);
@@ -168,10 +175,12 @@ function Game() {
       case 'noballs':  return <OutOfBallsPanel onClose={done} />;
       case 'levels':   return <LevelSelect onClose={done} onChest={() => open('chest')} />;
       case 'chest':    return <ChestPanel onClose={done} />;
-      case 'settings': return <SettingsPanel onClose={done}
-                                             onOpenInfo={() => open('info')}
-                                             onOpenShop={() => open('shop')}
-                                             onOpenSpin={() => open('spin')} />;
+      case 'menu':     return <MenuPanel onClose={done}
+                                         onOpenShop={() => open('shop')}
+                                         onOpenSpin={() => open('spin')}
+                                         onOpenChest={() => open('chest')}
+                                         onOpenLevels={() => open('levels')}
+                                         onOpenInfo={() => open('info')} />;
       case 'shop':     return <ShopPanel onClose={done} />;
       case 'spin':     return <SpinPanel onClose={done} />;
       case 'info':     return <InfoPanel onClose={done} />;
@@ -198,13 +207,13 @@ function Game() {
           wait. */}
       <div className="app"
            onPointerDown={e => { if (e.target === e.currentTarget && !controller.boardInputHeld) controller.drop(); }}>
-        <Hud onOpenSettings={() => open('settings')}
+        <Hud onOpenMenu={() => open('menu')}
              onOpenLevels={() => open('levels')} />
         <GameCanvas>
           <Status />
           <OfferStrip onShop={() => open('shop')} />
+          <ToolButtons />
         </GameCanvas>
-        <Controls />
       </div>
 
       {/* The walkthrough bubble. Over the board, under every panel. */}

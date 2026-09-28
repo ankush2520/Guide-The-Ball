@@ -90,7 +90,7 @@ export function Coach({ hidden }: { hidden: boolean }) {
         /* The bag is chrome, not board: point at the button itself. */
         case 'springBag': {
           const b = document.getElementById('btn-bouncy')?.getBoundingClientRect();
-          return b ? { x: b.left + b.width / 2, y: b.bottom, side: 'below' } : null;
+          return b ? { x: b.left + b.width / 2, y: b.top, side: 'above' } : null;
         }
         /* Under the player's own ramp - the newest one they drew. */
         case 'springRamp': {

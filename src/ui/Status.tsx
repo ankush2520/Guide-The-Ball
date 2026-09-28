@@ -36,7 +36,14 @@ export function Status() {
   const { controller } = useGame();
   useGameVersion();
   const flash = controller.flash;
-  const text = controller.cue;
+  /* the ramps left on this board ride on the cue - the top bar has no
+     ramp chip any more - plus the spares in the drawer, when they count */
+  const lv = controller.levels, spare = controller.sparesAllowed ? controller.rewards.extraRamps : 0;
+  const cueText = controller.cue;
+  const text = cueText && controller.phase === 'plan'
+    ? `${cueText.startsWith('Drag to draw') ? 'Drag to draw, tap to drop' : cueText}`
+      + ` · ${lv.rampsLeft} ramp${lv.rampsLeft === 1 ? '' : 's'} left${spare > 0 ? ` +${spare}` : ''}`
+    : cueText;
   const cue = !flash && !!text;
   // light text over the night boards, dark over the day ones
   const dark = !isLightSky(countryOf(controller.levels.level.id).sky[1]);

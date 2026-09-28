@@ -240,7 +240,7 @@ export function installGameHook(s: GameServices): void {
                        the signal and `step` above already carries it */
                     dropPulsing: false },
         infoOpen: !!document.getElementById('infopanel'),
-        settingsOpen: !!document.getElementById('settingspanel'),
+        settingsOpen: !!document.getElementById('menupanel'),
         infoText: document.getElementById('info-body')?.textContent ?? '',
         juice: { squash: c.squash.amt, tweens: c.tweens.count,
                  trail: c.renderer.trail.length, stars: STAR_N,
@@ -384,7 +384,7 @@ export function installGameHook(s: GameServices): void {
     spinInfo: () => {
       const el = (id: string) => document.getElementById(id);
       const cd = el('spin-cd');
-      const gear = el('btn-settings');
+      const gear = el('btn-menu');
       return { last: rewards.spinLast, ready: rewards.spinReady(),
                spinning: rewards.spinning,
                nextMs: rewards.msToSpin(),
@@ -398,7 +398,7 @@ export function installGameHook(s: GameServices): void {
                wouldOffer: rewards.shouldOfferSpin(),
                autoSpin: !(window as unknown as Record<string, unknown>).__gtbNoAutoSpin,
                panelOpen: !!el('spinpanel'),
-               settingsOpen: !!el('settingspanel'),
+               settingsOpen: !!el('menupanel'),
                goDisabled: !!(el('btn-spin-go') as HTMLButtonElement | null)?.disabled,
                btnLocked: !!gear?.classList.contains('locked'),
                badge: !!gear?.querySelector('.dot'),
