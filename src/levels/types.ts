@@ -59,7 +59,7 @@ export type BoxDef = Vec;
     down one side, round the foot and back up the other - the loop the
     world's exam boards are built on. It collides as wall segments (see
     levels/pillars.ts) and is painted in its world's own material. */
-export type PillarLook = 'tree' | 'basalt' | 'mint' | 'slate' | 'coral' | 'stone';
+export type PillarLook = 'tree' | 'basalt' | 'mint' | 'slate' | 'coral' | 'sandstone' | 'metal' | 'stone';
 export interface PillarDef { x: number; bottom: number; w: number; look?: PillarLook; }
 
 /** A THUNDERSTORM: lightning strikes `points` in order, `gaps[i]` steps
@@ -196,9 +196,10 @@ export interface Country {
   /** "r,g,b" for the overhead wash and the grid - alpha is applied per use. */
   wash: string;
   accent: string;
-  /** A world with its own painted backdrop (entities/Volcano) instead of
-      the day sky's clouds. */
-  scene?: 'volcano';
+  /** A world's painted ground (entities/Volcano, Mountains, Scenery). The
+      volcano, Egypt and space scenes are their own sky and replace the
+      drifting clouds; the others keep the clouds above them. */
+  scene?: 'volcano' | 'mountains' | 'meadow' | 'cliffs' | 'egypt' | 'space';
   /** What this country teaches. Documentation only; nothing reads it. */
   mechanic: string;
 }

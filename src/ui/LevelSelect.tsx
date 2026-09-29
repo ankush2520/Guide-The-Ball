@@ -19,6 +19,7 @@ import { useRef, useState } from 'react';
 import { useGame } from '../core/GameContext';
 import { LEVELS, COUNTRIES, cityOf } from '../levels';
 import { ChestBar } from './ChestPanel';
+import { isLightSky } from '../render/palette';
 
 /** Only the worlds that actually have levels in the game. */
 const WORLDS = COUNTRIES.filter(c => c.from <= LEVELS.length);
@@ -54,7 +55,7 @@ export function LevelSelect({ onClose, onChest }: { onClose: () => void; onChest
         <div className="worldnav">
           <button className="worldarrow" id="btn-world-prev" aria-label="Previous world"
                   disabled={page === 0} onClick={() => go(page - 1)}>&#8249;</button>
-          <div className="worldbanner" id="world-banner"
+          <div className={'worldbanner' + (isLightSky(w.sky[1]) ? '' : ' night')} id="world-banner"
                style={{ background: `linear-gradient(135deg, ${w.sky[0]}, ${w.sky[1]} 55%, ${w.sky[2]})`,
                         borderColor: w.accent }}>
             <small>World {page + 1} &middot; levels {w.from}&ndash;{w.to}</small>

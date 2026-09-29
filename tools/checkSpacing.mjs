@@ -29,6 +29,8 @@ const out = await esbuild.build({
                       export { BALL_R, WALL_HT } from './src/physics/constants';
                       export { crabPathAt } from './src/levels/crab';`, resolveDir: root, loader: 'ts' },
   bundle: true, write: false, format: 'esm', platform: 'node',
+  /* every authored level, not just the ones a release build ships */
+  define: { 'import.meta.env': '{"DEV":true}' },
 });
 const { LEVELS, BALL_R, crabPathAt } = await import('data:text/javascript;base64,' +
   Buffer.from(out.outputFiles[0].text).toString('base64'));

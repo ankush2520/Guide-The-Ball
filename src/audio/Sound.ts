@@ -26,20 +26,164 @@ const BURN_VOLUME = 0.4; // the whoosh when the ball touches fire
 const WATER_VOLUME = 0.3; // the underwater bubbling on levels 81-100
 const PINCH_VOLUME = 0.5; // the snip when a crab gets the ball
 
-const BPM = 112;
-const STEP = 60 / BPM / 2; // one eighth note, in seconds
+const MUSIC_VOLUME = 1; // every world's score, relative to the effects
+const BED_VOLUME = 1; // each world's background bed (birds, wind, rumble, hum)
+
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
-// C - G - Am - F. Four bars of eight eighth-notes each.
-const CHORDS = [
-  { root: 48, tones: [60, 64, 67, 72] }, // C
-  { root: 43, tones: [55, 59, 62, 67] }, // G
-  { root: 45, tones: [57, 60, 64, 69] }, // Am
-  { root: 41, tones: [53, 57, 60, 65] }, // F
-];
-/* which eighth-notes of a bar the arp speaks on - the rests are what keep it
-   from turning into a nagging loop while you think */
-const ARP = [0, 2, 3, 5, 6];
+/* ============================================================
+   THE WORLD SCORES
+
+   Every world has its own loop, all built from the same few
+   synthesised voices - four bars of eight eighth-notes, a chord
+   per bar - so nothing is downloaded and the whole score costs
+   a few hundred bytes. What changes per world is tempo, harmony,
+   the lead's voice, how busy the arp is, and the percussion:
+
+     1  Sunny Meadows  - the bouncy marimba loop (C G Am F)
+     6  Lava Land      - driving A minor, taiko drums
+     3  Windy Peaks    - airy F major, soft pads, sparse bells
+     4  Thunder Sky    - tense D minor, a pulsing bass
+     9  Coral Reef     - slow dreamy Eb, pads, sine lead
+     7  Ancient Egypt  - a Hijaz-scale oud melody over a D drone,
+                         darbuka doum-tek
+     12 Outer Space    - slow Lydian pads and a floating arp
+
+   Under each score a world can lay a BED - birds, wind, a lava
+   rumble, a desert breeze, a space hum - on the ambience bus,
+   separate from the level's own weather (rain, fire, water).
+   A new world's score takes over at the next bar line.
+   ============================================================ */
+type Bed = "birds" | "wind" | "rumble" | "breeze" | "hum" | null;
+interface Theme {
+  step: number; // one eighth note, in seconds
+  chords: { root: number; tones: number[] }[];
+  arp: number[]; // which eighths of a bar the lead speaks on
+  arpShift: number; // semitones added to the chord tone the arp plays
+  melody?: (number | null)[]; // 32 steps; replaces the arp when present
+  lead: OscillatorType;
+  leadGain: number;
+  leadDur: number;
+  sparkle: boolean;
+  stabs: number[]; // eighths with a struck chord
+  pad: boolean; // a soft sustained chord under each bar
+  bass: number[];
+  bassType: OscillatorType;
+  bassGain: number;
+  bassDur: number;
+  bassDur0: number; // the bar's first bass note
+  hat: boolean;
+  drum: "taiko" | "darbuka" | null;
+  bed: Bed;
+}
+const step = (bpm: number) => 60 / bpm / 2;
+const THEMES: Record<number, Theme> = {
+  /* SUNNY MEADOWS - the original loop, unchanged: C - G - Am - F */
+  1: {
+    step: step(112),
+    chords: [
+      { root: 48, tones: [60, 64, 67, 72] },
+      { root: 43, tones: [55, 59, 62, 67] },
+      { root: 45, tones: [57, 60, 64, 69] },
+      { root: 41, tones: [53, 57, 60, 65] },
+    ],
+    arp: [0, 2, 3, 5, 6], arpShift: 12, lead: "triangle", leadGain: 0.1, leadDur: 0.2, sparkle: true,
+    stabs: [2, 6], pad: false,
+    bass: [0, 3, 4, 6], bassType: "triangle", bassGain: 0.28, bassDur: 0.16, bassDur0: 0.26,
+    hat: true, drum: null, bed: "birds",
+  },
+  /* LAVA LAND - Am - F - G - E, fast, busy arp, taiko on 1 and 3 */
+  6: {
+    step: step(128),
+    chords: [
+      { root: 45, tones: [57, 60, 64, 69] },
+      { root: 41, tones: [53, 57, 60, 65] },
+      { root: 43, tones: [55, 59, 62, 67] },
+      { root: 40, tones: [56, 59, 64, 68] },
+    ],
+    arp: [0, 1, 3, 4, 6, 7], arpShift: 12, lead: "square", leadGain: 0.045, leadDur: 0.12, sparkle: false,
+    stabs: [2, 6], pad: false,
+    bass: [0, 1, 2, 3, 4, 5, 6, 7], bassType: "triangle", bassGain: 0.22, bassDur: 0.12, bassDur0: 0.2,
+    hat: true, drum: "taiko", bed: "rumble",
+  },
+  /* WINDY PEAKS - F - C - Dm - Bb, open and airy: pads and sparse bells */
+  3: {
+    step: step(100),
+    chords: [
+      { root: 41, tones: [57, 60, 65, 69] },
+      { root: 48, tones: [55, 60, 64, 67] },
+      { root: 50, tones: [57, 62, 65, 69] },
+      { root: 46, tones: [58, 62, 65, 70] },
+    ],
+    arp: [0, 3, 6], arpShift: 12, lead: "sine", leadGain: 0.11, leadDur: 0.45, sparkle: true,
+    stabs: [], pad: true,
+    bass: [0, 4], bassType: "triangle", bassGain: 0.22, bassDur: 0.3, bassDur0: 0.45,
+    hat: false, drum: null, bed: "wind",
+  },
+  /* THUNDER SKY - Dm - Bb - Gm - A, a pulsing bass under a sparse lead */
+  4: {
+    step: step(96),
+    chords: [
+      { root: 38, tones: [57, 62, 65, 69] },
+      { root: 46, tones: [58, 62, 65, 70] },
+      { root: 43, tones: [55, 58, 62, 67] },
+      { root: 45, tones: [57, 61, 64, 69] },
+    ],
+    arp: [0, 3, 5], arpShift: 12, lead: "triangle", leadGain: 0.09, leadDur: 0.3, sparkle: false,
+    stabs: [4], pad: true,
+    bass: [0, 1, 2, 3, 4, 5, 6, 7], bassType: "triangle", bassGain: 0.18, bassDur: 0.1, bassDur0: 0.18,
+    hat: false, drum: "taiko", bed: null,
+  },
+  /* CORAL REEF - Eb - Cm - Ab - Bb, slow and dreamy */
+  9: {
+    step: step(88),
+    chords: [
+      { root: 39, tones: [58, 63, 67, 70] },
+      { root: 48, tones: [60, 63, 67, 72] },
+      { root: 44, tones: [60, 63, 68, 72] },
+      { root: 46, tones: [58, 62, 65, 70] },
+    ],
+    arp: [0, 2, 4, 6], arpShift: 12, lead: "sine", leadGain: 0.1, leadDur: 0.35, sparkle: true,
+    stabs: [], pad: true,
+    bass: [0, 4], bassType: "sine", bassGain: 0.26, bassDur: 0.4, bassDur0: 0.6,
+    hat: false, drum: null, bed: null,
+  },
+  /* ANCIENT EGYPT - a Hijaz melody (D Eb F# G A Bb C) over a D drone,
+     plucked like an oud, with a darbuka doum-tek */
+  7: {
+    step: step(104),
+    chords: [
+      { root: 38, tones: [62, 66, 69] },
+      { root: 39, tones: [63, 67, 70] },
+      { root: 38, tones: [62, 66, 69] },
+      { root: 36, tones: [60, 63, 67] },
+    ],
+    melody: [
+      69, null, 70, 69, 66, null, 67, 66,
+      63, null, 66, 63, 62, null, null, null,
+      62, 63, 66, 67, 69, null, 70, 72,
+      70, 69, 67, 66, 63, null, 62, null,
+    ],
+    arp: [], arpShift: 0, lead: "triangle", leadGain: 0.12, leadDur: 0.18, sparkle: false,
+    stabs: [], pad: false,
+    bass: [0], bassType: "triangle", bassGain: 0.24, bassDur: 0.8, bassDur0: 0.8,
+    hat: false, drum: "darbuka", bed: "breeze",
+  },
+  /* OUTER SPACE - Cmaj7 - D/C - Em - D, slow Lydian pads, a floating arp */
+  12: {
+    step: step(84),
+    chords: [
+      { root: 36, tones: [60, 64, 67, 71] },
+      { root: 38, tones: [62, 66, 69, 74] },
+      { root: 40, tones: [64, 67, 71, 76] },
+      { root: 38, tones: [62, 67, 69, 74] },
+    ],
+    arp: [0, 3, 5], arpShift: 12, lead: "sine", leadGain: 0.09, leadDur: 0.5, sparkle: true,
+    stabs: [], pad: true,
+    bass: [0], bassType: "sine", bassGain: 0.24, bassDur: 1.2, bassDur0: 1.2,
+    hat: false, drum: null, bed: "hum",
+  },
+};
 
 export type BounceKind = "obstacle" | "ramp";
 /** The level's background weather: rain on a storm board, a crackle on a
@@ -72,6 +216,16 @@ class SoundEngine {
   private timer: ReturnType<typeof setInterval> | null = null;
   private nextTime = 0;
   private stepIx = 0;
+  /* the world score playing, the one asked for (it takes over at the next
+     bar), the shared delay it is timed to, and the world's bed */
+  private theme: Theme = THEMES[1];
+  private wantTheme: Theme = THEMES[1];
+  private delay: DelayNode | null = null;
+  private bed: {
+    kind: Bed;
+    srcs: AudioScheduledSourceNode[];
+    timer: ReturnType<typeof setInterval> | null;
+  } | null = null;
   private lastBounce = -1;
 
   constructor() {
@@ -137,7 +291,8 @@ class SoundEngine {
     this.master.connect(c.destination);
     // one shared delay gives every layer the same room to sit in
     const delay = c.createDelay(1.0);
-    delay.delayTime.value = STEP * 1.5;
+    delay.delayTime.value = this.theme.step * 1.5;
+    this.delay = delay;
     const fb = c.createGain();
     fb.gain.value = 0.28;
     const wet = c.createGain();
@@ -149,7 +304,7 @@ class SoundEngine {
     delay.connect(wet);
     wet.connect(this.master);
     this.music = c.createGain();
-    this.music.gain.value = 0.32;
+    this.music.gain.value = 0.32 * MUSIC_VOLUME;
     this.sfx = c.createGain();
     this.sfx.gain.value = 0.85;
     this.music.connect(this.master);
@@ -255,28 +410,54 @@ class SoundEngine {
      callbacks are far too jittery to sound on directly, so they only ever
      hand exact start times to the audio clock. */
   private scheduleStep(i: number, t: number): void {
+    const th = this.theme, out = this.music!;
     const bar = Math.floor(i / 8) % 4,
       beat = i % 8;
-    const ch = CHORDS[bar];
-    // off-beat chord stabs - the bounce in the loop
-    if (beat === 2 || beat === 6) this.pluck(ch.tones.slice(0, 3).map(mtof), t);
-    // a short hopping bass, pitched high enough for a phone speaker
-    if (beat === 0 || beat === 3 || beat === 4 || beat === 6)
-      this.tone(
-        this.music!,
-        mtof(ch.root),
-        t,
-        beat === 0 ? 0.26 : 0.16,
-        0.28,
-        "triangle",
-      );
-    if (ARP.indexOf(beat) !== -1) {
-      const m = ch.tones[(i * 3 + beat) % ch.tones.length] + 12;
-      this.tone(this.music!, mtof(m), t, 0.2, 0.1, "triangle");
-      if (beat === 0)
-        this.tone(this.music!, mtof(m + 12), t, 0.1, 0.02, "sine"); // sparkle
+    const ch = th.chords[bar];
+    // a soft chord held under the whole bar
+    if (th.pad && beat === 0)
+      for (const m of ch.tones.slice(0, 3)) this.pad(out, mtof(m), t, th.step * 8 * 1.02, 0.026);
+    // struck chord stabs - the bounce in the loop
+    if (th.stabs.indexOf(beat) !== -1) this.pluck(ch.tones.slice(0, 3).map(mtof), t);
+    // the bass, pitched high enough for a phone speaker
+    if (th.bass.indexOf(beat) !== -1)
+      this.tone(out, mtof(ch.root), t, beat === 0 ? th.bassDur0 : th.bassDur, th.bassGain, th.bassType);
+    // the lead: a written melody, or an arp over the chord
+    if (th.melody) {
+      const m = th.melody[i % 32];
+      if (m) {
+        this.tone(out, mtof(m), t, th.leadDur, th.leadGain, th.lead);
+        this.tone(out, mtof(m) * 2, t, 0.04, th.leadGain * 0.2, "sine"); // the pluck's bite
+      }
+    } else if (th.arp.indexOf(beat) !== -1) {
+      const m = ch.tones[(i * 3 + beat) % ch.tones.length] + th.arpShift;
+      this.tone(out, mtof(m), t, th.leadDur, th.leadGain, th.lead);
+      if (beat === 0 && th.sparkle) this.tone(out, mtof(m + 12), t, 0.1, 0.02, "sine");
     }
-    if (beat % 2 === 1) this.noise(this.music!, t, 0.035, 0.03, 7000);
+    if (th.hat && beat % 2 === 1) this.noise(out, t, 0.035, 0.03, 7000);
+    if (th.drum === "taiko" && (beat === 0 || beat === 4))
+      this.sweep(out, 150, 85, 55, t, 0.28, beat === 0 ? 0.2 : 0.13, "sine");
+    if (th.drum === "darbuka") {
+      if (beat === 0 || beat === 4) this.sweep(out, 130, 95, 75, t, 0.16, 0.16, "sine"); // doum
+      if (beat === 1 || beat === 3 || beat === 6) this.noise(out, t, 0.03, 0.045, 2800); // tek
+    }
+  }
+
+  /* A sustained voice: a slow swell in, held, and a slow fade out. */
+  private pad(dest: AudioNode, freq: number, t: number, dur: number, peak: number): void {
+    const c = this.ctx!;
+    const o = c.createOscillator(),
+      g = c.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + Math.min(0.5, dur * 0.3));
+    g.gain.setValueAtTime(peak, t + dur * 0.6);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(dest);
+    o.start(t);
+    o.stop(t + dur + 0.05);
   }
 
   private pump = (): void => {
@@ -284,18 +465,27 @@ class SoundEngine {
     while (this.nextTime < this.ctx.currentTime + 0.15) {
       if (this.nextTime < this.ctx.currentTime)
         this.nextTime = this.ctx.currentTime + 0.03;
+      /* a new world's score takes over on a bar line, from its own bar 1 */
+      if (this.stepIx % 8 === 0 && this.wantTheme !== this.theme) {
+        this.theme = this.wantTheme;
+        this.stepIx = 0;
+        this.delay?.delayTime.setValueAtTime(this.theme.step * 1.5, this.nextTime);
+      }
       this.scheduleStep(this.stepIx, this.nextTime);
-      this.nextTime += STEP;
+      this.nextTime += this.theme.step;
       this.stepIx = (this.stepIx + 1) % 32;
     }
   };
 
   private startMusic(): void {
     this.applyAmbience();
+    this.applyBed();
     if (!this.ctx || this.started || this.ctx.state !== "running") return;
     this.started = true;
     this.nextTime = this.ctx.currentTime + 0.1;
     this.stepIx = 0;
+    this.theme = this.wantTheme;
+    this.delay?.delayTime.setValueAtTime(this.theme.step * 1.5, this.ctx.currentTime);
     this.pump();
     this.timer = setInterval(this.pump, 25);
   }
@@ -561,6 +751,100 @@ class SoundEngine {
           );
       }, 45);
       this.amb = { kind: "fire", srcs: [], timer };
+    }
+  }
+
+  /** Which world is on screen, by country id: picks its score (taking over at
+      the next bar line) and its bed. Cheap to call every frame. */
+  setWorld(id: number): void {
+    const th = THEMES[id] ?? THEMES[1];
+    if (th === this.wantTheme) return;
+    this.wantTheme = th;
+    this.applyBed();
+  }
+
+  /* The world's bed, on the ambience bus under the score. */
+  private applyBed(): void {
+    const want = this.wantTheme.bed;
+    if (this.bed && this.bed.kind === want) return;
+    if (this.bed) {
+      for (const s of this.bed.srcs) {
+        try {
+          s.stop();
+        } catch {
+          /* already stopped */
+        }
+      }
+      if (this.bed.timer) clearInterval(this.bed.timer);
+      this.bed = null;
+    }
+    const c = this.ctx;
+    if (!c || c.state !== "running" || this.isMuted || !want || BED_VOLUME <= 0) return;
+    const live = () => !!this.ctx && this.ctx.state === "running" && !this.isMuted;
+    /* filtered noise whose level breathes slowly - wind, a rumble, a breeze */
+    const breath = (lo: number, hi: number, gain: number, rate: number, depth: number) => {
+      const src = c.createBufferSource();
+      src.buffer = this.longNoise;
+      src.loop = true;
+      const hp = c.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = lo;
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = hi;
+      const g = c.createGain();
+      g.gain.value = gain * BED_VOLUME;
+      const lfo = c.createOscillator(),
+        d = c.createGain();
+      lfo.frequency.value = rate;
+      d.gain.value = depth * BED_VOLUME;
+      lfo.connect(d);
+      d.connect(g.gain);
+      src.connect(hp);
+      hp.connect(lp);
+      lp.connect(g);
+      g.connect(this.ambBus!);
+      src.start();
+      lfo.start();
+      return [src, lfo];
+    };
+    if (want === "birds") {
+      /* now and then a bird: two or three quick rising chirps */
+      const timer = setInterval(() => {
+        if (!live() || Math.random() > 0.035) return;
+        let t = this.ctx!.currentTime + 0.02;
+        const f = 2200 + Math.random() * 1400;
+        for (let k = 0, n = 2 + Math.floor(Math.random() * 2); k < n; k++) {
+          this.sweep(this.ambBus!, f, f * 1.3, f * 1.1, t, 0.07, 0.008 * BED_VOLUME, "sine");
+          t += 0.09 + Math.random() * 0.04;
+        }
+      }, 120);
+      this.bed = { kind: want, srcs: [], timer };
+    } else if (want === "wind") {
+      this.bed = { kind: want, srcs: breath(250, 1400, 0.006, 0.09, 0.004), timer: null };
+    } else if (want === "rumble") {
+      this.bed = { kind: want, srcs: breath(30, 160, 0.02, 0.07, 0.01), timer: null };
+    } else if (want === "breeze") {
+      this.bed = { kind: want, srcs: breath(400, 2200, 0.003, 0.06, 0.002), timer: null };
+    } else if (want === "hum") {
+      /* a slow-beating drone, and now and then a far-off twinkle */
+      const g = c.createGain();
+      g.gain.value = 0.012 * BED_VOLUME;
+      g.connect(this.ambBus!);
+      const oscs = [110, 110.6, 165].map(f => {
+        const o = c.createOscillator();
+        o.type = "sine";
+        o.frequency.value = f;
+        o.connect(g);
+        o.start();
+        return o;
+      });
+      const timer = setInterval(() => {
+        if (!live() || Math.random() > 0.05) return;
+        const f = 1600 + Math.random() * 1400;
+        this.tone(this.music!, f, this.ctx!.currentTime + 0.02, 0.25, 0.012 * BED_VOLUME, "sine");
+      }, 150);
+      this.bed = { kind: want, srcs: oscs, timer };
     }
   }
 

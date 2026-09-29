@@ -1348,3 +1348,8 @@ body{padding:0 !important}
 .selcard .grid button.cur .lvs i{color:rgba(255,255,255,.35)}
 .selcard .grid button.cur .lvs i.on{color:#ffd84a;text-shadow:none}
 .selcard .worlddots{margin:0 0 14px}
+
+/* the dark-sky world (Outer Space): light text on its world card and banner */
+.card.intro.worldcard.night .big,.card.intro.worldcard.night .sub{color:#fff}
+.worldbanner.night{color:#fff}
+.worldbanner.night .worldstars{background:rgba(255,255,255,.18)}

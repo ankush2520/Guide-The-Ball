@@ -577,6 +577,7 @@ export class GameController {
   private weather(): void {
     const lv = this.levels.playLevel;
     Sound.setAmbience(lv.storm ? 'rain' : lv.crabs && lv.crabs.length ? 'water' : lv.fires.length ? 'fire' : 'none');
+    Sound.setWorld(this.levels.country.id);          // the world's own score and bed
     if (!lv.storm) return;
     const simT = this.ball ? this.ball.t0 + this.ball.steps : this.patrolClock;
     const s = strikeAt(lv, simT);

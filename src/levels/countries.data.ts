@@ -50,7 +50,9 @@ export const COUNTRIES: Country[] = [
      target's dark green and wall grey each clear 3:1 against all three stops
      (tightest: wall grey at 3.06:1 on the top stop), and the ink outline
      around every shape clears 11:1. */
-  { id: 1, name: 'Verdholm', from: 1,   to: 20,  mechanic: 'ramps only - the fundamentals',
+  { id: 1, name: 'Sunny Meadows', from: 1,   to: 20,  mechanic: 'ramps only - the fundamentals',
+    /* rolling hills, round trees, flowers and butterflies (entities/Scenery) */
+    scene: 'meadow',
     sky: ['#d3edff', '#e4f3ff', '#f2ecff'], wash: '90,130,210', accent: '#ffb400' },
 
   /* ============================================================
@@ -72,7 +74,7 @@ export const COUNTRIES: Country[] = [
      yours. Fire is inside the red family and is told apart by
      SHAPE and MOTION, never by hue alone - see FireObstacle.
      ============================================================ */
-  { id: 6, name: 'Emberkeep', from: 21,  to: 40,  mechanic: 'fire - the hazard that ends the run',
+  { id: 6, name: 'Lava Land', from: 21,  to: 40,  mechanic: 'fire - the hazard that ends the run',
     /* the fire world looks like one: volcanoes, lava, embers (entities/Volcano) */
     scene: 'volcano',
     sky: ['#ffe4de', '#ffe9e2', '#fff3ea'], wash: '230,100,70', accent: '#ff5a2e' },
@@ -90,7 +92,9 @@ export const COUNTRIES: Country[] = [
      Soft sage-mint - low chroma on purpose, because wind streaks
      are the thing that should be moving here.
      ============================================================ */
-  { id: 3, name: 'Windemere', from: 41,  to: 60,  mechanic: 'wind + fire',
+  { id: 3, name: 'Windy Peaks', from: 41,  to: 60,  mechanic: 'wind + fire',
+    /* snowy peaks and a breezy meadow on the horizon (entities/Mountains) */
+    scene: 'mountains',
     sky: ['#d6f0e6', '#e5f6ee', '#f1faf5'], wash: '80,165,135', accent: '#2fb584' },
 
   /* ============================================================
@@ -108,7 +112,9 @@ export const COUNTRIES: Country[] = [
      Frostvale's icy cyan into snow-white - a cold, wet sky, which
      the rain and the lightning's yellow both read clearly against.
      ============================================================ */
-  { id: 4, name: 'Stormhold', from: 61,  to: 80,  mechanic: 'thunderstorm',
+  { id: 4, name: 'Thunder Sky', from: 61,  to: 80,  mechanic: 'thunderstorm',
+    /* storm clouds, rain-dark cliffs, a lighthouse, puddles (entities/Scenery) */
+    scene: 'cliffs',
     sky: ['#d2f1f7', '#e3f7fa', '#f4fcfd'], wash: '90,180,215', accent: '#27b0e0' },
 
   /* ============================================================
@@ -126,19 +132,28 @@ export const COUNTRIES: Country[] = [
 
      Shallow-water turquoise.
      ============================================================ */
-  { id: 9, name: 'Coralis Deep', from: 81, to: 100, mechanic: 'underwater - crabs',
+  { id: 9, name: 'Coral Reef', from: 81, to: 100, mechanic: 'underwater - crabs',
     sky: ['#cff3f3', '#dff8f6', '#effcfa'], wash: '40,175,185', accent: '#16aebf' },
 
   /* Periwinkle dusk over pale sand - a gold pickup star is the warmest,
      strongest thing on screen. Twenty cities, like every world; it absorbed
      Cascadia Falls' block. */
-  { id: 7, name: 'Nocturne Sands', from: 101, to: 120, mechanic: 'collectible stars',
-    sky: ['#e8e8fb', '#ece8f7', '#fbf0dc'], wash: '120,110,215', accent: '#7c6cf0' },
+  { id: 7, name: 'Ancient Egypt', from: 101, to: 120, mechanic: 'collectible stars',
+    /* pyramids, an obelisk, the Nile and its palms (entities/Scenery).
+       Warm sand sky, pale enough that every entity colour clears 3:1 on it. */
+    scene: 'egypt',
+    sky: ['#ffe6c7', '#ffeedb', '#fff5e8'], wash: '215,140,70', accent: '#f59a1b' },
 
   /* Brushed steel warming at the floor, with a single orange spark. Dense
      boards and few ramps, so the palette stays flat and lets the geometry
      carry it. The last world: twenty cities, and it absorbed Aerith Heights'
      block; The Zenith's old 141-150 are gone with it. */
-  { id: 12, name: 'Ironvale', from: 121, to: 140, mechanic: 'high density, fewer ramps',
-    sky: ['#e9eaec', '#eceef1', '#f6f1ea'], wash: '125,135,150', accent: '#ff7a2a' },
+  { id: 12, name: 'Outer Space', from: 121, to: 140, mechanic: 'high density, fewer ramps',
+    /* deep space: nebula glow, a star field, shooting stars, a ringed
+       planet, a moon, a rocket and a cratered floor (entities/Scenery).
+       The one NIGHT sky in the game - isLightSky is false here, so the
+       backdrop, the caption and the world cards switch to their dark-sky
+       treatment, as they did for the original navy board. */
+    scene: 'space',
+    sky: ['#26205a', '#1b1746', '#0e0c2a'], wash: '120,100,230', accent: '#a78bfa' },
 ];

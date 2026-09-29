@@ -201,8 +201,9 @@ export class Renderer {
        drifting stars on the countries that are still night */
     /* ...and nothing at all under water: the sea (entities/Sea) is the sky there */
     const underwater = !!(s.level.crabs && s.level.crabs.length);
-    // a painted world (the volcano) is its own sky too
-    if (underwater || s.country.scene) { /* no clouds, no stars */ }
+    // the volcano, Egypt's clear sky and space are their own sky; other worlds keep the clouds
+    const ownSky = s.country.scene === 'volcano' || s.country.scene === 'egypt' || s.country.scene === 'space';
+    if (underwater || ownSky) { /* no clouds, no stars */ }
     else if (isLightSky(s.country.sky[1])) drawClouds(ctx, s.clock);
     else drawStarfield(ctx, s.clock);
 

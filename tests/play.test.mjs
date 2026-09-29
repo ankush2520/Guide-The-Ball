@@ -300,7 +300,7 @@ const geo = await page.evaluate(() => {
     orphan, uniqueCities: new Set(cities).size, nCities: cities.length,
     sample: [g.cityOf(g.LEVELS[0]), g.cityOf(g.LEVELS[19]),
              g.cityOf(g.LEVELS[20]), g.cityOf(g.LEVELS[29])],
-    verdholmFrozen: C[0].name === 'Verdholm' &&
+    verdholmFrozen: C[0].name === 'Sunny Meadows' &&
                     /* the toon day sky. It replaced the night navy on purpose;
                        pinned so it cannot change by accident either */
                     C[0].sky.join(',') === '#d3edff,#e4f3ff,#f2ecff' &&
@@ -326,8 +326,8 @@ check(geo.uniqueCities === geo.nCities, 'every city name is unique',
    Verdholm, then the start and the middle of Emberkeep, so the ordinal is
    checked where it starts, where it reaches XX, where it rolls over into the
    next country, and again ten cities into a twenty-city world. */
-check(geo.sample[0] === 'Verdholm I'  && geo.sample[1] === 'Verdholm XX' &&
-      geo.sample[2] === 'Emberkeep I' && geo.sample[3] === 'Emberkeep X',
+check(geo.sample[0] === 'Sunny Meadows I'  && geo.sample[1] === 'Sunny Meadows XX' &&
+      geo.sample[2] === 'Lava Land I' && geo.sample[3] === 'Lava Land X',
   'city names are derived from country + position, and roll over at a border',
   geo.sample.join(', '));
 

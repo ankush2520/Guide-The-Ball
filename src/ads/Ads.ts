@@ -96,7 +96,9 @@ class AdsImpl {
       if (cg) {
         await cg.init();
         this.platform = 'crazygames';
-        this.ready = cg.environment !== 'disabled';
+        /* VITE_NO_ADS: the Basic Launch build. CrazyGames allows no ads in
+           that phase, so every ad button stays hidden whatever the SDK says. */
+        this.ready = cg.environment !== 'disabled' && !import.meta.env.VITE_NO_ADS;
         return;
       }
       const poki = window.PokiSDK;

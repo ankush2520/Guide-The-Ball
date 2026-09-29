@@ -33,6 +33,8 @@ import { Storm } from './Storm';
 import { Crab } from './Crab';
 import { Sea } from './Sea';
 import { Volcano } from './Volcano';
+import { Mountains } from './Mountains';
+import { Meadow, Cliffs, Egypt, Space } from './Scenery';
 import { countryOf } from '../levels';
 import { PILLAR_SEGS } from '../levels/pillars';
 import type { PillarLook } from '../levels/types';
@@ -60,6 +62,11 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   sea:       { ctor: Sea,          pick: lv => (lv.crabs && lv.crabs.length ? [lv.crabs] : []) },
   /* a world's painted backdrop, by the world it is in (Country.scene) */
   volcano:   { ctor: Volcano,      pick: lv => (countryOf(lv.id).scene === 'volcano' ? [lv] : []) },
+  mountains: { ctor: Mountains,    pick: lv => (countryOf(lv.id).scene === 'mountains' ? [lv] : []) },
+  meadow:    { ctor: Meadow,       pick: lv => (countryOf(lv.id).scene === 'meadow' ? [lv] : []) },
+  cliffs:    { ctor: Cliffs,       pick: lv => (countryOf(lv.id).scene === 'cliffs' ? [lv] : []) },
+  egypt:     { ctor: Egypt,        pick: lv => (countryOf(lv.id).scene === 'egypt' ? [lv] : []) },
+  space:     { ctor: Space,        pick: lv => (countryOf(lv.id).scene === 'space' ? [lv] : []) },
   /* One target per level; a patrolling one is the same kind with its lane
      drawn under it - see MovingTarget. */
   target:    { ctor: Target,       pick: lv => [lv.target],
@@ -83,8 +90,10 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
 
 /* A pillar wears its WORLD, by country id: a tree trunk in the meadows,
    basalt by the volcano, wind-worn mint stone in the breezes, rain-dark
-   slate in the storm, reef rock under the sea. Any other world gets stone. */
-const PILLAR_LOOK: Record<number, PillarLook> = { 1: 'tree', 6: 'basalt', 3: 'mint', 4: 'slate', 9: 'coral' };
+   slate in the storm, reef rock under the sea, carved sandstone in
+   Egypt and a riveted metal strut in space. Any other world gets stone. */
+const PILLAR_LOOK: Record<number, PillarLook> = { 1: 'tree', 6: 'basalt', 3: 'mint', 4: 'slate', 9: 'coral',
+                                                  7: 'sandstone', 12: 'metal' };
 const pillarLook = (id: number): PillarLook => PILLAR_LOOK[countryOf(id).id] ?? 'stone';
 
 export class EntityFactory {

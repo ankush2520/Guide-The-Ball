@@ -91,7 +91,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
 
     const services: GameServices = { bus, levels, rewards, controller, canvas };
-    installGameHook(services);      // the Playwright suite and the solver sweep
+    /* the Playwright suite and the solver sweep - never in a portal build */
+    if (import.meta.env.DEV || !import.meta.env.VITE_PLATFORM) installGameHook(services);
     return services;
   }, []);
 

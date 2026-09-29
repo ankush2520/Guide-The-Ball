@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react';
 import { useGame, useGameVersion } from '../core/GameContext';
 import { drawIntroIcon, hasIcon } from './introIcons';
+import { isLightSky } from '../render/palette';
 
 export function IntroCard({ hidden }: { hidden: boolean }) {
   const { controller } = useGame();
@@ -38,7 +39,8 @@ export function IntroCard({ hidden }: { hidden: boolean }) {
   const world = card.world;
   return (
     <div className={'overlay introlay' + (world ? ' world' : '')} id="introcard">
-      <div className={'card intro' + (world ? ' worldcard' : '')} data-key={card.key}
+      <div className={'card intro' + (world ? ' worldcard' : '') + (world && !isLightSky(world.sky[1]) ? ' night' : '')}
+           data-key={card.key}
            style={world ? { background: `linear-gradient(180deg, ${world.sky[0]}, ${world.sky[1]} 55%, ${world.sky[2]})`,
                             ['--accent' as string]: world.accent } : undefined}>
         {hasIcon(card.icon) && <canvas ref={cv} className="introicon" aria-hidden="true" />}

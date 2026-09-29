@@ -45,7 +45,7 @@ const NAMES = {
   51: 'Sirocco', 52: 'Ash Storm', 53: 'Crossdraught', 54: 'Hot Breeze', 55: 'Wildfire',
   56: 'Gale Force', 57: 'Firestorm', 58: 'Fire Whirl', 59: 'Dust Devil', 60: 'The Tempest',
 };
-export { NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, rng, rint };
+export { NAMES, FIRE_GLOW, BOX_GLOW, BOX_R, GLOW_PAD, STORM_R, rng, rint, MIN_GAP };
 
 /** A proper integer hash (murmur3's finaliser): neighbouring ids come out
     unrelated, which a plain LCG seeded with them does not. */
@@ -214,6 +214,25 @@ export function crabFor(rr, n, spawn, lane, blockers, ok = () => true){
   return crabs.length >= Math.min(MIN_CRABS, n) ? crabs : null;
 }
 
+/** GOLD STARS (Ancient Egypt): optional pickups, scenery to the physics. Put
+    in the open air a ball can pass through - clear of every hazard, the box,
+    the target's lane and the drop - spread apart, and never low on the board
+    where only a finished shot would reach them. */
+export function starsFor(rr, n, spawn, lane, blockers, walls = [], extraOk = () => true){
+  const out = [];
+  for (let c = 0; c < 2000 && out.length < n; c++){
+    const s = { x: rint(rr, 40, W - 40), y: rint(rr, 150, H - 170), r: 14 };
+    if (Math.hypot(s.x - spawn.x, s.y - spawn.y) < 90) continue;
+    if (!lane.every(t => Math.hypot(s.x - t.x, s.y - t.y) >= s.r + t.r + 40)) continue;
+    if (!blockers.every(q => Math.hypot(s.x - q.x, s.y - q.y) >= s.r + q.r * 1.4 + MIN_GAP)) continue;
+    if (walls.some(w => segDist(s.x, s.y, w) < s.r + MIN_GAP)) continue;
+    if (!out.every(q => Math.hypot(s.x - q.x, s.y - q.y) >= 110)) continue;
+    if (!extraOk(s)) continue;
+    out.push(s);
+  }
+  return out.map(({ x, y }) => ({ x, y }));
+}
+
 /** Re-rolls a city until the spread audit (tools/spread-metrics.mjs) has
     nothing to flag: no clustering, no glow overlap. */
 async function buildSpread(id, tpl, oldGift, world){
@@ -221,7 +240,7 @@ async function buildSpread(id, tpl, oldGift, world){
   let last;
   for (let attempt = 0; attempt < 200; attempt++){
     try { last = build(id, tpl, oldGift, attempt, world); } catch (e) { continue; }
-    const m = measure({ ...last, boxes: last.box ? [last.box] : [], stars: [] });
+    const m = measure({ ...last, boxes: last.box ? [last.box] : [], stars: last.stars || [] });
     if (!m.flags.length) return last;
   }
   if (!last) throw new Error(`level ${id}: template problem - nothing placed`);
@@ -261,6 +280,12 @@ function build(id, tpl, oldGift, attempt, world){
   const pieces = [...tpl.fires.map(o => ({ r: o.r, kind: 'f' })),
                   ...tpl.breakables.map(o => ({ r: o.r, kind: 'b' })),
                   ...tpl.obstacles.map(o => ({ r: o.r, kind: 'o' }))];
+  /* DENSE worlds (Outer Space) crowd the board: extra small red obstacles
+     on top of the twin's own, more of them the later the city */
+  if (world.addOn === 'dense'){
+    const p = id - world.from + 1;
+    for (let k = 0, n = p <= 8 ? 2 : p <= 12 ? 3 : 4; k < n; k++) pieces.push({ r: rint(r, 16, 20), kind: 'o' });
+  }
   const placed = [];
   for (const pc of pieces){
     let best = null, bestScore = -Infinity;
@@ -282,13 +307,15 @@ function build(id, tpl, oldGift, attempt, world){
 
   /* the world's own mechanic, on top of the twin's layout */
   const pos = id - world.from + 1;                      // 1..16
-  let wind, storm, crabs;
+  let wind, storm, crabs, stars;
   if (world.addOn === 'wind'){
     const lo = targetMove ? { ...target, x: (x0 + x1) / 2 } : target;
     wind = windFor(r, pos <= 8 ? 1 : 2, pos >= 13, spawn.x, lo, lo);
   } else if (world.addOn === 'storm'){
     storm = stormFor(r, pos <= 8 ? 4 : pos <= 12 ? 5 : 6, spawn, lane);
     if (!storm) throw new Error('no room for the storm');
+  } else if (world.addOn === 'stars'){
+    stars = starsFor(r, pos <= 8 ? 2 : pos <= 12 ? 3 : 4, spawn, lane, [...placed, ...(box ? [box] : [])], walls);
   } else if (world.addOn === 'crabs'){
     crabs = crabFor(r, pos <= 8 ? 2 : pos <= 12 ? 3 : 4, spawn, lane, [...placed, ...(box ? [box] : [])]);
     if (!crabs) throw new Error('no room for the crabs');
@@ -296,7 +323,7 @@ function build(id, tpl, oldGift, attempt, world){
 
   const pick = k => placed.filter(o => o.kind === k).map(({ x, y, r }) => ({ x, y, r }));
   return { id, name: world.names[id], maxBlocks: tpl.maxBlocks, targetType: tpl.targetType, wallSide,
-           spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm, crabs,
+           spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm, crabs, stars,
            box: box && { x: box.x, y: box.y }, target, targetMove, gift: oldGift };
 }
 
@@ -308,6 +335,7 @@ function toRaw(L){
            breakables: L.breakables.length ? L.breakables : undefined,
            fires: L.fires.length ? L.fires : undefined,
            wind: L.wind, storm: L.storm, crabs: L.crabs,
+           stars: L.stars && L.stars.length ? L.stars : undefined,
            boxes: L.box ? [L.box] : undefined,
            target: L.target, targetMove: L.targetMove || undefined,
            targetGift: L.gift || undefined };

@@ -29,6 +29,8 @@ const MATS: Record<PillarLook, Mat> = {
   mint:   { top: '#d9efe4', bottom: '#94c7ae', line: 'rgba(60,120,95,.45)' },
   slate:  { top: '#7a7598', bottom: '#4a4667', line: 'rgba(28,24,48,.5)' },
   coral:  { top: '#ffab98', bottom: '#dc6f86', line: 'rgba(150,50,80,.4)' },
+  sandstone: { top: '#f8dca8', bottom: '#dba266', line: 'rgba(150,85,35,.45)' },
+  metal:  { top: '#e1e4ef', bottom: '#9aa1bd', line: 'rgba(60,65,100,.5)' },
   stone:  { top: WALL.light, bottom: WALL.dark, line: 'rgba(42,35,80,.35)' },
 };
 
@@ -147,6 +149,31 @@ export class Pillar extends Entity<PillarDef> {
           }
         break;
       }
+      case 'sandstone': {
+        // an Egyptian column: gold bands, and carved marks between them
+        ctx.fillStyle = 'rgba(240,190,60,.9)';
+        for (let y = 0; y < bottom - 16; y += 72) ctx.fillRect(x - hw, y, w, 6);
+        ctx.fillStyle = 'rgba(130,75,30,.55)';
+        for (let y = 16; y < bottom - 20; y += 72) {
+          ctx.beginPath(); ctx.arc(x, y + 6, 4, 0, Math.PI * 2); ctx.fill();          // a sun disc
+          ctx.fillRect(x - 1.5, y + 14, 3, 14);                                       // a reed
+          ctx.beginPath(); ctx.moveTo(x - 5, y + 44); ctx.lineTo(x, y + 34);           // a little pyramid
+          ctx.lineTo(x + 5, y + 44); ctx.closePath(); ctx.fill();
+        }
+        break;
+      }
+      case 'metal': {
+        // panel seams and a column of rivets down each side
+        for (let y = 0; y < bottom - 10; y += 56) {
+          ctx.beginPath(); ctx.moveTo(x - hw, y); ctx.lineTo(x + hw, y); ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(60,65,100,.45)';
+        for (let y = 14; y < bottom - 14; y += 28)
+          for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(x + s * hw * 0.62, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = 'rgba(255,255,255,.35)';
+        ctx.fillRect(x - hw * 0.35, PILLAR_TOP, 4, bottom - PILLAR_TOP);
+        break;
+      }
       default: {
         for (let y = 0; y < bottom - 10; y += 48) {
           ctx.beginPath(); ctx.moveTo(x - hw, y); ctx.lineTo(x + hw, y); ctx.stroke();
@@ -231,6 +258,27 @@ export class Pillar extends Entity<PillarDef> {
           ctx.beginPath(); ctx.ellipse(x + hw + 5 + Math.cos(ang) * 6, ay + Math.sin(ang) * 6, 4, 2.5, ang, 0, Math.PI * 2);
           ctx.fill(); ctx.stroke();
         }
+        break;
+      }
+      case 'sandstone': {
+        // sand trickling off the foot
+        ctx.fillStyle = 'rgba(214,160,90,.8)';
+        for (let k = 0; k < 3; k++) {
+          const t = (clock * 0.8 + k / 3) % 1;
+          ctx.globalAlpha = 1 - t;
+          ctx.beginPath(); ctx.arc(x + (k - 1) * 4, bottom + 2 + t * 22, 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case 'metal': {
+        // a beacon at the tip, blinking red and green
+        const on = Math.floor(clock * 1.5) % 2;
+        ctx.fillStyle = on ? '#ff4d5e' : '#39d67a'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, bottom + 2, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const bg = ctx.createRadialGradient(x, bottom + 2, 2, x, bottom + 2, 16);
+        bg.addColorStop(0, on ? 'rgba(255,77,94,.45)' : 'rgba(57,214,122,.45)'); bg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x, bottom + 2, 16, 0, Math.PI * 2); ctx.fill();
         break;
       }
       default: break;
