@@ -35,6 +35,8 @@ import { Sea } from './Sea';
 import { Volcano } from './Volcano';
 import { Mountains } from './Mountains';
 import { Meadow, Cliffs, Egypt, Space } from './Scenery';
+import { Quicksand } from './Quicksand';
+import { BlackHole } from './BlackHole';
 import { countryOf } from '../levels';
 import { PILLAR_SEGS } from '../levels/pillars';
 import type { PillarLook } from '../levels/types';
@@ -57,6 +59,8 @@ interface Spec {
 
 const REGISTRY: Partial<Record<EntityKind, Spec>> = {
   slippery:  { ctor: SlipperyZone, pick: lv => lv.slippery },
+  quicksand: { ctor: Quicksand,    pick: lv => lv.quicksand },
+  blackhole: { ctor: BlackHole,    pick: lv => lv.blackholes },
   wind:      { ctor: WindZone,     pick: lv => lv.wind },
   rain:      { ctor: Rain,         pick: lv => (lv.storm ? [lv.storm] : []) },
   sea:       { ctor: Sea,          pick: lv => (lv.crabs && lv.crabs.length ? [lv.crabs] : []) },

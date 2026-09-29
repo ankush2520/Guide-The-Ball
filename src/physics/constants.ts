@@ -249,6 +249,11 @@ export const SPRING_CD = 12;
 export const BOOST_SUB_PX = 3;
 export const BOOST_SUBSTEPS_MAX = 48;
 
+/* Quicksand: the share of its speed the ball keeps each step it is inside a
+   pit. Gravity still adds GRAVITY a step, so it sinks at about
+   GRAVITY * QUICKSAND_KEEP / (1 - QUICKSAND_KEEP) = 2.3 px/step - slowly,
+   but never stuck. */
+export const QUICKSAND_KEEP = 0.86;
 export const SLIP_REST = 0.985;      // restitution inside a slippery zone
 
 export const STAR_R = 13;            // star collection radius (plus the ball's)

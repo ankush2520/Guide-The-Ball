@@ -16,6 +16,8 @@ export function initLevel(raw: RawLevel): Level {
     boosters: raw.boosters ?? [],
     wind: raw.wind ?? [],
     slippery: raw.slippery ?? [],
+    quicksand: raw.quicksand ?? [],
+    blackholes: raw.blackholes ?? [],
     breakables: raw.breakables ?? [],
     stars: raw.stars ?? [],
     fires: raw.fires ?? [],
@@ -53,12 +55,10 @@ export function initLevel(raw: RawLevel): Level {
   return lv;
 }
 
-/* Levels that ship. 101-140 are still the old design, so a release build
-   stops at the end of world 5; raise this as later worlds are rebuilt. In
-   dev (npm run dev) every level is there, so worlds 6 and 7 can be seen and
-   worked on. Every screen (worlds, level picker, progress) follows
-   LEVELS.length. */
-export const RELEASED_LEVELS = import.meta.env?.DEV ? RAW_LEVELS.length : 100;
+/* Levels that ship: all seven worlds, 1-140. Lower this to hold back a
+   world that is not ready - every screen (worlds, level picker, progress)
+   follows LEVELS.length. */
+export const RELEASED_LEVELS = RAW_LEVELS.length;
 export const LEVELS: Level[] = RAW_LEVELS.slice(0, RELEASED_LEVELS).map(initLevel);
 
 /** The obstacle-scatter seed a level's drops use. DETERMINISTIC: the same

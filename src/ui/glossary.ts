@@ -105,6 +105,18 @@ export const GLOSSARY: GlossaryEntry[] = [
           'drop for when the crabs are out of the way.',
     title: 'Crab', icon: 'crab', intro: 'Walks the same loop every time. Get pinched and your drop is over!',
     highlight: (lv, t) => (lv.crabs ?? []).map(c => { const p = crabAt(c, t); return { x: p.x, y: p.y, r: c.r + 8 }; }) },
+  { key: 'quicksand', cls: 'qs', has: lv => lv.quicksand.length > 0, name: 'Quicksand', covers: ['quicksand'],
+    long: 'A pit of sinking sand. It does not stop the ball, but inside it the ball loses almost all ' +
+          'its speed and just sinks straight down. Route around it - or use it to drop the ball ' +
+          'exactly where you want it.',
+    title: 'Quicksand', icon: 'quicksand', intro: 'Grabs the ball and kills its speed. It sinks straight down!',
+    highlight: lv => lv.quicksand.map(q => ({ x: q.x, y: q.y, r: q.r + 6 })) },
+  { key: 'blackhole', cls: 'bh', has: lv => lv.blackholes.length > 0, name: 'Black hole', covers: ['blackhole'],
+    long: 'It pulls the ball toward it from anywhere inside its faint outer ring, bending the path - ' +
+          'harder the closer the ball gets. Skim the edge to curve around it; fall into the dark ' +
+          'middle and the drop is over.',
+    title: 'Black hole', icon: 'blackhole', intro: 'Pulls the ball in. Touch the dark middle and it is gone!',
+    highlight: lv => lv.blackholes.map(h => ({ x: h.x, y: h.y, r: h.r + 16 })) },
   { key: 'pillar', cls: 'ov', has: lv => lv.pillars.length > 0, name: 'Pillar', covers: ['pillar'],
     long: 'A solid column hanging from the sky. Nothing goes through it or over it - the ball ' +
           'bounces off it like a wall - so the only way to the other side is DOWN and round ' +

@@ -233,6 +233,43 @@ export function starsFor(rr, n, spawn, lane, blockers, walls = [], extraOk = () 
   return out.map(({ x, y }) => ({ x, y }));
 }
 
+/** QUICKSAND pits (Ancient Egypt): round, clear of the drop, the target's
+    lane, every hazard and each other. At least one, or the board re-rolls. */
+export function pitsFor(rr, n, spawn, lane, others, walls = []){
+  const out = [];
+  for (let c = 0; c < 1500 && out.length < n; c++){
+    const q = { x: 0, y: 0, r: rint(rr, 36, 48) };
+    q.x = rint(rr, q.r + 10, W - q.r - 10); q.y = rint(rr, 200, H - 140);
+    if (Math.hypot(q.x - spawn.x, q.y - spawn.y) < q.r + 110) continue;
+    if (!lane.every(t => Math.hypot(q.x - t.x, q.y - t.y) >= q.r + t.r + 30)) continue;
+    if (!others.every(o => Math.hypot(q.x - o.x, q.y - o.y) >= q.r + o.r * (o.kind === 'f' ? 1.6 : 1) + MIN_GAP)) continue;
+    if (walls.some(w => segDist(q.x, q.y, w) < q.r + 10)) continue;
+    if (!out.every(o => Math.hypot(q.x - o.x, q.y - o.y) >= q.r + o.r + 40)) continue;
+    out.push(q);
+  }
+  if (!out.length) throw new Error('no room for quicksand');
+  return out;
+}
+
+/** BLACK HOLES (Outer Space): the core clear of every hazard, and the whole
+    PULL kept off the drop and the target's lane - so a hole bends shots on
+    the way, never the finish. At least one, or the board re-rolls. */
+export function holesFor(rr, n, spawn, lane, others, walls = []){
+  const out = [];
+  for (let c = 0; c < 1500 && out.length < n; c++){
+    const h = { x: 0, y: 0, r: rint(rr, 13, 16), reach: rint(rr, 85, 110), pull: rfl(rr, 0.38, 0.5) };
+    h.x = rint(rr, 50, W - 50); h.y = rint(rr, 220, H - 180);
+    if (Math.hypot(h.x - spawn.x, h.y - spawn.y) < h.reach + 40) continue;
+    if (!lane.every(t => Math.hypot(h.x - t.x, h.y - t.y) >= h.reach + t.r + 10)) continue;
+    if (!others.every(o => Math.hypot(h.x - o.x, h.y - o.y) >= h.r + o.r + MIN_GAP + 24)) continue;
+    if (walls.some(w => segDist(h.x, h.y, w) < h.reach * 0.5)) continue;
+    if (!out.every(o => Math.hypot(h.x - o.x, h.y - o.y) >= h.reach + o.reach)) continue;
+    out.push(h);
+  }
+  if (!out.length) throw new Error('no room for a black hole');
+  return out;
+}
+
 /** Re-rolls a city until the spread audit (tools/spread-metrics.mjs) has
     nothing to flag: no clustering, no glow overlap. */
 async function buildSpread(id, tpl, oldGift, world){
@@ -321,8 +358,14 @@ function build(id, tpl, oldGift, attempt, world){
     if (!crabs) throw new Error('no room for the crabs');
   }
 
+  /* the world's own HAZARD ZONE, last, around everything already placed */
+  let quicksand, blackholes;
+  const others = [...placed, ...(box ? [box] : []), ...(stars || []).map(p => ({ ...p, r: 14 }))];
+  if (world.hazard === 'quicksand') quicksand = pitsFor(r, pos <= 8 ? 1 : 2, spawn, lane, others, walls);
+  if (world.hazard === 'blackholes') blackholes = holesFor(r, pos <= 8 ? 1 : 2, spawn, lane, others, walls);
+
   const pick = k => placed.filter(o => o.kind === k).map(({ x, y, r }) => ({ x, y, r }));
-  return { id, name: world.names[id], maxBlocks: tpl.maxBlocks, targetType: tpl.targetType, wallSide,
+  return { id, name: world.names[id], quicksand, blackholes, maxBlocks: tpl.maxBlocks, targetType: tpl.targetType, wallSide,
            spawn, obstacles: pick('o'), breakables: pick('b'), fires: pick('f'), wind, storm, crabs, stars,
            box: box && { x: box.x, y: box.y }, target, targetMove, gift: oldGift };
 }
@@ -336,6 +379,8 @@ function toRaw(L){
            fires: L.fires.length ? L.fires : undefined,
            wind: L.wind, storm: L.storm, crabs: L.crabs,
            stars: L.stars && L.stars.length ? L.stars : undefined,
+           quicksand: L.quicksand && L.quicksand.length ? L.quicksand : undefined,
+           blackholes: L.blackholes && L.blackholes.length ? L.blackholes : undefined,
            boxes: L.box ? [L.box] : undefined,
            target: L.target, targetMove: L.targetMove || undefined,
            targetGift: L.gift || undefined };
@@ -366,7 +411,8 @@ export async function runWorld(world){
     }
     out.push(toRaw(L));
     const n = L.fires.length + L.breakables.length + L.obstacles.length;
-    const extra = [L.storm && `storm ${L.storm.points.length} points`, L.crabs && `${L.crabs.length} crabs (${L.crabs.map(c => c.pattern).join(', ')})`,
+    const extra = [L.quicksand && `${L.quicksand.length} quicksand`, L.blackholes && `${L.blackholes.length} black hole(s)`,
+                   L.stars && L.stars.length && `${L.stars.length} stars`, L.storm && `storm ${L.storm.points.length} points`, L.crabs && `${L.crabs.length} crabs (${L.crabs.map(c => c.pattern).join(', ')})`,
                    L.wind && 'wind ' + L.wind.map(z => (z.ax > 0 ? '+' : '') + z.ax).join(' ')]
                   .filter(Boolean).join(', ');
     console.log(`${id} ${L.name.padEnd(15)} ${String(n).padStart(2)} hazards (f${L.fires.length} b${L.breakables.length} o${L.obstacles.length})` +

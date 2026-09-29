@@ -44,7 +44,9 @@ export interface DrawContext {
 
 export type EntityKind =
   | 'slippery' | 'wind' | 'rain' | 'sea' | 'volcano' | 'mountains'  // ground
-  | 'meadow' | 'cliffs' | 'egypt' | 'space'             // ground: world scenery
+  | 'meadow' | 'cliffs' | 'egypt' | 'space'
+  | 'quicksand'                                          // ground: a hazard zone
+  | 'blackhole'             // ground: world scenery
   | 'target'
   | 'wall' | 'pillar'
   | 'obstacle' | 'fire' | 'crab'
@@ -58,6 +60,7 @@ export type EntityKind =
 export const LAYER: Record<EntityKind, number> = {
   slippery: 0, wind: 0, rain: 0, sea: 0, volcano: 0, mountains: 0,
   meadow: 0, cliffs: 0, egypt: 0, space: 0,
+  quicksand: 0,
   target: 1,
   wall: 2, pillar: 2,
   /* Fire shares the obstacle's layer: they are the same class of furniture
@@ -65,6 +68,8 @@ export const LAYER: Record<EntityKind, number> = {
   obstacle: 3, fire: 3,
   /* over the other furniture: it swims past things */
   crab: 4,
+  /* a black hole swirls over the furniture near it, as a crab swims past */
+  blackhole: 4,
   breakable: 4, booster: 4, star: 4,
   /* A mystery box rides with the other pickups, and after the star in
      registry order so two that overlap read box-over-star - the box is the

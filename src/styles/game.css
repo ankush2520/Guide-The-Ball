@@ -1353,3 +1353,7 @@ body{padding:0 !important}
 .card.intro.worldcard.night .big,.card.intro.worldcard.night .sub{color:#fff}
 .worldbanner.night{color:#fff}
 .worldbanner.night .worldstars{background:rgba(255,255,255,.18)}
+
+/* info-panel swatches for the Ancient Egypt and Outer Space hazards */
+.sw.qs{border-radius:50%;background:radial-gradient(circle,#a8743c 0 30%,#e9c07c 62%)}
+.sw.bh{border-radius:50%;background:radial-gradient(circle,#0b0820 0 38%,#a78bfa 55%,#ff9a5c 78%)}

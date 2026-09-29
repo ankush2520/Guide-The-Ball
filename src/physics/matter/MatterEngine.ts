@@ -42,7 +42,7 @@ import { mulberry32, falses, closestOnSeg } from '../math';
 import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
   SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, STAR_R, BOX_R,
-  MAX_STEPS, REST_STEPS, REST_PX,
+  MAX_STEPS, REST_STEPS, REST_PX, QUICKSAND_KEEP,
   SPRING_GAIN, SPRING_CAP, SPRING_DECAY, SPRING_CD,
   BOOST_SUB_PX, BOOST_SUBSTEPS_MAX,
   OB_JITTER, OB_MAX_DEV, PLAY } from '../constants';
@@ -397,6 +397,25 @@ export class MatterEngine implements PhysicsEngine {
       }
     }
 
+    /* QUICKSAND drains the ball's speed while it is in a pit; gravity keeps
+       it sinking through. BLACK HOLES bend its path toward them, harder the
+       closer it is. Both are accelerations, so they go on before the solve,
+       like wind. */
+    for (const q of lv.quicksand) {
+      if (Math.hypot(b.x - q.x, b.y - q.y) < q.r) {
+        b.setVelocity(b.vx * QUICKSAND_KEEP, b.vy * QUICKSAND_KEEP);
+        break;
+      }
+    }
+    for (const h of lv.blackholes) {
+      const dx = h.x - b.x, dy = h.y - b.y, d = Math.hypot(dx, dy);
+      if (d < h.reach && d > 0.001) {
+        const a = h.pull * (1 - d / h.reach);
+        b.setVelocity(b.vx + dx / d * a, b.vy + dy / d * a);
+        capSpeed(b, cfg);
+      }
+    }
+
     /* Ice: Matter takes the GREATER of the two restitutions on a pair, so
        raising the ball's is enough to make every surface inside the zone
        bouncier without touching the surfaces themselves. */
@@ -609,6 +628,11 @@ export class MatterEngine implements PhysicsEngine {
     if (lv.crabs) for (const c of lv.crabs) {
       const at = crabAt(c, b.t0 + b.steps);
       if (reached(at, c.r + BALL_R)) { b.result = 'pinched'; return; }
+    }
+
+    /* ---- black holes: the ball's centre inside the dark core is gone */
+    for (const h of lv.blackholes) {
+      if (Math.hypot(b.x - h.x, b.y - h.y) < h.r) { b.result = 'swallowed'; return; }
     }
 
     /* ---- lightning: a live strike that reaches the ball ENDS the run, like

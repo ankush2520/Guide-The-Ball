@@ -790,6 +790,7 @@ export class GameController {
     this.lastResult = result;
     if (result === 'burned') Sound.burn();
     if (result === 'pinched') Sound.pinch();
+    if (result === 'swallowed') Sound.swallow();
     // where the ball died, read before it is released
     const at = this.ball ? { x: this.ball.x, y: this.ball.y } : null;
     if (this.tutDropping) { this.tutRetry = true; this.tutDropping = false; }
@@ -807,6 +808,9 @@ export class GameController {
       // a cloud of bubbles where it was snatched
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffffff', 14, 3.0, Math.PI, 700, 2.4);
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#3fb6e8', 12, 2.2, Math.PI, 800, 2.2);
+    } else if (at && result === 'swallowed') {
+      this.renderer.particles.burst(at.x, at.y, 0, -1, '#a78bfa', 16, 2.6, Math.PI, 700, 2.4);
+      this.renderer.particles.burst(at.x, at.y, 0, -1, '#ff9a5c', 10, 1.8, Math.PI, 800, 2.0);
     } else if (at && result === 'zapped') {
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#ffc400', 16, 4.6, Math.PI, 600, 2.6);
       this.renderer.particles.burst(at.x, at.y, 0, -1, '#2f8cff', 12, 3.4, Math.PI, 700, 2.2);
@@ -818,6 +822,7 @@ export class GameController {
       result === 'burned' ? 'Burned up! Fire ends the drop - go around it.'
       : result === 'zapped' ? 'Zapped! Lightning ends the drop - time it or go around it.'
       : result === 'pinched' ? 'Pinched! A crab got the ball - time your drop around it.'
+      : result === 'swallowed' ? 'Swallowed! A black hole pulled it in - skim the edge, not the middle.'
       : result === 'timeout' ? 'Got stuck! Try readjusting your ramps.'
       : 'Missed! Try readjusting your ramps.');
     this.emitEnded(result);

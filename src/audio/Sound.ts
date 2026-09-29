@@ -888,6 +888,18 @@ class SoundEngine {
     this.noise(this.sfx!, t + 0.04, 0.12, 0.08 * CRACK_VOLUME, 2600);
   }
 
+  /** A black hole took the ball: a falling, fading whoop into the dark. */
+  swallow(): void {
+    if (this.isMuted || PINCH_VOLUME <= 0) return;
+    if (!this.ctx || this.ctx.state !== "running") {
+      this.nudge();
+      return;
+    }
+    const t = this.ctx.currentTime;
+    this.sweep(this.sfx!, 900, 420, 70, t, 0.55, 0.16 * PINCH_VOLUME, "sine");
+    this.sweep(this.sfx!, 1350, 600, 110, t + 0.02, 0.5, 0.05 * PINCH_VOLUME, "triangle");
+  }
+
   /** A crab got the ball: two quick claw snips, then a soft bubbly plop. */
   pinch(): void {
     if (this.isMuted || PINCH_VOLUME <= 0) return;

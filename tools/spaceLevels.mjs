@@ -26,7 +26,7 @@ export const NAMES = {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)){
-  await runWorld({ from: 121, names: NAMES, addOn: 'dense', noFire: true, windChance: 0.35 });
+  await runWorld({ from: 121, names: NAMES, addOn: 'dense', hazard: 'blackholes', noFire: true, windChance: 0.35 });
   const raw = await loadRaw();
   const exams = [137, 138, 139, 140].map(id =>
     cloneExam(raw.find(l => l.id === id - 80), { id, name: NAMES[id], noFire: true }));
