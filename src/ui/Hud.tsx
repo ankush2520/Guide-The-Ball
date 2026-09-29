@@ -7,7 +7,7 @@
    (left)       (centre)        (right)
 
    ☰ opens the menu (MenuPanel) - shop, daily spin, star chest,
-   challenge runs, how to play, sound. It carries a dot when
+   how to play, sound. It carries a dot when
    there is something waiting in there (a spin, a chest).
 
    The tool used WHILE solving a board - Bouncy - is not up
@@ -56,16 +56,11 @@ export function Hud({ onOpenMenu, onOpenLevels }: Props) {
         </div>
         {/* THIS LEVEL'S balls, as pips: a full one per ball left, a hollow
             one per ball used. A count, not a currency - see ballsFor. */}
-        <div className={'counter balls' + (controller.ballsLeft <= 0 ? ' empty' : '')
-                        + (controller.challenge ? ' challenge' : '')}
-             title={controller.challenge ? `Challenge Run: ${controller.ballsLeft} balls left`
-                                         : `Balls left on this level: ${controller.ballsLeft}`} id="ball-count">
-          {/* a Challenge Run's pool is too big for pips: a count instead */}
-          {controller.challenge
-            ? <><i className="pip" /><b>{controller.ballsLeft}</b></>
-            : Array.from({ length: controller.ballsMax }, (_, i) => (
-                <i key={i} className={'pip' + (i < controller.ballsLeft ? '' : ' used')} />
-              ))}
+        <div className={'counter balls' + (controller.ballsLeft <= 0 ? ' empty' : '')}
+             title={`Balls left on this level: ${controller.ballsLeft}`} id="ball-count">
+          {Array.from({ length: controller.ballsMax }, (_, i) => (
+            <i key={i} className={'pip' + (i < controller.ballsLeft ? '' : ' used')} />
+          ))}
         </div>
       </div>
       <div className="chips right">

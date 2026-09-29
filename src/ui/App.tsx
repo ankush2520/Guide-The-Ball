@@ -179,7 +179,6 @@ function Game() {
                                          onOpenShop={() => open('shop')}
                                          onOpenSpin={() => open('spin')}
                                          onOpenChest={() => open('chest')}
-                                         onOpenLevels={() => open('levels')}
                                          onOpenInfo={() => open('info')} />;
       case 'shop':     return <ShopPanel onClose={done} />;
       case 'spin':     return <SpinPanel onClose={done} />;

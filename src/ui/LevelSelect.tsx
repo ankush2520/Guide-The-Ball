@@ -13,12 +13,11 @@
    Cleared levels stay unlocked; everything past the player's
    high-water mark is locked. The star-chest bar sits above the
    carousel (it counts stars from every world), and each twenty-
-   level world carries its own Challenge Run row.
+   level world lists its own levels.
    ============================================================ */
 import { useRef, useState } from 'react';
 import { useGame } from '../core/GameContext';
 import { LEVELS, COUNTRIES, cityOf } from '../levels';
-import { CHALLENGE_BALLS } from '../managers/RewardManager';
 import { ChestBar } from './ChestPanel';
 
 /** Only the worlds that actually have levels in the game. */
@@ -38,8 +37,6 @@ export function LevelSelect({ onClose, onChest }: { onClose: () => void; onChest
   const reached = w.from - 1 <= rewards.highest;              // its first level is open
   let stars = 0;
   for (let id = w.from; id <= w.to; id++) stars += rewards.bestStars[id - 1] | 0;
-  const done = !!rewards.challengesDone[w.id];
-  const cleared = rewards.worldCleared(w.from, w.to);
 
   return (
     <div className="overlay" id="select">
@@ -113,20 +110,6 @@ export function LevelSelect({ onClose, onChest }: { onClose: () => void; onChest
                     onClick={() => go(k)} />
           ))}
         </div>
-
-        {/* THIS world's Challenge Run - twenty-level worlds only, open once the
-            world is cleared: all its levels in a row on one pool of balls */}
-        {n >= 20 && (
-          <div className={'chrow' + (done ? ' done' : '')} id="challenges">
-            <span className="chname">Challenge Run{done && <i className="badge">&#10003; cleared</i>}</span>
-            <button id={`btn-challenge-${w.id}`} disabled={!cleared}
-                    title={cleared ? `All ${n} levels in a row, ${CHALLENGE_BALLS} balls`
-                                   : `Clear levels ${w.from}-${w.to} to unlock`}
-                    onClick={() => { controller.startChallenge(w.id); onClose(); }}>
-              {cleared ? (done ? 'Play again' : 'Play') : `Clear ${w.from}-${w.to}`}
-            </button>
-          </div>
-        )}
 
         <div className="row"><button id="btn-close-sel" onClick={onClose}>Close</button></div>
       </div>

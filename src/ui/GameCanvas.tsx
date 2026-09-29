@@ -115,6 +115,7 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
      stage's size back cannot feed into the measurement.
      ============================================================ */
   useEffect(() => {
+    const COVER_MAX = 1.15;
     const fit = () => {
       const stage = host.current, slot = stage?.parentElement;
       if (stage && slot) {
@@ -122,12 +123,21 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
         const ratio = BOARD.w / H;
         // -2 for the stage's 1px border, which sits outside the board itself
         const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2);
-        const w = Math.min(avW, avH * ratio);
+        /* COVER, not contain, when the shapes are close (phones): the board
+           fills the whole slot edge to edge and only a sliver of sky is
+           cropped - VIEW_SCALE keeps the scene well inside that margin.
+           A far-off shape (desktop) stays contained. */
+        const contain = Math.min(avW, avH * ratio), cover = Math.max(avW, avH * ratio);
+        const w = cover <= contain * COVER_MAX ? cover : contain;
         if (w > 0) {
+          const h = w / ratio;
           stage.style.width = `${Math.round(w)}px`;
-          stage.style.height = `${Math.round(w / ratio)}px`;
-          slot.parentElement?.style.setProperty('--board-w', `${Math.round(w)}px`);
-          slot.parentElement?.style.setProperty('--board-h', `${Math.round(w / ratio) + 2}px`);
+          stage.style.height = `${Math.round(h)}px`;
+          // how much of the stage is cropped per side - on-board chrome insets by it
+          stage.style.setProperty('--crop-x', `${Math.max(0, Math.round((w - avW) / 2))}px`);
+          stage.style.setProperty('--crop-y', `${Math.max(0, Math.round((h - avH) / 2))}px`);
+          slot.parentElement?.style.setProperty('--board-w', `${Math.round(Math.min(w, avW))}px`);
+          slot.parentElement?.style.setProperty('--board-h', `${Math.round(Math.min(h, avH)) + 2}px`);
         }
       }
       rect.current = null;              // whatever we measured is now stale

@@ -1152,13 +1152,6 @@
 #introcard.introlay:not(.world) .introicon{width:150px;height:84px;margin-bottom:0}
 #introcard.introlay:not(.world) .card.intro{padding-top:14px;padding-bottom:14px}
 
-/* ---- Challenge Runs ---- */
-.challenges{display:flex;flex-direction:column;gap:6px;margin:0 0 8px}
-.chrow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--ink)}
-.chrow button{padding:5px 10px;font-size:12px;flex:none}
-.chrow .badge{margin-left:6px;font-style:normal;font-size:11px;font-weight:800;color:#fff;
-              background:#2fc95a;border-radius:8px;padding:1px 6px}
-.counter.balls.challenge{gap:5px}
 
 /* One slot per open panel (App.tsx): a fixed, click-through layer whose
    z-index is the panel's place in the open-order, so the newest panel is
@@ -1272,7 +1265,6 @@ body{background:linear-gradient(180deg, var(--sky0, #cfe9ff) 0%, var(--sky1, var
 .mi-shop{background:#ffc53a}
 .mi-spin{background:conic-gradient(#ffd76b 0 25%,#d98b0c 0 50%,#ffd76b 0 75%,#d98b0c 0)}
 .mi-chest{background:#f0a03c}
-.mi-challenge{background:#a57cf0}
 .mi-info{background:#78aaff}
 .mi-sound{background:#78d2a0}
 #menupanel{z-index:65}
@@ -1304,3 +1296,13 @@ body{background:linear-gradient(180deg, var(--sky0, #cfe9ff) 0%, var(--sky1, var
 .hud{left:50% !important;right:auto !important;transform:translateX(-50%);
      width:min(100%, max(var(--board-w, 100%), 300px)) !important;
      box-sizing:border-box;padding-left:8px;padding-right:8px}
+
+/* ---- the board COVERS the screen on phones ----
+   GameCanvas sizes the stage to cover the slot when the shapes are close, so
+   the sky runs edge to edge and under the top bar. The slot crops the
+   overflow; on-board chrome is inset by the cropped amount (--crop-x/-y). */
+.board-slot{padding-top:0;overflow:hidden}
+.stage{flex:none;max-height:none;max-width:none}
+.stage > .tools{right:calc(10px + var(--crop-x, 0px));bottom:calc(34px + var(--crop-y, 0px))}
+.stage > .status{bottom:calc(6px + var(--crop-y, 0px))}
+.tut-skip{top:calc(58px + var(--crop-y, 0px));right:calc(9px + var(--crop-x, 0px))}

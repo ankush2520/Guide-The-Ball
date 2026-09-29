@@ -20,9 +20,8 @@ export interface Cosmetic {
   name: string;
   /** Coins in the shop, or null for one that cannot be bought. */
   price: number | null;
-  /** Where a non-shop cosmetic comes from: a star chest, or clearing the
-      Challenge Run of the world with this country id. */
-  from?: 'chest' | { challenge: number };
+  /** Where a non-shop cosmetic comes from: a star chest. */
+  from?: 'chest';
   /** ball: [highlight, middle, edge]; trail: [colour] or 'rainbow';
       ramp: [fill]. */
   colors: string[];
@@ -37,12 +36,6 @@ export const COSMETICS: readonly Cosmetic[] = [
   { id: 'ball-sky',     kind: 'ball', name: 'Sky',     price: 600, colors: ['#ffffff', '#dcefff', '#4aa3ff'] },
   { id: 'ball-galaxy',  kind: 'ball', name: 'Galaxy',  price: null, from: 'chest', colors: ['#f4e9ff', '#9b7bff', '#3b2a8a'] },
   { id: 'ball-gold',    kind: 'ball', name: 'Gold',    price: 2000, colors: ['#fffbe6', '#ffd84a', '#c98a00'] },
-  /* Challenge Run exclusives - one per twenty-city world, in its colours */
-  { id: 'ball-verdant', kind: 'ball', name: 'Verdant', price: null, from: { challenge: 1 }, colors: ['#ffffff', '#c9f2b0', '#3fae3a'] },
-  { id: 'ball-ember',   kind: 'ball', name: 'Ember',   price: null, from: { challenge: 6 }, colors: ['#fff4d6', '#ff9a4d', '#d2381e'] },
-  { id: 'ball-gale',    kind: 'ball', name: 'Gale',    price: null, from: { challenge: 3 }, colors: ['#ffffff', '#c8f3e4', '#2fb584'] },
-  { id: 'ball-storm',   kind: 'ball', name: 'Storm',   price: null, from: { challenge: 4 }, colors: ['#eef6ff', '#8fb0e8', '#34457a'] },
-  { id: 'ball-pearl',   kind: 'ball', name: 'Pearl',   price: null, from: { challenge: 9 }, colors: ['#ffffff', '#e4f7f8', '#16aebf'] },
   // ---- trails ----
   { id: 'trail-classic', kind: 'trail', name: 'Classic', price: 0, colors: ['#ffb400'] },
   { id: 'trail-mint',    kind: 'trail', name: 'Mint',    price: 250, colors: ['#3fd6a4'] },
@@ -66,9 +59,6 @@ export const CHEST_COSMETICS: readonly string[] = ['ball-galaxy', 'trail-rainbow
 
 export const cosmeticById = (id: string): Cosmetic | undefined => COSMETICS.find(c => c.id === id);
 
-/** The skin a world's Challenge Run awards, by country id. */
-export const challengeSkin = (countryId: number): string | undefined =>
-  COSMETICS.find(c => typeof c.from === 'object' && c.from.challenge === countryId)?.id;
 
 /* ============================================================
    THE ACTIVE STYLE

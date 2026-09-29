@@ -36,7 +36,7 @@ import {
 import { clamp } from "../physics/math";
 import { track } from "../analytics/track";
 import { countryOf } from "../levels";
-import { CHEST_COSMETICS, DEFAULT_STYLE, cosmeticById, applyStyle, challengeSkin,
+import { CHEST_COSMETICS, DEFAULT_STYLE, cosmeticById, applyStyle,
          type CosmeticKind } from "../cosmetics/cosmetics";
 
 /* ============================================================
@@ -66,15 +66,6 @@ export function ballsFor(levelId: number): number {
   const pos = levelId - countryOf(levelId).from + 1;
   return pos >= EXAM_FROM ? BALLS_EXAM : BALLS_PER_LEVEL;
 }
-
-/* ---- the Challenge Run ----
-
-   A world's twenty levels in a row on one shared pool of balls; running out
-   sends the player back to the world's first level. No spare ramps,
-   no continue ads. Clearing it awards the world's exclusive ball skin and a
-   badge - and nothing else: normal progress (stars, coins, clears) is never
-   touched by a run. */
-export const CHALLENGE_BALLS = 30;
 
 /* ---- midgame (interstitial) ads ----
 
@@ -539,8 +530,6 @@ export class RewardManager {
   wheelAdSpinDay = "";
   /** Star chests opened so far. */
   chestsClaimed = 0;
-  /** Cleared Challenge Runs, by country id. */
-  challengesDone: Record<number, boolean> = {};
 
   /** Has this level's mystery box already been taken? */
   boxClaimed(levelIndex: number): boolean {
@@ -630,13 +619,12 @@ export class RewardManager {
     this.springUnlockSeen = !!s.springUnlockSeen;
     this.wheelAdSpinDay = typeof s.wheelAdSpinDay === "string" ? s.wheelAdSpinDay : "";
     this.chestsClaimed = Math.max(0, (s.chestsClaimed as number) | 0);
-    this.challengesDone = s.challenges && typeof s.challenges === "object" ? s.challenges : {};
     const cos = s.cosmetics && typeof s.cosmetics === "object" ? s.cosmetics : {};
     this.cosmeticsOwned = new Set([...Object.values(DEFAULT_STYLE),
       ...(Array.isArray(cos.owned) ? cos.owned.filter((id) => !!cosmeticById(id)) : [])]);
     for (const k of Object.keys(DEFAULT_STYLE) as CosmeticKind[]) {
       const id = cos.selected?.[k];
-      this.cosmeticsSelected[k] = id && this.cosmeticsOwned.has(id) ? id : DEFAULT_STYLE[k];
+      this.cosmeticsSelected[k] = id && this.cosmeticsOwned.has(id) && cosmeticById(id) ? id : DEFAULT_STYLE[k];
     }
     applyStyle(this.cosmeticsSelected);
     this.claimedBoxes = s.boxes && typeof s.boxes === "object" ? s.boxes : {};
@@ -736,7 +724,6 @@ export class RewardManager {
     this.springUnlockSeen = false;
     this.wheelAdSpinDay = "";
     this.chestsClaimed = 0;
-    this.challengesDone = {};
     this.cosmeticsOwned = new Set(Object.values(DEFAULT_STYLE));
     this.cosmeticsSelected = { ...DEFAULT_STYLE };
     applyStyle(this.cosmeticsSelected);
@@ -787,7 +774,6 @@ export class RewardManager {
       springUnlockSeen: this.springUnlockSeen,
       wheelAdSpinDay: this.wheelAdSpinDay,
       chestsClaimed: this.chestsClaimed,
-      challenges: this.challengesDone,
       cosmetics: { owned: [...this.cosmeticsOwned], selected: { ...this.cosmeticsSelected } },
     });
   }
@@ -1037,24 +1023,6 @@ export class RewardManager {
     this.saveProgress();
     this.bus.emit("cosmetics:changed", { id });
     return true;
-  }
-
-  /* ---------------- the Challenge Run ---------------- */
-
-  /** Has every level of this world (level INDICES from..to) been cleared? */
-  worldCleared(fromId: number, toId: number): boolean {
-    for (let id = fromId; id <= toId; id++) if (!this.clearedLevels[id - 1]) return false;
-    return true;
-  }
-
-  /** A world's run is cleared: the badge, and its exclusive skin. */
-  completeChallenge(countryId: number): string | null {
-    const first = !this.challengesDone[countryId];
-    this.challengesDone[countryId] = true;
-    this.saveProgress();
-    const skin = challengeSkin(countryId) ?? null;
-    if (first && skin) this.unlockCosmetic(skin);
-    return first ? skin : null;
   }
 
   /* ---------------- star chests ---------------- */

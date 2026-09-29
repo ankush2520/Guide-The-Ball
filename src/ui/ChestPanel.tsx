@@ -22,22 +22,47 @@ export function ChestPanel({ onClose }: { onClose: () => void }) {
   const [beat, setBeat] = useState<'wrap' | 'open' | 'shown'>('wrap');
   const [chest, setChest] = useState<ChestContents | null>(null);
   const claimed = useRef(false);
+  /* Opened from the menu before 30 stars: show progress, claim nothing. */
+  const [ready] = useState(() => rewards.chestReady());
 
   /* Claimed ONCE (the ref survives StrictMode's double effect run), and the
      reveal's timers are their own effect so a re-run restarts them rather
      than leaving the lid shut. */
   useEffect(() => {
-    if (claimed.current) return;
+    if (claimed.current || !ready) return;
     claimed.current = true;
     setChest(rewards.claimChest());
   }, [rewards]);
   useEffect(() => {
+    if (!ready) return;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { setBeat('shown'); return; }
     const a = window.setTimeout(() => { setBeat('open'); Sound.coin(1); }, SHAKE_MS);
     const b = window.setTimeout(() => { setBeat('shown'); Sound.coin(2); }, SHAKE_MS + OPEN_MS);
     return () => { clearTimeout(a); clearTimeout(b); };
-  }, []);
+  }, [ready]);
 
+  if (!ready) {
+    const left = STARS_PER_CHEST - rewards.chestProgress;
+    return (
+      <div className="overlay giftlay" id="chestpanel"
+           onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="card giftcard locked">
+          <div className="big">Star chest</div>
+          <div className="sub">Earn {left} more {left === 1 ? 'star' : 'stars'} to open it.</div>
+          <div className="giftbox" aria-hidden="true">
+            <i className="gbbody" />
+            <i className="gbtie" />
+            <i className="gblid" />
+            <i className="gbbow" />
+          </div>
+          <ChestBar />
+          <div className="row">
+            <button id="btn-chest-ok" className="primary" onClick={onClose}>OK</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!chest) return null;
   const take = () => {
     flyReward('coins', '#chest-prizes');

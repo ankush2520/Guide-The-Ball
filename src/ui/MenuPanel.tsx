@@ -3,7 +3,7 @@
 
    Everything that is not the board, in one drawer that slides
    in from the left (the side its button is on): the shop, the
-   daily spin, the star chest, the challenge runs, how to play,
+   daily spin, the star chest, how to play,
    and sound. Each row says its state in a word - "Ready!",
    "18 / 30 ★" - so a player can tell what is waiting in there
    without opening every one.
@@ -29,11 +29,10 @@ interface Props {
   onOpenShop: () => void;
   onOpenSpin: () => void;
   onOpenChest: () => void;
-  onOpenLevels: () => void;
   onOpenInfo: () => void;
 }
 
-export function MenuPanel({ onClose, onOpenShop, onOpenSpin, onOpenChest, onOpenLevels, onOpenInfo }: Props) {
+export function MenuPanel({ onClose, onOpenShop, onOpenSpin, onOpenChest, onOpenInfo }: Props) {
   const { rewards } = useGame();
   useGameVersion();
   const [muted, setMuted] = useState(Sound.muted);
@@ -69,8 +68,7 @@ export function MenuPanel({ onClose, onOpenShop, onOpenSpin, onOpenChest, onOpen
           {row('btn-spin', 'mi-spin', 'Daily spin', spin ? 'Ready!' : `Next in ${fmtLong(rewards.msToSpin())}`, onOpenSpin, spin)}
           {row('btn-chest', 'mi-chest', 'Star chest',
                chest ? 'Ready to open!' : `${rewards.chestProgress} / ${STARS_PER_CHEST} ★`,
-               chest ? onOpenChest : onOpenLevels, chest)}
-          {row('btn-challenges', 'mi-challenge', 'Challenge Runs', 'Clear a world, then run it', onOpenLevels)}
+               onOpenChest, chest)}
           {row('btn-info', 'mi-info', 'How to play', 'Rules, pieces and stars', onOpenInfo)}
           <button id="btn-sound" className={'menurow' + (muted ? ' off' : '')}
                   onClick={e => { setMuted(Sound.toggle()); e.stopPropagation(); }}>

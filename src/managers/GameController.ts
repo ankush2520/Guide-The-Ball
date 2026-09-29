@@ -14,7 +14,7 @@
    ============================================================ */
 import type { FlightKind, GameBus, Phase } from '../core/events';
 import { LevelManager, DEL_R, HANDLE_R } from './LevelManager';
-import { RewardManager, prizeLabel, ballsFor, starsFor, CONTINUE_BALLS, SPRING_UNLOCK_LEVEL, CHALLENGE_BALLS,
+import { RewardManager, prizeLabel, ballsFor, CONTINUE_BALLS, SPRING_UNLOCK_LEVEL,
          SPARE_PER_LEVEL, SPARE_FROM, STUCK_AFTER_RESTARTS } from './RewardManager';
 import type { BallState, PhysicsEngine } from '../physics/PhysicsEngine';
 import { Renderer, type CaptureState, type Squash } from '../render/Renderer';
@@ -26,7 +26,7 @@ import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import { strikeAt } from '../levels/storm';
-import { levelSeed, LEVELS, COUNTRIES } from '../levels';
+import { levelSeed, LEVELS } from '../levels';
 import { INTROS, GLOSSARY, type IntroCtx } from '../ui/glossary';
 import { track } from '../analytics/track';
 import type { Circle, Level, Segment, Vec } from '../levels/types';
@@ -119,8 +119,6 @@ export interface WinCard {
       doubled ad first. `paid` is what actually landed. */
   collected: boolean;
   paid: number;
-  /** During a Challenge Run: where the run is, and whether this win ended it. */
-  challenge?: { at: number; of: number; balls: number; done: boolean; skin: string | null };
 }
 
 export class GameController {
@@ -148,19 +146,6 @@ export class GameController {
   ballsLeft = 0;
   ballsMax = 0;
   restarts = 0;
-  /* ============================================================
-     THE CHALLENGE RUN
-
-     While `challenge` is set, the world's levels are played in a
-     row on ONE pool of CHALLENGE_BALLS (ballsLeft carries across
-     them instead of being refilled per level). Running out sends
-     the player back to the world's first level with a full pool.
-     No spare ramps, no out-of-balls choice, no continue
-     ad - and nothing is recorded: stars, coins and clears are
-     never touched by a run. Picking a level from the picker ends
-     it.
-     ============================================================ */
-  challenge: { id: number; from: number; to: number; name: string } | null = null;
   /* Whatever the engine produced. The controller never names a concrete
      ball class - see PhysicsEngine. */
   ball: BallState | null = null;
@@ -311,7 +296,7 @@ export class GameController {
   /** Whether a spare ramp may be taken on THIS board right now: not on the
       first levels, at most SPARE_PER_LEVEL, and only if one is in the bag. */
   get spareAvailable(): boolean {
-    return !this.challenge && this.sparesAllowed && this.levels.extraBudget < SPARE_PER_LEVEL
+    return this.sparesAllowed && this.levels.extraBudget < SPARE_PER_LEVEL
       && this.rewards.extraRamps > 0;
   }
   /** Spares are not a thing at all on the first few levels - the HUD hides
@@ -322,7 +307,7 @@ export class GameController {
       this entry, once, until dismissed. */
   stuckDismissed = false;
   get stuckOffer(): boolean {
-    return !this.challenge && this.restarts >= STUCK_AFTER_RESTARTS && !this.stuckDismissed
+    return this.restarts >= STUCK_AFTER_RESTARTS && !this.stuckDismissed
       && this.phase === 'plan' && !this.intros.length;
   }
   dismissStuck(): void { this.stuckDismissed = true; this.changed(); }
@@ -837,16 +822,8 @@ export class GameController {
     this.emitEnded(result);
     track('ball_lost', { level: this.levels.level.id, result, ballsLeft: this.ballsLeft, tries: this.tries });
     /* That was the last ball: offer the way on straight away, rather than
-       waiting for a Drop press that can only lead there. In a Challenge Run
-       there is no choice - the run starts again from the world's first level. */
-    if (this.ballsLeft <= 0) {
-      if (this.challenge) {
-        const ch = this.challenge;
-        this.ballsLeft = CHALLENGE_BALLS;
-        this.setLevel(ch.from - 1, true);
-        this.showFlash(`Out of balls - the ${ch.name} Challenge Run starts again from level ${ch.from}.`);
-      } else this.bus.emit('balls:empty', {});
-    }
+       waiting for a Drop press that can only lead there. */
+    if (this.ballsLeft <= 0) this.bus.emit('balls:empty', {});
   }
 
   /* ============================================================
@@ -910,23 +887,10 @@ export class GameController {
     if (springsUsed > 0) track('spring_used', { level: lv.id, n: springsUsed });
     /* Judged against the level's OWN budget, not the one in force: a spare
        ramp bought from the drawer must not be able to buy a star with it. */
-    /* A Challenge Run records nothing - see `challenge`. The card still shows
-       the rating, worked out the same way. */
-    const ch = this.challenge;
-    const { stars, coins, note, firstClear } = ch
-      ? { stars: starsFor(this.tries, this.levels.rampsUsed, this.levels.levelBudget),
-          coins: 0, note: '', firstClear: false }
-      : this.rewards.recordClear(
-          this.levels.levelIndex, lv.id, this.levels.isLast,
-          this.tries, this.levels.rampsUsed, this.levels.levelBudget,
-          usedSpare ? 'spare' : null);
-    let challenge: WinCard['challenge'];
-    if (ch) {
-      const done = lv.id >= ch.to;
-      const skin = done ? this.rewards.completeChallenge(ch.id) : null;
-      challenge = { at: lv.id - ch.from + 1, of: ch.to - ch.from + 1, balls: this.ballsLeft, done, skin };
-      if (done) this.challenge = null;
-    }
+    const { stars, coins, note, firstClear } = this.rewards.recordClear(
+      this.levels.levelIndex, lv.id, this.levels.isLast,
+      this.tries, this.levels.rampsUsed, this.levels.levelBudget,
+      usedSpare ? 'spare' : null);
 
     track('level_win', { level: lv.id, stars, tries: this.tries, usedSpareRamp: usedSpare,
                          usedSpring: springsUsed > 0, firstClear });
@@ -935,9 +899,7 @@ export class GameController {
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
       springs: springsUsed,
       collected: coins <= 0, paid: 0,
-      challenge,
     };
-    if (challenge?.done) card.isLast = true;      // the run ends here: no Next
     this.capture = null;
 
     /* IS THIS TARGET WRAPPED? Claimed here rather than when the panel opens,
@@ -1023,11 +985,9 @@ export class GameController {
 
   /* ---------------- level flow ---------------- */
 
-  /** Enter level index `i`. `inChallenge` is the run moving itself on; any
-      other call (the picker, a test) ends a Challenge Run. */
-  setLevel(i: number, inChallenge = false): void {
+  /** Enter level index `i`. */
+  setLevel(i: number): void {
     this.holdBoardInput();
-    if (!inChallenge) this.challenge = null;
     this.collectWin(false, false);      // an uncollected clear is paid, never lost
     this.levels.setLevel(i);
     this.tutRetry = false; this.tutDropping = false;
@@ -1044,13 +1004,8 @@ export class GameController {
     this.tries = 0;
     this.restarts = 0;
     this.stuckDismissed = false;
-    if (this.challenge) {
-      // the run's one pool carries across its levels
-      this.ballsMax = CHALLENGE_BALLS;
-    } else {
-      this.ballsMax = ballsFor(this.levels.level.id);
-      this.ballsLeft = this.ballsMax;
-    }
+    this.ballsMax = ballsFor(this.levels.level.id);
+    this.ballsLeft = this.ballsMax;
     // every visit starts the patrol (and the storm) from the same phase
     this.patrolClock = 0; this.lastT0 = 0; this.lastStrike = -1; this.lastRumble = -1;
     this.hideFlash();
@@ -1089,21 +1044,7 @@ export class GameController {
     this.teachGiftBoard();
   }
 
-  nextLevel(): void { this.setLevel(this.levels.levelIndex + 1, !!this.challenge); }
-
-  /** Start a world's Challenge Run from its first level - only once every
-      level of it has been cleared. */
-  startChallenge(countryId: number): boolean {
-    const c = COUNTRIES.find(k => k.id === countryId);
-    if (!c || c.to - c.from + 1 < 20 || !this.rewards.worldCleared(c.from, c.to)) return false;
-    this.setLevel(c.from - 1);                 // ends any other run first
-    this.challenge = { id: c.id, from: c.from, to: c.to, name: c.name };
-    this.ballsMax = CHALLENGE_BALLS;
-    this.ballsLeft = CHALLENGE_BALLS;
-    this.showFlash(`${c.name} Challenge Run: all ${c.to - c.from + 1} levels, ${CHALLENGE_BALLS} balls. No help.`);
-    this.changed();
-    return true;
-  }
+  nextLevel(): void { this.setLevel(this.levels.levelIndex + 1); }
 
   /** Replay: drop the same layout again, at the same patrol phase, so it is
       the same drop, not a new roll. A replay of a cleared board follows the
@@ -1111,10 +1052,8 @@ export class GameController {
   retry(): void {
     this.collectWin(false, false);
     this.patrolClock = this.lastT0;
-    if (!this.challenge) {
-      this.ballsMax = ballsFor(this.levels.level.id);
-      this.ballsLeft = this.ballsMax;
-    }
+    this.ballsMax = ballsFor(this.levels.level.id);
+    this.ballsLeft = this.ballsMax;
     this.setPhase('plan');
     this.winCard = null; this.pendingCard = null; this.gift = null;
     this.drop();
