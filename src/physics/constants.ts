@@ -254,6 +254,13 @@ export const BOOST_SUBSTEPS_MAX = 48;
    GRAVITY * QUICKSAND_KEEP / (1 - QUICKSAND_KEEP) = 2.3 px/step - slowly,
    but never stuck. */
 export const QUICKSAND_KEEP = 0.86;
+/* BLACK HOLES. While a hole PULSES (levels/blackhole.ts), a ball anywhere
+   inside its ripple ring (`reach`) is CAUGHT: it stops bouncing and spirals
+   in - tighter each step (ORBIT_DECAY), faster as it goes, stretched thin -
+   until the core swallows it (spaghettification). Lower ORBIT_DECAY = a
+   quicker end; ORBIT_W_MAX = the fastest spin near the core. */
+export const ORBIT_DECAY = 0.95;
+export const ORBIT_W_MAX = 0.6;
 export const SLIP_REST = 0.985;      // restitution inside a slippery zone
 
 export const STAR_R = 13;            // star collection radius (plus the ball's)

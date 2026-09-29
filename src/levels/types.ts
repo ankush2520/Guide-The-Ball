@@ -43,10 +43,14 @@ export type SlipperyDef = Rect;
 /** QUICKSAND (Ancient Egypt): a round pit. Inside it the ball keeps sinking
     under gravity but loses most of its speed every step. */
 export interface QuicksandDef { x: number; y: number; r: number; }
-/** A BLACK HOLE (Outer Space): anywhere inside `reach` the ball is pulled
-    toward the centre, harder the closer it gets (up to `pull` px/step^2);
-    inside `r` it is swallowed and the drop ends. */
-export interface BlackHoleDef { x: number; y: number; r: number; reach: number; pull: number; }
+/** A BLACK HOLE (Outer Space): its gravity switches ON for `on` steps out of
+    every `period` (phase shifted by `offset`) - see levels/blackhole.ts. While
+    ON, anywhere inside `reach` the ball is pulled toward the centre, harder
+    the closer it gets; the core `r` swallows it at any time. */
+export interface BlackHoleDef {
+  x: number; y: number; r: number; reach: number; pull: number;
+  period?: number; on?: number; offset?: number;
+}
 /** `id` is written by the generator to label a pair; the sim ignores it. */
 export type BreakableDef = Circle;
 export type StarDef = Vec;

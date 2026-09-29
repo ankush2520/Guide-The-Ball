@@ -7,11 +7,11 @@
  * each takes the PATTERN of the Lava Land city at the same position
  * (121 <- 21 ... 136 <- 36). No fire in space: each fire becomes a red
  * obstacle of the same size. On top: a CROWDED board - 2 extra small red
- * obstacles on 121-128, 3 on 129-132, 4 on 133-136 - and wind (drawn as
- * the space scene's drift) on some cities.
+ * obstacles on 121-128, 3 on 129-132, 4 on 133-136 - and BLACK HOLES.
+ * No wind in space.
  *
- * 137-140 are the pillar exam: Windy Peaks' 57-60 (wind + the pillar), fire
- * turned to red obstacles (tools/examClone.mjs). Nothing here runs the solver.
+ * 137-140 are the pillar exam: Lava Land's 37-40, fire turned to red
+ * obstacles (tools/examClone.mjs). Nothing here runs the solver.
  */
 import { fileURLToPath } from 'node:url';
 import { runWorld } from './windLevels.mjs';
@@ -26,10 +26,10 @@ export const NAMES = {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)){
-  await runWorld({ from: 121, names: NAMES, addOn: 'dense', hazard: 'blackholes', noFire: true, windChance: 0.35 });
+  await runWorld({ from: 121, names: NAMES, addOn: 'dense', hazard: 'blackholes', noFire: true });
   const raw = await loadRaw();
   const exams = [137, 138, 139, 140].map(id =>
-    cloneExam(raw.find(l => l.id === id - 80), { id, name: NAMES[id], noFire: true }));
+    cloneExam(raw.find(l => l.id === id - 100), { id, name: NAMES[id], noFire: true }));
   writeLevels(exams);
-  for (const L of exams) console.log(`${L.id} ${L.name.padEnd(18)} exam <- ${L.id - 80}, fire -> obstacles`);
+  for (const L of exams) console.log(`${L.id} ${L.name.padEnd(18)} exam <- ${L.id - 100}, fire -> obstacles`);
 }

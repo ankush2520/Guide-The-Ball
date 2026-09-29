@@ -888,6 +888,15 @@ class SoundEngine {
     this.noise(this.sfx!, t + 0.04, 0.12, 0.08 * CRACK_VOLUME, 2600);
   }
 
+  /** A black hole's gravity switching on: a soft low whum that swells in. */
+  holeOn(): void {
+    if (this.isMuted || PINCH_VOLUME <= 0) return;
+    if (!this.ctx || this.ctx.state !== "running") return;
+    const t = this.ctx.currentTime;
+    this.sweep(this.sfx!, 70, 110, 90, t, 0.6, 0.12 * PINCH_VOLUME, "sine");
+    this.sweep(this.sfx!, 140, 220, 180, t + 0.03, 0.5, 0.04 * PINCH_VOLUME, "triangle");
+  }
+
   /** A black hole took the ball: a falling, fading whoop into the dark. */
   swallow(): void {
     if (this.isMuted || PINCH_VOLUME <= 0) return;

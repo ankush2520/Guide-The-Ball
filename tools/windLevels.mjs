@@ -362,7 +362,18 @@ function build(id, tpl, oldGift, attempt, world){
   let quicksand, blackholes;
   const others = [...placed, ...(box ? [box] : []), ...(stars || []).map(p => ({ ...p, r: 14 }))];
   if (world.hazard === 'quicksand') quicksand = pitsFor(r, pos <= 8 ? 1 : 2, spawn, lane, others, walls);
-  if (world.hazard === 'blackholes') blackholes = holesFor(r, pos <= 8 ? 1 : 2, spawn, lane, others, walls);
+  if (world.hazard === 'blackholes'){
+    blackholes = holesFor(r, pos <= 8 ? 1 : 2, spawn, lane, others, walls);
+    /* THE RHYTHM - every hole switches its gravity on and off (levels/blackhole):
+       a long quiet gap early, shorter and busier later; a second hole on its
+       own period, so the player hunts for the moment both are quiet. */
+    const tr = rng(mix(id + 5000));
+    const [period, on] = pos <= 8 ? [270, 80] : pos <= 12 ? [230, 90] : [200, 95];
+    blackholes = blackholes.map((h, k) => {
+      const p = period + k * 50;
+      return { ...h, period: p, on, offset: rint(tr, 0, p - 1) };
+    });
+  }
 
   const pick = k => placed.filter(o => o.kind === k).map(({ x, y, r }) => ({ x, y, r }));
   return { id, name: world.names[id], quicksand, blackholes, maxBlocks: tpl.maxBlocks, targetType: tpl.targetType, wallSide,

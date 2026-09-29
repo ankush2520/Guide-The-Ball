@@ -36,13 +36,14 @@ import type { Level, Segment, Circle } from '../../levels/types';
 import { targetAt } from '../../levels/target';
 import { strikeAt, STORM_R } from '../../levels/storm';
 import { crabAt } from '../../levels/crab';
+import { holeState } from '../../levels/blackhole';
 import type { BallState, PhysicsEngine } from '../PhysicsEngine';
 import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '../types';
 import { mulberry32, falses, closestOnSeg } from '../math';
 import {
   BALL_R, RAMP_HT, WALL_HT, TERMINAL_VY, RESTITUTION, SLIP_REST, MIN_BOUNCE,
   SPEED_CAP, BOOST_GAIN, BOOST_CAP, BOOST_STEPS, STAR_R, BOX_R,
-  MAX_STEPS, REST_STEPS, REST_PX, QUICKSAND_KEEP,
+  MAX_STEPS, REST_STEPS, REST_PX, QUICKSAND_KEEP, ORBIT_DECAY, ORBIT_W_MAX,
   SPRING_GAIN, SPRING_CAP, SPRING_DECAY, SPRING_CD,
   BOOST_SUB_PX, BOOST_SUBSTEPS_MAX,
   OB_JITTER, OB_MAX_DEV, PLAY } from '../constants';
@@ -136,6 +137,9 @@ export class MatterBall implements BallState {
   spdMin = Infinity; spdMax = -Infinity; vyMax = 0;
 
   result: DropResult | null = null;
+  /* a black hole's spiral, once the ball is caught - see spiral() */
+  orbit: { cx: number; cy: number; k: number; hole: number; ang: number; rad: number; rad0: number;
+           w0: number; dir: number } | null = null;
   readonly rng: () => number;
 
   /* the Matter world for THIS drop - one per run, disposed with it */
@@ -357,6 +361,32 @@ function stepMatter(b: MatterBall): void {
   Body.setVelocity(b.body, v);
 }
 
+/* ============================================================
+   SPAGHETTIFICATION
+
+   A ball caught by a black hole is taken out of Matter's hands:
+   each step it swings further round the hole, a little closer in
+   (ORBIT_DECAY), and - keeping its angular momentum - faster the
+   closer it gets, up to ORBIT_W_MAX a step. It is moved directly,
+   with its velocity set to match so the trail and the render
+   interpolation follow it. At half the core's radius it is gone.
+   Deterministic like everything else: same entry, same spiral.
+   ============================================================ */
+function spiral(b: MatterBall, lv: Level): void {
+  const o = b.orbit!, h = lv.blackholes[o.hole];
+  o.rad *= ORBIT_DECAY;
+  const w = Math.min(ORBIT_W_MAX, o.w0 * Math.pow(o.rad0 / o.rad, 1.5));
+  o.ang += w * o.dir;
+  const x = h.x + Math.cos(o.ang) * o.rad, y = h.y + Math.sin(o.ang) * o.rad;
+  const vx = x - b.x, vy = y - b.y;
+  b.setPosition(x, y);
+  b.setVelocity(vx, vy);
+  const end = h.r * 0.5;
+  o.k = Math.min(1, Math.max(0, 1 - (o.rad - end) / (o.rad0 - end)));
+  b.steps++;
+  if (o.rad <= end || b.steps >= MAX_STEPS) b.result = 'swallowed';
+}
+
 /* A segment becomes a rotated static rectangle of the thickness the renderer
    draws it at (RAMP_HT / WALL_HT), so what the player sees is what collides. */
 function segmentBody(s: Segment, halfT: number): MBody {
@@ -389,6 +419,9 @@ export class MatterEngine implements PhysicsEngine {
     if (b.steps === 0 && !b.tags.size) { /* walls already added in ctor */ }
     if (b.steps === 0) syncRamps(b, ramps);
 
+    /* CAUGHT BY A BLACK HOLE: no more physics, only the spiral in */
+    if (b.orbit) { spiral(b, lv); return; }
+
     // wind is an acceleration, so it goes on before the solve
     for (const z of lv.wind) {
       if (inRect(b.x, b.y, z)) {
@@ -407,12 +440,22 @@ export class MatterEngine implements PhysicsEngine {
         break;
       }
     }
-    for (const h of lv.blackholes) {
+    for (const [i, h] of lv.blackholes.entries()) {
+      /* A PULSING hole catches anything inside its ripple ring - its whole
+         reach - and spaghettifies it. Quiet, it lets the ball pass. The
+         entire puzzle is when to drop. */
+      if (!holeState(h, b.t0 + b.steps).on) continue;
       const dx = h.x - b.x, dy = h.y - b.y, d = Math.hypot(dx, dy);
       if (d < h.reach && d > 0.001) {
-        const a = h.pull * (1 - d / h.reach);
-        b.setVelocity(b.vx + dx / d * a, b.vy + dy / d * a);
-        capSpeed(b, cfg);
+        /* caught: it keeps the way it was already swinging round the hole,
+           and from here it can only spiral in */
+        const rx = -dx, ry = -dy;
+        const vt = (rx * b.vy - ry * b.vx) / d;
+        const w0 = Math.min(0.2, Math.max(0.06, Math.abs(vt) / d));
+        b.orbit = { cx: h.x, cy: h.y, k: 0, hole: i, ang: Math.atan2(ry, rx), rad: d, rad0: d,
+                    w0, dir: vt >= 0 ? 1 : -1 };
+        spiral(b, lv);
+        return;
       }
     }
 

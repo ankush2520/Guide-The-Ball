@@ -77,7 +77,7 @@ const ICONS: Record<string, Draw> = {
   star: (ctx, c) => new StarPickup({ x: 60, y: 40 }, 0).draw({ ...g(ctx, c), got: [false] }),
   ice: (ctx, c) => new SlipperyZone({ x: 4, y: 14, w: 112, h: 52 }, 0).draw(g(ctx, c)),
   quicksand: (ctx, c) => new Quicksand({ x: 60, y: 40, r: 34 }, 0).draw(g(ctx, c)),
-  blackhole: (ctx, c) => new BlackHole({ x: 60, y: 40, r: 12, reach: 38, pull: 0.4 }, 0).draw(g(ctx, c)),
+  blackhole: (ctx, c) => new BlackHole({ x: 60, y: 40, r: 12, reach: 38, pull: 0.4, period: 120, on: 60, offset: 60 }, 0).draw(g(ctx, c)),
   tricky: (ctx, c) => {
     const lv = { id: 0, name: '', maxBlocks: 1, targetType: 'POCKET' as const, wallSide: 'left' as const,
                  spawn: { x: 0, y: 0 }, target: { x: 64, y: 44, r: 18 } };

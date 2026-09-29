@@ -19,6 +19,10 @@ export interface BallState {
   vx: number; vy: number;
 
   steps: number;
+  /** Set while a black hole has the ball in its spiral: the hole's centre and
+      how far in it has gone (0 caught .. 1 swallowed). The renderer stretches
+      the ball by it. */
+  orbit?: { cx: number; cy: number; k: number } | null;
   /** The patrol clock when this ball was let go, in steps. A moving target
       runs from the moment its level is entered, so a drop starts partway
       through the patrol; the target's clock during the drop is t0 + steps.

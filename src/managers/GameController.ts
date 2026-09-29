@@ -26,6 +26,7 @@ import { TERMINAL_VY, MIN_RAMP } from '../physics/constants';
 import type { DropResult, Hit } from '../physics/types';
 import { targetAt } from '../levels/target';
 import { strikeAt } from '../levels/storm';
+import { holeState } from '../levels/blackhole';
 import { levelSeed, LEVELS } from '../levels';
 import { INTROS, GLOSSARY, type IntroCtx } from '../ui/glossary';
 import { track } from '../analytics/track';
@@ -574,12 +575,19 @@ export class GameController {
       only for a strike that hits the ball (see reactToStep). */
   private lastStrike = -1;
   private lastRumble = -1;
+  private holeWasOn = false;
   private weather(): void {
     const lv = this.levels.playLevel;
     Sound.setAmbience(lv.storm ? 'rain' : lv.crabs && lv.crabs.length ? 'water' : lv.fires.length ? 'fire' : 'none');
     Sound.setWorld(this.levels.country.id);          // the world's own score and bed
-    if (!lv.storm) return;
     const simT = this.ball ? this.ball.t0 + this.ball.steps : this.patrolClock;
+    /* a black hole switching ON: a low whum, so the rhythm can be heard too */
+    if (lv.blackholes.length) {
+      const on = lv.blackholes.some(h => holeState(h, simT).on);
+      if (on && !this.holeWasOn) Sound.holeOn();
+      this.holeWasOn = on;
+    }
+    if (!lv.storm) return;
     const s = strikeAt(lv, simT);
     if (s && s.key !== this.lastRumble) { this.lastRumble = s.key; Sound.thunder(); }
   }

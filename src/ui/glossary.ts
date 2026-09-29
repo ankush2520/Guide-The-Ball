@@ -112,10 +112,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     title: 'Quicksand', icon: 'quicksand', intro: 'Grabs the ball and kills its speed. It sinks straight down!',
     highlight: lv => lv.quicksand.map(q => ({ x: q.x, y: q.y, r: q.r + 6 })) },
   { key: 'blackhole', cls: 'bh', has: lv => lv.blackholes.length > 0, name: 'Black hole', covers: ['blackhole'],
-    long: 'It pulls the ball toward it from anywhere inside its faint outer ring, bending the path - ' +
-          'harder the closer the ball gets. Skim the edge to curve around it; fall into the dark ' +
-          'middle and the drop is over.',
-    title: 'Black hole', icon: 'blackhole', intro: 'Pulls the ball in. Touch the dark middle and it is gone!',
+    long: 'It PULSES on a fixed rhythm. While its ripples are rolling in, anything inside its outer ' +
+          'ring is caught, spun round and round and stretched to spaghetti - the drop is over. While ' +
+          'it is quiet the ball can pass right by. Watch the ring round the core fill up, and time ' +
+          'your drop for the quiet gap. The dark middle swallows the ball at any time.',
+    title: 'Black hole', icon: 'blackhole', intro: 'Inside its ring while it pulses? Spaghetti! Drop in the quiet gap.',
     highlight: lv => lv.blackholes.map(h => ({ x: h.x, y: h.y, r: h.r + 16 })) },
   { key: 'pillar', cls: 'ov', has: lv => lv.pillars.length > 0, name: 'Pillar', covers: ['pillar'],
     long: 'A solid column hanging from the sky. Nothing goes through it or over it - the ball ' +

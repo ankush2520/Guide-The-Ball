@@ -67,7 +67,7 @@ export interface RenderState {
       from the drop (see GameController.patrolClock). Drives a patrolling
       target and nothing else. */
   simT: number;
-  ball: { x: number; y: number; px: number; py: number } | null;
+  ball: { x: number; y: number; px: number; py: number; orbit?: { cx: number; cy: number; k: number } | null } | null;
   /* read-only: the renderer never writes game state, and these are reused
      buffers on the controller - see its render-state scratch. */
   broken: readonly boolean[];
@@ -514,8 +514,15 @@ export class Renderer {
     ctx.fillStyle = this.bloomFor(rad);
     ctx.beginPath(); ctx.arc(0, 0, rad * 2.2, 0, Math.PI * 2); ctx.fill();
 
-    const q = s.squash.amt;
-    if (Math.abs(q) > 0.002) {
+    /* SPAGHETTIFICATION: caught by a black hole, the ball is pulled out
+       long toward it and thinned across, and shrinks as it goes in */
+    const orb = s.phase === 'drop' ? s.ball?.orbit : null;
+    const q = orb ? 0 : s.squash.amt;
+    if (orb) {
+      const k = orb.k;
+      ctx.rotate(Math.atan2(orb.cy - by, orb.cx - bx));
+      ctx.scale((1 + 2 * k) * (1 - 0.4 * k), (1 - 0.6 * k) * (1 - 0.4 * k));
+    } else if (Math.abs(q) > 0.002) {
       /* flatten along the surface it hit, bulge across it; outBack drives q
          slightly negative on the way home, which stretches it the other way */
       ctx.rotate(Math.atan2(s.squash.ny, s.squash.nx));
@@ -534,7 +541,7 @@ export class Renderer {
     /* the gloss is painted after the squash is undone, so the light stays
        high and left however the ball is flattened */
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = alpha * (orb ? 1 - orb.k : 1);
     ctx.fillStyle = 'rgba(255,255,255,.95)';
     ctx.beginPath();
     ctx.ellipse(bx - rad * 0.34, by - rad * 0.38, rad * 0.26, rad * 0.16, -0.7, 0, Math.PI * 2);

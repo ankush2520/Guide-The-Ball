@@ -407,7 +407,7 @@ export function starNote(
    set back to false before release. Only the level picker is affected: real
    progress, stars and coins are untouched.
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
-export const TEMP_UNLOCK_ALL = false;
+export const TEMP_UNLOCK_ALL = true;
 
 /** The dev unlock: DEV builds only, and only when asked for in storage -
     or everywhere while TEMP_UNLOCK_ALL is on. */
