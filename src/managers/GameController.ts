@@ -29,8 +29,6 @@ import { strikeAt } from '../levels/storm';
 import { levelSeed, LEVELS, COUNTRIES } from '../levels';
 import { INTROS, GLOSSARY, type IntroCtx } from '../ui/glossary';
 import { track } from '../analytics/track';
-import { HINTS } from '../levels/hints.data';
-import { boardCycles } from '../levels/crab';
 import type { Circle, Level, Segment, Vec } from '../levels/types';
 import type { ItemKind } from '../items/items';
 
@@ -157,7 +155,7 @@ export class GameController {
      row on ONE pool of CHALLENGE_BALLS (ballsLeft carries across
      them instead of being refilled per level). Running out sends
      the player back to the world's first level with a full pool.
-     No hints, no spare ramps, no out-of-balls choice, no continue
+     No spare ramps, no out-of-balls choice, no continue
      ad - and nothing is recorded: stars, coins and clears are
      never touched by a run. Picking a level from the picker ends
      it.
@@ -328,37 +326,6 @@ export class GameController {
       && this.phase === 'plan' && !this.intros.length;
   }
   dismissStuck(): void { this.stuckDismissed = true; this.changed(); }
-
-  /* ============================================================
-     THE HINT
-
-     One proven winning plan per level (levels/hints.data.ts, made
-     by tools/genhints.mjs on the level's own seed). Showing it
-     draws its ramps as a dashed ghost for the rest of this level
-     ENTRY, and on a timed board pulses the drop point at the
-     proven moment. It counts as help: the clear is capped at
-     HELPED_MAX_STARS, like a spare ramp.
-
-     Paying for it (the first one free, then an ad) is the UI's
-     job; this only shows it.
-     ============================================================ */
-  hintShown = false;
-  /** Whether this board has a hint, not yet shown this entry. */
-  get hintAvailable(): boolean {
-    return !this.challenge && !!HINTS[this.levels.level.id] && !this.hintShown;
-  }
-  showHint(): void {
-    const h = HINTS[this.levels.level.id];
-    if (!h || this.hintShown) return;
-    this.hintShown = true;
-    this.stuckDismissed = true;
-    track('hint_used', { level: this.levels.level.id });
-    // short: the caption is one line on a phone
-    this.showFlash('Trace the dashed ramp' + (h.ramps.length > 1 ? 's' : '')
-      + (h.ramps.some(r => r.spring) ? ' (make it Bouncy)' : '')
-      + (h.t0 !== undefined ? ', drop on the pulse' : '') + '. Max 2★');
-    this.changed();
-  }
 
   /** Take a ramp off the board (its × button). If that brings the board back
       within its own budget, a reserved spare goes back to the bag. */
@@ -952,7 +919,7 @@ export class GameController {
       : this.rewards.recordClear(
           this.levels.levelIndex, lv.id, this.levels.isLast,
           this.tries, this.levels.rampsUsed, this.levels.levelBudget,
-          usedSpare ? 'spare' : this.hintShown ? 'hint' : null);
+          usedSpare ? 'spare' : null);
     let challenge: WinCard['challenge'];
     if (ch) {
       const done = lv.id >= ch.to;
@@ -962,7 +929,7 @@ export class GameController {
     }
 
     track('level_win', { level: lv.id, stars, tries: this.tries, usedSpareRamp: usedSpare,
-                         usedHint: this.hintShown, usedSpring: springsUsed > 0, firstClear });
+                         usedSpring: springsUsed > 0, firstClear });
     const card: WinCard = {
       stars, note, coins, isLast: this.levels.isLast,
       nextId: this.levels.isLast ? null : this.levels.levelIndex + 2,
@@ -1077,7 +1044,6 @@ export class GameController {
     this.tries = 0;
     this.restarts = 0;
     this.stuckDismissed = false;
-    this.hintShown = false;
     if (this.challenge) {
       // the run's one pool carries across its levels
       this.ballsMax = CHALLENGE_BALLS;
@@ -1134,7 +1100,7 @@ export class GameController {
     this.challenge = { id: c.id, from: c.from, to: c.to, name: c.name };
     this.ballsMax = CHALLENGE_BALLS;
     this.ballsLeft = CHALLENGE_BALLS;
-    this.showFlash(`${c.name} Challenge Run: all ${c.to - c.from + 1} levels, ${CHALLENGE_BALLS} balls. No hints, no help.`);
+    this.showFlash(`${c.name} Challenge Run: all ${c.to - c.from + 1} levels, ${CHALLENGE_BALLS} balls. No help.`);
     this.changed();
     return true;
   }
@@ -1273,8 +1239,7 @@ export class GameController {
      its own. The Info panel can replay a board's cards.
      ============================================================ */
   private introCtx(): IntroCtx {
-    return { spares: this.sparesAllowed ? this.rewards.extraRamps : 0,
-             hint: !!HINTS[this.levels.level.id] };
+    return { spares: this.sparesAllowed ? this.rewards.extraRamps : 0 };
   }
 
   private markSeen(key: string): void {
@@ -1297,7 +1262,7 @@ export class GameController {
     if (country.from > 1 && !seen[wkey]) {
       const inWorld = LEVELS.filter(l => l.id >= country.from && l.id <= country.to);
       const news = INTROS.filter(e => !seen[e.key] && e.key !== 'balls' && e.key !== 'spareRamp'
-                                      && e.key !== 'hint' && inWorld.some(l => e.has(l, ctx)));
+                                      && inWorld.some(l => e.has(l, ctx)));
       this.queueIntro({ key: wkey, icon: '', title: `Welcome to ${country.name}!`,
                         text: news.length ? `New here: ${news.map(e => e.title!.replace(/^New power: /, '').replace(/!$/, '')).join(' + ')}`
                                           : 'A new world - same rules, harder boards.',
@@ -1425,27 +1390,10 @@ export class GameController {
       handleR: HANDLE_R,
       delR: DEL_R,
       tutorial: this.fillTutorial(),
-      /* the hint's ghost ramps, while it is shown, and whether the drop point
-         should pulse right now (a timed board at the proven moment) */
-      hint: this.hintShown ? HINTS[lv.id]?.ramps ?? null : null,
       /* what the intro card on screen is about, pulsing on the board */
       introHighlight: this.intro?.highlight
         ? this.intro.highlight(this.levels.playLevel, this.patrolClock) : null,
-      hintPulse: this.hintShown && this.phase === 'plan' && this.atHintMoment(),
     };
-  }
-
-  /** On a timed board: is the board back at the moment the hint was proven
-      at? Only if EVERY clock on it is - within a few steps, since the drop
-      itself is floored to a step. */
-  private atHintMoment(): boolean {
-    const h = HINTS[this.levels.level.id];
-    if (!h || h.t0 === undefined) return false;
-    const t = this.patrolClock;
-    return boardCycles(this.levels.playLevel).every(P => {
-      const d = (((t - h.t0!) % P) + P) % P;
-      return Math.min(d, P - d) <= 3;
-    });
   }
 
   /* OR-ed rather than taken from the ball: a box claimed on an earlier visit
@@ -1477,18 +1425,5 @@ export class GameController {
       : 'Touch or click on screen to drop ball';
   }
 
-  /** The hint line under the board - a read-only view of state. */
-  get hint(): string {
-    const step = this.tutorialStep();
-    if (step === 'intro') return 'Get the ball into the green target.';
-    if (step === 'draw') return 'Drag across the board to draw a ramp under the ball.';
-    if (step === 'drop') return 'Tap anywhere to drop the ball.';
-    if (this.phase === 'drop' || this.phase === 'capture') return 'Watching the drop…';
-    if (this.phase === 'over') return 'Replay drops this same layout again. Next moves on.';
-    if (this.armedSpring) return 'Draw your bouncy ramp, or tap a ramp to make it bouncy.';
-    if (this.selected >= 0) return 'Drag the middle to move it, an end to reshape it, × to remove it.';
-    if (this.levels.rampsLeft <= 0 && !this.spareAvailable)
-      return 'No ramps left — tap a ramp to adjust it, or tap empty board to drop.';
-    return 'Drag to draw a ramp. Tap a ramp to adjust it, or empty board to drop.';
-  }
+
 }

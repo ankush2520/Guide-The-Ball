@@ -89,20 +89,7 @@ const ICONS: Record<string, Draw> = {
     ctx.fillStyle = INK; ctx.font = 'bold 20px system-ui, sans-serif';
     ctx.fillText('+1', 84, 66);
   },
-  hint: (ctx) => {
-    // the HUD's lightbulb, over a dashed ghost ramp
-    ctx.save();
-    ctx.setLineDash([8, 6]); ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(40,110,230,0.75)'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(14, 66); ctx.lineTo(70, 50); ctx.stroke();
-    ctx.restore();
-    ctx.save(); ctx.translate(74, 8); ctx.scale(2.2, 2.2);
-    const bulb = new Path2D('M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.1.9 1.8v.5h6v-.5c0-.7.3-1.3.9-1.8A6.5 6.5 0 0 0 12 2.5z');
-    ctx.fillStyle = '#ffd23f'; ctx.fill(bulb);
-    ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.stroke(bulb);
-    ctx.beginPath(); ctx.moveTo(9.5, 19); ctx.lineTo(14.5, 19); ctx.moveTo(10.2, 21.5); ctx.lineTo(13.8, 21.5); ctx.stroke();
-    ctx.restore();
-  },
+
   spring: (ctx, clock) => {
     const seg = { x1: 18, y1: 58, x2: 102, y2: 30, spring: true };
     drawSeg(ctx, seg, RAMP_HT, RAMP_STYLE);

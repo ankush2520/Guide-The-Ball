@@ -199,6 +199,7 @@ export function SpinPanel({ onClose }: { onClose: () => void }) {
   const doSpin = () => {
     if (!ready) return;
     const ix = rewards.beginSpin();     // committed to storage before it turns
+    if (ix < 0) return;                 // no spin to take (a repeat tap) - pay nothing
     rewards.wheelDeg = spinTarget(ix, rewards.wheelDeg, Math.random() * 2 - 1);
     setTick(t => t + 1);
     window.setTimeout(() => {

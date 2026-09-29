@@ -13,7 +13,7 @@
 export type TrackEvent =
   | 'level_start' | 'ball_lost' | 'level_restart' | 'level_win'
   | 'ad_offer_shown' | 'ad_watched' | 'ad_failed'
-  | 'spring_used' | 'spare_ramp_used' | 'hint_used'
+  | 'spring_used' | 'spare_ramp_used'
   | 'chest_opened' | 'cosmetic_bought' | 'session_end';
 
 export interface Tracked { e: TrackEvent; t: number; d: Record<string, unknown>; }

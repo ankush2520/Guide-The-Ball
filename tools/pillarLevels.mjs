@@ -21,7 +21,7 @@
  *
  * Then each candidate is PROVED in the real simulator on the level's seed:
  *   - a spring solution exists (rounded to whole pixels, and still winning
- *     with the layout nudged a few pixels - it becomes the level's hint);
+ *     with the layout nudged a few pixels);
  *   - and no plain-ramp layout wins, so the board still needs its spring.
  * A level tries a few pillar placements, closest to the old layout first,
  * and keeps the first that passes both. One that passes none is reported and
@@ -36,7 +36,6 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const HINTS = path.join(root, 'src/levels/hints.data.ts');
 const W = 480, H = 800, GAP = 18, WALL_HT = 5;
 
 /* ---------------- geometry ---------------- */
@@ -241,10 +240,10 @@ for (const drop of [40, 70, 25, 100])
   for (const lane of [70, 90, 55])
     CFGS.push({ w: 56, lane, drop });
 
-const done = {}, hints = {};
+const done = {};
 let pending = [...ids];
 /* --no-proof: place every pillar at the first placement that fits, prove
-   nothing, and drop those levels' hints (the old ones were for the oval). */
+   nothing. */
 if (process.argv.includes('--no-proof')){
   for (const id of ids)
     for (let ci = 0; ci < CFGS.length && !done[id]; ci++){
@@ -252,8 +251,6 @@ if (process.argv.includes('--no-proof')){
       if (L) done[id] = L;
     }
   writeLevels(Object.values(done));
-  const src = fs.readFileSync(HINTS, 'utf8');
-  fs.writeFileSync(HINTS, src.split('\n').filter(l => !ids.some(id => l.startsWith(`  ${id}: `))).join('\n'));
   console.log(`pillars placed (unproved): ${Object.keys(done).join(', ')}; not placed: ${ids.filter(i => !done[i]).join(', ') || '-'}`);
   process.exit(0);
 }
@@ -274,8 +271,8 @@ for (let ci = 0; ci < CFGS.length && pending.length; ci++){
     const tag = `${id}: cfg ${JSON.stringify(cfg)}`;
     if (r.plain){ console.log(`${tag} - REJECT, a plain ramp wins ${JSON.stringify(r.plain)}`); continue; }
     if (!r.plan){ console.log(`${tag} - REJECT, no spring loop found (${r.tries} tries)`); continue; }
-    console.log(`${tag} - OK${r.plan.robust ? '' : ' (hint exact only)'}`);
-    done[id] = cand[id]; hints[id] = r.plan;
+    console.log(`${tag} - OK${r.plan.robust ? '' : ' (exact only)'}`);
+    done[id] = cand[id];
   }
   pending = pending.filter(id => !done[id]);
   /* what did not pass goes back exactly as it was before the next round */
@@ -283,18 +280,6 @@ for (let ci = 0; ci < CFGS.length && pending.length; ci++){
 }
 writeLevels(Object.values(done));
 if (pending.length) writeLevels(pending.map(id => orig[id]));
-
-/* the hints: the proof's own plan, merged into the hint file */
-const src = fs.readFileSync(HINTS, 'utf8');
-const m = src.match(/HINTS: Record<number, Hint> = (\{[\s\S]*\});/);
-const all = Function(`return (${m[1]})`)();
-for (const [id, p] of Object.entries(hints)) all[id] = { ramps: p.ramps, t0: p.t0 };
-const body = Object.keys(all).map(Number).sort((a, b) => a - b).map(id => {
-  const e = all[id];
-  const ramps = e.ramps.map(s => `{ x1: ${s.x1}, y1: ${s.y1}, x2: ${s.x2}, y2: ${s.y2}${s.spring ? ', spring: true' : ''} }`).join(', ');
-  return `  ${id}: { ramps: [${ramps}]${e.t0 !== undefined ? `, t0: ${e.t0}` : ''} },`;
-}).join('\n');
-fs.writeFileSync(HINTS, src.replace(/HINTS: Record<number, Hint> = \{[\s\S]*\};/, `HINTS: Record<number, Hint> = {\n${body}\n};`));
 
 console.log(`\npillars: ${Object.keys(done).length} of ${ids.length}` +
             (pending.length ? `; left as they were (no placement passed): ${pending.join(', ')}` : ''));

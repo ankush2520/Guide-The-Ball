@@ -25,7 +25,7 @@ import { crabAt } from '../levels/crab';
 import { SPARE_FROM } from '../managers/RewardManager';
 
 /** What an intro's `has` may ask besides the level: facts about the player. */
-export interface IntroCtx { spares: number; hint: boolean; }
+export interface IntroCtx { spares: number; }
 
 export interface GlossaryEntry {
   /** Stable id - the tipsSeen key and the card's key. */
@@ -126,11 +126,6 @@ export const GLOSSARY: GlossaryEntry[] = [
     long: 'One extra ramp from your bag, for a level you are stuck on - at most one per level. ' +
           'It is only used up if you win with it, and a clear that needed one earns at most 2 stars.',
     title: 'Spare ramp', icon: 'spareRamp', intro: 'One extra ramp for a stuck level. Max 2 stars when used.' },
-  { key: 'hint', cls: 'hn', onBoard: false, name: 'Hint', has: (_lv, ctx) => !!ctx && ctx.hint,
-    long: 'The lightbulb shows one ramp layout that is proven to win this level, as a dashed ' +
-          'outline to trace. Your first hint is free; after that it costs an ad. A clear with a ' +
-          'hint earns at most 2 stars.',
-    title: 'Hint', icon: 'hint', intro: 'Shows one ramp that wins. Max 2 stars when used.' },
   { key: 'box', cls: 'bx', has: lv => lv.boxes.length > 0, name: 'Mystery box', covers: ['box'],
     long: 'A chest. Touch it with the ball mid-drop and it pays out something random - coins, ' +
           'a spare ramp, sometimes a Bouncy ramp or a free spin of the wheel. Like a star it ' +

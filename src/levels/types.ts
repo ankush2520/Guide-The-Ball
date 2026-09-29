@@ -76,12 +76,6 @@ export interface CrabDef {
   pattern: CrabPattern; period: number; phase?: number; r: number;
 }
 
-/** A HINT: one proven winning plan for a level, found by tools/genhints.mjs
-    in the real simulator on the level's own seed. `ramps` are the ramps to
-    draw (one may carry `spring`); `t0`, on a timed board (moving target,
-    crabs, thunder), is the patrol-clock step to drop at. */
-export interface Hint { ramps: Segment[]; t0?: number; }
-
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
     the same shape of data - what differs is entirely what contact means. The
     red obstacle deflects; this ends the drop. */

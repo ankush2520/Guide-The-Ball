@@ -61,7 +61,7 @@ declare global {
 }
 
 /** Where an ad was offered from - what the analytics (Part K) records. */
-export type AdPlacement = 'continue' | 'spring' | 'hint' | 'spare' | 'double' | 'wheel' | string;
+export type AdPlacement = 'continue' | 'spring' | 'spare' | 'double' | 'wheel' | string;
 
 class AdsImpl {
   private platform: Platform = 'none';

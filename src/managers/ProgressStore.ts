@@ -50,8 +50,6 @@ export interface SaveData {
   migratedBalls?: boolean;
   /** The spring walkthrough has been shown through, or skipped. */
   springUnlockSeen?: boolean;
-  /** The first hint in the game is free - this records it has been had. */
-  freeHintUsed?: boolean;
   /** The local day (YYYY-MM-DD) the wheel's "Watch ad: spin again" was last
       used - once a day. */
   wheelAdSpinDay?: string;

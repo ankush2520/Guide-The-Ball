@@ -10,8 +10,8 @@
    challenge runs, how to play, sound. It carries a dot when
    there is something waiting in there (a spin, a chest).
 
-   The tools used WHILE solving a board - Bouncy and Hint - are
-   not up here: they float by the thumb (ToolButtons), and the
+   The tool used WHILE solving a board - Bouncy - is not up
+   here: it floats by the thumb (ToolButtons), and the
    ramps left ride on the caption at the bottom (Status).
    ============================================================ */
 import { useEffect, useState } from 'react';

@@ -70,7 +70,7 @@ export function ballsFor(levelId: number): number {
 /* ---- the Challenge Run ----
 
    A world's twenty levels in a row on one shared pool of balls; running out
-   sends the player back to the world's first level. No hints, no spare ramps,
+   sends the player back to the world's first level. No spare ramps,
    no continue ads. Clearing it awards the world's exclusive ball skin and a
    badge - and nothing else: normal progress (stars, coins, clears) is never
    touched by a run. */
@@ -127,13 +127,13 @@ export const SPRING_GIFT = 2;
 export const SPARE_PER_LEVEL = 1;
 /** Spares cannot be used on levels 1..SPARE_FROM-1. */
 export const SPARE_FROM = 6;
-/** The best rating a helped clear (spare ramp or hint) can earn. */
+/** The best rating a helped clear (a spare ramp) can earn. */
 export const HELPED_MAX_STARS = 2;
 /** Restarts in one level entry before the "Stuck?" offer appears. */
 export const STUCK_AFTER_RESTARTS = 2;
 
 /** What helped a clear, if anything. */
-export type Help = 'spare' | 'hint' | null;
+export type Help = 'spare' | null;
 
 /* ============================================================
    STAR CHESTS
@@ -535,8 +535,6 @@ export class RewardManager {
   /** Whether the spring walkthrough (bag -> Use -> ramp) has been shown
       through to the end, or skipped. Once, ever. */
   springUnlockSeen = false;
-  /** The first hint in the game is free; after that, one ad each. */
-  freeHintUsed = false;
   /** See SaveData.wheelAdSpinDay. */
   wheelAdSpinDay = "";
   /** Star chests opened so far. */
@@ -630,7 +628,6 @@ export class RewardManager {
     this.tipsSeen = s.tips && typeof s.tips === "object" ? s.tips : {};
     this.springGift = !!s.springGift;
     this.springUnlockSeen = !!s.springUnlockSeen;
-    this.freeHintUsed = !!s.freeHintUsed;
     this.wheelAdSpinDay = typeof s.wheelAdSpinDay === "string" ? s.wheelAdSpinDay : "";
     this.chestsClaimed = Math.max(0, (s.chestsClaimed as number) | 0);
     this.challengesDone = s.challenges && typeof s.challenges === "object" ? s.challenges : {};
@@ -737,7 +734,6 @@ export class RewardManager {
     this.tipsSeen = {};
     this.springGift = false;
     this.springUnlockSeen = false;
-    this.freeHintUsed = false;
     this.wheelAdSpinDay = "";
     this.chestsClaimed = 0;
     this.challengesDone = {};
@@ -789,7 +785,6 @@ export class RewardManager {
       gifts: this.claimedGifts,
       migratedBalls: true,
       springUnlockSeen: this.springUnlockSeen,
-      freeHintUsed: this.freeHintUsed,
       wheelAdSpinDay: this.wheelAdSpinDay,
       chestsClaimed: this.chestsClaimed,
       challenges: this.challengesDone,
@@ -968,8 +963,6 @@ export class RewardManager {
       coins,
       note: help === 'spare'
         ? "Cleared with a spare ramp. Solve it without help for 3 stars."
-        : help === 'hint'
-          ? "Cleared with a hint. Solve it without help for 3 stars."
           : starNote(tries, rampsUsed, budget, stars),
       firstClear,
     };
@@ -996,6 +989,7 @@ export class RewardManager {
   }
   /** A watched ad's spin: one bonus spin token, and today is used up. */
   grantAdSpin(): void {
+    if (this.wheelAdSpinDay === RewardManager.today()) return;   // once a day, however it is asked
     this.wheelAdSpinDay = RewardManager.today();
     /* the last prize's "You won…" would otherwise sit over a wheel that is
        ready to spin again */
@@ -1213,12 +1207,17 @@ export class RewardManager {
       only drawn on when it is the only way this spin could happen. That
       ordering is what keeps a token worth what it says: spending one on a day
       the wheel was free anyway would quietly buy nothing. */
+  /* Returns -1 when there is no spin to take - one already turning, or none
+     due. The caller MUST stop there: a fast double-tap (or a held key) fires
+     Spin several times before the button can disable itself, and every call
+     used to come back with a prize index that was then paid out. */
   beginSpin(): number {
+    if (this.spinning) return -1;
     const ix = this.pickPrize();
     const p = SPIN_PRIZES[ix];
     if (this.dailyReady()) this.spinLast = Date.now();
     else if (this.bonusSpins > 0) this.bonusSpins--;
-    else return ix;                     // not spinnable; the UI never calls it
+    else return -1;                     // nothing to spin
     this.spinning = true;
     this.spinShown = null;
     progressStore.saveSpin(
@@ -1232,6 +1231,7 @@ export class RewardManager {
 
   /** Pay a spin whose animation has finished, and clear the owed record. */
   settleSpin(ix: number): void {
+    if (!this.spinning) return;         // only a spin that was really taken pays
     const p = SPIN_PRIZES[ix];
     this.spinning = false;
     this.spinShown = { kind: p.kind, n: p.n };

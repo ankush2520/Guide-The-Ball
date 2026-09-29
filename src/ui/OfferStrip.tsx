@@ -9,7 +9,7 @@
    - a board that needs a spring, with none in the bag:
      [Shop] [Watch ad: get 1 spring];
    - "Stuck?" after restarting the same level entry twice:
-     [Hint (ad)] [Spare ramp (ad)], dismissible, once per entry.
+     [Spare ramp (ad)], dismissible, once per entry.
    Buttons side by side and the same
    size (CrazyGames: an ad button must never be bigger than the
    non-ad one beside it). The ad button hides where no ad can be
@@ -31,7 +31,6 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
   const live = controller.phase === 'plan' && !controller.intro && adsReady;
   const stuck = live && !needsSpring && controller.stuckOffer;
   useAdOffer('spring', live && needsSpring);
-  useAdOffer('hint', stuck && controller.hintAvailable);
   useAdOffer('spare', stuck && controller.sparesAllowed);
   if (controller.phase !== 'plan' || controller.intro) return null;
 
@@ -45,18 +44,14 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
 
   if (!needsSpring) {
     if (!controller.stuckOffer || !adsReady) return null;
-    const hint = controller.hintAvailable, spare = controller.sparesAllowed;
-    if (!hint && !spare) return null;
+    const spare = controller.sparesAllowed;
+    if (!spare) return null;
     return (
       <div data-ui className="offerstrip" id="stuck-offer">
         <button className="offerclose" id="btn-stuck-close" aria-label="Dismiss"
                 onClick={() => controller.dismissStuck()}>&times;</button>
         <span className="offertext">Stuck?</span>
         <div className="row pair">
-          {hint && (
-            <button id="btn-stuck-hint" disabled={waiting}
-                    onClick={ad('hint', () => controller.showHint())}>Hint (ad)</button>
-          )}
           {spare && (
             <button id="btn-stuck-spare" disabled={waiting}
                     onClick={ad('spare', () => { rewards.grantRamps(1, 'grant'); controller.dismissStuck(); })}>
