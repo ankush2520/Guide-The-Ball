@@ -88,8 +88,12 @@ export function LevelSelect({ onClose, onChest }: { onClose: () => void; onChest
                 <button key={lv.id} className={cls} disabled={locked}
                         title={locked ? 'Locked' : cityOf(lv)}
                         onClick={() => { controller.setLevel(i); onClose(); }}>
-                  {lv.id}
-                  {got > 0 && <span className="gstars">{'★'.repeat(got)}</span>}
+                  <span className="lvn">{lv.id}</span>
+                  {!locked && (
+                    <span className="lvs" aria-label={`${got} of 3 stars`}>
+                      {[0, 1, 2].map(j => <i key={j} className={j < got ? 'on' : ''}>&#9733;</i>)}
+                    </span>
+                  )}
                 </button>
               );
             })}

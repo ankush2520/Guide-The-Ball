@@ -121,8 +121,8 @@ export function GameCanvas({ children }: { children?: ReactNode }) {
       if (stage && slot) {
         const r = slot.getBoundingClientRect();
         const ratio = BOARD.w / H;
-        // -2 for the stage's 1px border, which sits outside the board itself
-        const avW = Math.max(0, r.width - 2), avH = Math.max(0, r.height - 2);
+        // the stage has no border any more, so the whole slot is board
+        const avW = Math.max(0, r.width), avH = Math.max(0, r.height);
         /* COVER, not contain, when the shapes are close (phones): the board
            fills the whole slot edge to edge and only a sliver of sky is
            cropped - VIEW_SCALE keeps the scene well inside that margin.

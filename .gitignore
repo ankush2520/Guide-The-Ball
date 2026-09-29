@@ -17,3 +17,6 @@ tests/screenshots/
 
 # econsim output
 tools/out/
+
+# files the Claude desktop app saves into the folder
+Claude outputs/
