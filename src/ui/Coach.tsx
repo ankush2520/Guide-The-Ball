@@ -28,7 +28,7 @@ interface Copy { title?: string; text: string; button?: string }
 
 const COPY: Record<TutStep, Copy> = {
   intro: { title: 'Get the ball in the target!',
-           text: "You can't steer the ball. Place ramps so it bounces into the green target, then drop it.",
+           text: "You can't steer the ball. Place ramps so it drops into the cup from above, then let it go.",
            button: "Let's go" },
   draw:  { title: 'Draw a ramp',
            text: 'Press on the board and drag. Where you drag is the ramp - ' +

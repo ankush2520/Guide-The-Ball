@@ -15,6 +15,8 @@ import { BOARD } from '../physics/constants';
 import type { Level } from '../levels/types';
 import type { Entity } from '../entities/Entity';
 import { Target } from '../entities/Target';
+import { cupThemeOf } from '../entities/Cup';
+import { targetAt } from '../levels/target';
 import { RAMP_STYLE } from '../entities/Ramp';
 import { activeStyle } from '../cosmetics/cosmetics';
 import { rampAllowed } from '../levels/patrol';
@@ -215,7 +217,8 @@ export class Renderer {
 
     const g = { ctx, clock: s.clock, broken: s.broken, got: s.got,
                 gotBox: s.gotBox, giftTaken: s.giftTaken,
-                simT: s.simT, level: s.level };
+                simT: s.simT, level: s.level,
+                cup: cupThemeOf(s.country), capturing: !!s.capture };
 
     /* Entities paint themselves in factory order: zones are ground, then the
        target, walls, obstacles, and the mechanics that sit with them. */
@@ -277,6 +280,11 @@ export class Renderer {
     this.particles.draw(ctx);
 
     this.drawBall(s);
+    /* the ball is dropping into the cup: its front goes down over the ball,
+       so it sinks in behind the lip instead of floating over the cup */
+    if (s.capture) {
+      for (const e of s.entities) if (e instanceof Target) e.drawFront(g);
+    }
     ctx.restore();
   }
 
@@ -482,13 +490,19 @@ export class Renderer {
       bx = s.ball.px + (s.ball.x - s.ball.px) * s.alpha;
       by = s.ball.py + (s.ball.y - s.ball.py) * s.alpha;
     } else if (s.capture) {
-      // swallowed: slide to the centre while shrinking and fading out
-      const k = Math.min(1, s.capture.t / (s.captureMs * 0.55));
+      /* into the cup: the win fires the moment the ball is inside, below
+         the rim (levels/cup), so it just settles to the middle of the floor.
+         The cup's front is painted over it afterwards (see the scene draw),
+         so it sinks out of sight behind the lip. Aimed at where the cup IS
+         now, so a patrolling cup keeps it. */
+      const c = targetAt(s.level, s.simT);
+      const k = Math.min(1, s.capture.t / (s.captureMs * 0.6));
       const e = k * k * (3 - 2 * k);
-      bx = s.capture.bx + (s.capture.cx - s.capture.bx) * e;
-      by = s.capture.by + (s.capture.cy - s.capture.by) * e;
-      rad = BALL_R * (1 - e);
-      alpha = 1 - e;
+      const dx = s.capture.bx - s.capture.cx, dy = s.capture.by - s.capture.cy;
+      bx = c.x + dx * (1 - e);
+      by = c.y + dy + (c.r * 0.45 - dy) * e;
+      rad = BALL_R * (1 - 0.25 * k);
+      alpha = k < 0.9 ? 1 : (1 - k) / 0.1;
     } else if (s.ball) {
       bx = s.ball.x; by = s.ball.y;
     } else {

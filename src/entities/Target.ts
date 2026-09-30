@@ -1,17 +1,14 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { Circle } from '../levels/types';
 import { targetAt } from '../levels/target';
-import { INK, TARGET } from '../render/palette';
-import { TARGET_GLOW } from '../render/glow';
+import { INK } from '../render/palette';
+import { drawCupBack, drawCupFront, MOUTH_Y } from './Cup';
 import { TIE, WRAP } from './MysteryBox';
 
-/* A bullseye well. Concentric rings, a pulsing core and a few drifting
-   motes, so it reads as "land here" and stays alive even before the ball is
-   dropped.
-
-   Note what does NOT happen here: nothing rotates. The rings breathe along
-   their radius only. An orbiting element implies the target SPINS, which it
-   never does - on a patrolling board it slides, and those two would fight.
+/* The goal: a CUP the ball drops into, dressed for its world - see
+   entities/Cup for the look and why it is split into a back and a front.
+   The win check is untouched: it is still this circle, and the cup is drawn
+   to sit inside it.
 
    Where it is drawn is not its authored centre. A patrolling target is
    painted at targetAt(simT), the same function and the same clock the win
@@ -19,72 +16,19 @@ import { TIE, WRAP } from './MysteryBox';
    says it missed. simT is fractional - steps plus the interpolation alpha -
    which is what keeps the slide smooth between physics steps rather than
    stepping 60 times a second, the same trick the ball's own draw uses. */
-const TARGET_PULSE_S = 1.9;   // seconds per outward pulse ring
-const TARGET_MOTES = 6;       // motes at fixed angles, breathing in and out
 
 export class Target extends Entity<Circle> {
   readonly kind: EntityKind = 'target';
 
-  draw({ ctx, clock, simT, level, giftTaken }: DrawContext): void {
+  draw(g: DrawContext): void {
+    const { ctx, clock, simT, level, giftTaken } = g;
     const c = targetAt(level, simT);
+    const theme = g.cup ?? 'meadow';
     const pulse = 0.5 + 0.5 * Math.sin(clock * 2.3);
 
     ctx.save();
     ctx.translate(c.x, c.y);
-
-    const ring = (r: number, fill: string, ow = 3) => {
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fillStyle = fill; ctx.fill();
-      ctx.lineWidth = ow; ctx.strokeStyle = INK; ctx.stroke();
-    };
-
-    // soft halo, breathing
-    const halo = ctx.createRadialGradient(0, 0, c.r * 0.6, 0, 0, c.r * TARGET_GLOW);
-    halo.addColorStop(0, `rgba(47,201,90,${0.22 + pulse * 0.14})`);
-    halo.addColorStop(1, 'rgba(47,201,90,0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * TARGET_GLOW, 0, Math.PI * 2); ctx.fill();
-
-    /* A bullseye: a pale outer pad, a white band, a solid green centre. Every
-       band carries the ink line, so the goal is a hard-edged shape rather
-       than a glow - which is what kept it readable on the dark board and
-       would not on a light one. */
-    ring(c.r, 'rgba(127,227,154,.55)', 3);
-
-    // the outer ring's dashes - fixed; nothing here rotates
-    ctx.save();
-    ctx.strokeStyle = TARGET.dark;
-    ctx.lineWidth = 3;
-    ctx.setLineDash([10, 8]);
-    ctx.beginPath(); ctx.arc(0, 0, c.r * 0.84, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
-
-    ring(c.r * 0.62, '#ffffff', 2.5);
-    ring(c.r * (0.36 + pulse * 0.04), TARGET.base, 2.5);
-
-    // breathing pulse ring: expands outward and fades, then repeats
-    const bk = (clock % TARGET_PULSE_S) / TARGET_PULSE_S;
-    ctx.strokeStyle = `rgba(23,150,61,${(1 - bk) * 0.6})`;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(0, 0, c.r * (0.62 + bk * 0.7), 0, Math.PI * 2); ctx.stroke();
-
-    // gloss on the centre
-    ctx.fillStyle = 'rgba(255,255,255,.8)';
-    ctx.beginPath();
-    ctx.ellipse(-c.r * 0.12, -c.r * 0.14, c.r * 0.10, c.r * 0.06, -0.7, 0, Math.PI * 2);
-    ctx.fill();
-
-    // motes sit at FIXED angles and breathe in and out along their radius -
-    // radial drift, never an orbit
-    for (let i = 0; i < TARGET_MOTES; i++) {
-      const a = i * (Math.PI * 2 / TARGET_MOTES) + 0.4;
-      const rr = c.r * 1.18 + Math.sin(clock * 1.5 + i * 1.9) * (c.r * 0.14);
-      ctx.globalAlpha = 0.45 + 0.45 * (0.5 + 0.5 * Math.sin(clock * 2 + i));
-      ctx.fillStyle = TARGET.base;
-      ctx.beginPath(); ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 3, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
+    drawCupBack(ctx, c.r, theme, clock);
 
     /* ============================================================
        THE GIFT INSIDE THE TARGET
@@ -116,7 +60,10 @@ export class Target extends Entity<Circle> {
       const bob = Math.sin(clock * 2.2) * (s * 0.03);
 
       ctx.save();
-      ctx.translate(0, bob);
+      /* it sits IN the cup's mouth, smaller, and the cup's front covers its
+         bottom half - a present peeking out of the cup */
+      ctx.translate(0, MOUTH_Y * s + bob);
+      ctx.scale(0.72, 0.72);
 
       // a warm glow under it, so the present reads as treasure in a well
       const bloom = ctx.createRadialGradient(0, 0, s * 0.1, 0, 0, s * 0.8);
@@ -174,7 +121,20 @@ export class Target extends Entity<Circle> {
 
       ctx.restore();
     }
+    /* During a capture the front goes down AFTER the ball (Renderer calls
+       drawFront), so the ball sinks in behind the cup's lip. */
+    if (!g.capturing) drawCupFront(ctx, c.r, theme, clock);
     ctx.restore();
+  }
+
+  /** The cup's body and front lip on their own - painted over the ball
+      while it drops in. */
+  drawFront(g: DrawContext): void {
+    const c = targetAt(g.level, g.simT);
+    g.ctx.save();
+    g.ctx.translate(c.x, c.y);
+    drawCupFront(g.ctx, c.r, g.cup ?? 'meadow', g.clock);
+    g.ctx.restore();
   }
 
   /** Expanding shockwave rings when the ball is swallowed. Drawn straight
@@ -188,8 +148,9 @@ export class Target extends Entity<Circle> {
       ctx.save();
       ctx.strokeStyle = `rgba(23,150,61,${(1 - kk) * 0.9})`;
       ctx.lineWidth = 3 * (1 - kk) + 0.5;
+      const rr = c.r * (0.9 + kk * 1.2);
       ctx.beginPath();
-      ctx.arc(cx, cy, c.r * (0.5 + kk * 1.5), 0, Math.PI * 2);
+      ctx.ellipse(cx, cy + MOUTH_Y * c.r - kk * c.r * 0.6, rr, rr * 0.3, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

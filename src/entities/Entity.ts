@@ -13,6 +13,7 @@
    ============================================================ */
 
 import type { RawLevel } from '../levels/types';
+import type { CupTheme } from './Cup';
 
 export interface DrawContext {
   ctx: CanvasRenderingContext2D;
@@ -40,6 +41,12 @@ export interface DrawContext {
       one thing on the board that is not drawn off the wall clock: a patrolling target has to be painted where the physics says it
       is, or the board would show a different game than it plays. */
   simT: number;
+  /** Which world's cup the target wears (entities/Cup). Optional so an intro
+      card can draw one without a country; it falls back to the meadow cup. */
+  cup?: CupTheme;
+  /** True while the ball is dropping into the cup: the target then leaves
+      its front for the renderer to paint over the ball. */
+  capturing?: boolean;
 }
 
 export type EntityKind =

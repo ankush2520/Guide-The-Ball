@@ -83,7 +83,7 @@ export const GLOSSARY: GlossaryEntry[] = [
           'moving when the level opens: watch where it is and time your drop. It always starts ' +
           'from the same spot when you enter the level, and Replay drops at the same moment ' +
           'again. The pale track it rides on is its own: ramps cannot be drawn across it.',
-    title: 'Moving target', icon: 'movingTarget', intro: "It's already moving. Time your drop to meet it.",
+    title: 'Moving cup', icon: 'movingTarget', intro: "It's already moving. Time your drop to land in it.",
     highlight: lv => [lv.target] },
   { key: 'wind', cls: 'wd', has: lv => lv.wind.length > 0, name: 'Wind', covers: ['wind'],
     long: 'Pushes the ball steadily while it is inside the band, and stops the moment it leaves. ' +
@@ -167,7 +167,7 @@ export const GLOSSARY: GlossaryEntry[] = [
     long: 'Fixed level scenery guarding the target. It bounces the ball the same predictable way ' +
           'your ramps do - it just is not yours to move - and it means the target can only be ' +
           'reached from its open side.',
-    title: 'Tricky target', icon: 'tricky', intro: 'This target can only be entered from one side.',
+    title: 'Tricky target', icon: 'tricky', intro: 'Walls guard this cup. Find the side that lets the ball drop in.',
     highlight: lv => [{ x: lv.target.x, y: lv.target.y, r: lv.target.r + 22 }] },
   { key: 'ramp', cls: 'rp', has: () => true, name: 'Your ramp',
     long: 'What you draw: drag anywhere on empty board and the ramp is the line you drag, any ' +

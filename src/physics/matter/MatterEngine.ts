@@ -34,6 +34,7 @@ import {
 } from 'matter-js';
 import type { Level, Segment, Circle } from '../../levels/types';
 import { targetAt } from '../../levels/target';
+import { cupSegments, inCup, CUP_HT } from '../../levels/cup';
 import { strikeAt, STORM_R } from '../../levels/storm';
 import { crabAt } from '../../levels/crab';
 import { holeState } from '../../levels/blackhole';
@@ -93,7 +94,9 @@ export const MATTER_PURE: MatterConfig = {
 };
 
 /** What a body in the world represents, so a contact can be named. */
-interface BodyTag { kind: HitKind; index: number; }
+/* 'cup' is the target's own walls (levels/cup): it bounces like a wall and
+   reports to the rest of the game AS one, so it needs no HitKind of its own. */
+interface BodyTag { kind: HitKind | 'cup'; index: number; }
 
 export class MatterBall implements BallState {
   px: number; py: number;
@@ -147,6 +150,10 @@ export class MatterBall implements BallState {
   readonly body: MBody;
   readonly tags = new Map<number, BodyTag>();
   readonly breakableBodies: (MBody | null)[];
+  /** The cup's three bars, and where they are right now - they move with a
+      patrolling target (see syncCup). */
+  readonly cupBodies: MBody[] = [];
+  cupSegs: Segment[] = [];
   /** Contacts Matter reported this frame, drained after the step. */
   pending: { tag: BodyTag; nx: number; ny: number }[] = [];
 
@@ -174,7 +181,7 @@ export class MatterBall implements BallState {
     });
     Composite.add(this.engine.world, this.body);
 
-    const add = (b: MBody, kind: HitKind, index: number) => {
+    const add = (b: MBody, kind: BodyTag["kind"], index: number) => {
       this.tags.set(b.id, { kind, index });
       Composite.add(this.engine.world, b);
     };
@@ -182,6 +189,13 @@ export class MatterBall implements BallState {
     // level walls - real collidable geometry, not just a bounds check
     lv.walls.forEach((s, i) => add(segmentBody(s, WALL_HT), 'wall', i));
     lv.obstacles.forEach((o, i) => add(circleBody(o, cfg.restitution), 'obstacle', i));
+    /* THE CUP: solid sides and a floor, so the only way in is over the rim */
+    this.cupSegs = cupSegments(targetAt(lv, t0));
+    this.cupSegs.forEach((s, i) => {
+      const body = segmentBody(s, CUP_HT);
+      this.cupBodies.push(body);
+      add(body, 'cup', i);
+    });
 
     this.breakableBodies = lv.breakables.map((o, i) => {
       if (this.broken[i]) return null;          // already gone this session
@@ -389,6 +403,16 @@ function spiral(b: MatterBall, lv: Level): void {
 
 /* A segment becomes a rotated static rectangle of the thickness the renderer
    draws it at (RAMP_HT / WALL_HT), so what the player sees is what collides. */
+/* A patrolling target carries its cup: the three bars are moved to where
+   the target is this step, on the same step clock the win check reads. */
+function syncCup(b: MatterBall, lv: Level): void {
+  const segs = cupSegments(targetAt(lv, b.t0 + b.steps));
+  segs.forEach((s, i) => {
+    Body.setPosition(b.cupBodies[i], { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 });
+  });
+  b.cupSegs = segs;
+}
+
 function segmentBody(s: Segment, halfT: number): MBody {
   const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
   const len = Math.hypot(dx, dy) || 1;
@@ -479,6 +503,7 @@ export class MatterEngine implements PhysicsEngine {
     const fromX = b.x, fromY = b.y;
 
     b.pending.length = 0;
+    if (lv.targetMove) syncCup(b, lv);
     stepMatter(b);
 
     /* ---- contacts Matter reported, applied now the solve is over ----
@@ -500,7 +525,7 @@ export class MatterEngine implements PhysicsEngine {
          scatter, no shatter. Only an approaching contact - dot < 0 against
          the outward normal - counts as a hit. */
       if (inX * n.x + inY * n.y >= 0) continue;
-      if (c.tag.kind === 'wall' || c.tag.kind === 'ramp') {
+      if (c.tag.kind === 'wall' || c.tag.kind === 'ramp' || c.tag.kind === 'cup') {
         b.segHits++;
         if (cfg.minBounce !== null) enforceMinBounce(b, c.nx, c.ny, cfg.minBounce);
         /* ============================================================
@@ -539,7 +564,7 @@ export class MatterEngine implements PhysicsEngine {
           b.firedSpring[c.tag.index] = true;
           b.springs++;
         }
-        b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind);
+        b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind === 'cup' ? 'wall' : c.tag.kind);
         inX = b.vx; inY = b.vy;
       } else if (c.tag.kind === 'obstacle' || c.tag.kind === 'breakable') {
         b.hits++;
@@ -693,8 +718,10 @@ export class MatterEngine implements PhysicsEngine {
        was authored. The clock is the drop's start phase plus the steps it has
        run - the target was already moving while the player planned, and t0
        is where it had got to when the ball was let go. See targetAt. */
+    /* Won only INSIDE the cup: below the rim, between its walls. The walls
+       are solid, so the ball can only have come in over the rim. */
     const c = targetAt(lv, b.t0 + b.steps);
-    if (reached(c, c.r)) { b.result = 'win'; return; }
+    if (inCup(c, b.x, b.y)) { b.result = 'win'; return; }
     if (b.isOutOfBounds()) { b.result = 'out'; return; }
     b.tickStallWatch();
   }
@@ -732,7 +759,8 @@ function outwardNormal(b: MatterBall, tag: BodyTag, lv: Level,
     const o = tag.kind === 'obstacle' ? lv.obstacles[tag.index] : lv.breakables[tag.index];
     cx = o.x; cy = o.y;
   } else {
-    const s = tag.kind === 'wall' ? lv.walls[tag.index] : ramps[tag.index];
+    const s = tag.kind === 'wall' ? lv.walls[tag.index]
+            : tag.kind === 'cup' ? b.cupSegs[tag.index] : ramps[tag.index];
     if (!s) return { x: 0, y: -1 };
     const p = closestOnSeg(b.x, b.y, s.x1, s.y1, s.x2, s.y2);
     cx = p.x; cy = p.y;

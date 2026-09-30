@@ -1,7 +1,7 @@
 /* Build the static wall segments around a CIRCULAR target.
      OPEN        - nothing.
      SIDE_WALL   - one tall bar guarding a side; entry must come from elsewhere.
-     POCKET      - an L (one side + a lid), so entry must be from the open side.
+     POCKET      - one side + a part lid, so entry must be from the open side.
      NARROW_GAP  - bars on both sides plus a lid with a single small opening.
      ENCLOSED    - both sides + a floor, open only at the top: a cup.
    Walls are rebuilt from the target's centre, which is fixed: every target in
@@ -20,10 +20,16 @@ export function buildWalls(lv: RawLevel, target?: Circle): Segment[] {
     case 'SIDE_WALL':
       return side === 'left' ? [seg(c.x - d, c.y + d, c.x - d, c.y - up)]
                              : [seg(c.x + d, c.y + d, c.x + d, c.y - up)];
-    case 'POCKET':
+    case 'POCKET': {
+      /* The target is a CUP now (levels/cup) and can only be entered over its
+         rim, so a lid across the whole top would seal it. The lid reaches only
+         from the wall side to just short of the cup's middle: the ball still
+         has to come in from the open side, then drop over the rim. */
+      const lid = c.r * 0.25;
       return side === 'left'
-        ? [seg(c.x - d, c.y + d, c.x - d, c.y - d), seg(c.x - d, c.y - d, c.x + d, c.y - d)]
-        : [seg(c.x + d, c.y + d, c.x + d, c.y - d), seg(c.x - d, c.y - d, c.x + d, c.y - d)];
+        ? [seg(c.x - d, c.y + d, c.x - d, c.y - d), seg(c.x - d, c.y - d, c.x - lid, c.y - d)]
+        : [seg(c.x + d, c.y + d, c.x + d, c.y - d), seg(c.x + lid, c.y - d, c.x + d, c.y - d)];
+    }
     case 'NARROW_GAP': {
       /* gapW is the CLEAR window the ball centre can pass through, not the raw
          span between bars - the bar ends are pushed out by the ball radius and
