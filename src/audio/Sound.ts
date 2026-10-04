@@ -368,6 +368,24 @@ class SoundEngine {
     src.stop(t + dur + 0.02);
   }
 
+  /* A muffled pop: band-passed noise with a short attack and a soft tail. */
+  private softPop(dest: AudioNode, t: number, dur: number, peak: number, centre: number): void {
+    const c = this.ctx!;
+    const src = c.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = c.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = centre;
+    f.Q.value = 1.2;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(dest);
+    src.start(t);
+    src.stop(t + dur + 0.02);
+  }
+
   /* A tone whose pitch moves: up to `f1` in the first third, then on to `f2`.
      A fast bend is what makes a hit read as a cartoon "boing". */
   private sweep(
@@ -713,44 +731,26 @@ class SoundEngine {
       }, 90);
       this.amb = { kind: "water", srcs: [hum.src], timer };
     } else {
-      /* CRACKLE, not roar: no continuous noise at all (a filtered hiss is
-         wind), only tiny sharp clicks in quick clusters - the snap of wood -
-         and now and then a soft low pop. Kept well under the music. */
+      /* A WARM HEARTH, not a crackle. The old version was tiny high-passed
+         clicks of a few milliseconds, which on real speakers read as a
+         damaged cone. Now: a soft low rumble that slowly breathes, and now
+         and then a muffled "pop" - band-passed, with a real attack and a
+         decay long enough to sound like wood, not like a fault. */
+      const bed = loop(60, 420, 0.02 * FIRE_VOLUME);
+      const lfo = c.createOscillator(), depth = c.createGain();
+      lfo.frequency.value = 0.21;
+      depth.gain.value = 0.008 * FIRE_VOLUME;
+      lfo.connect(depth); depth.connect(bed.g.gain); lfo.start();
       const timer = setInterval(() => {
-        if (
-          !this.ctx ||
-          this.ctx.state !== "running" ||
-          this.isMuted ||
-          FIRE_VOLUME <= 0
-        )
+        if (!this.ctx || this.ctx.state !== "running" || this.isMuted || FIRE_VOLUME <= 0)
           return;
-        const t0 = this.ctx.currentTime;
-        if (Math.random() < 0.35) {
-          let t = t0 + Math.random() * 0.03;
-          for (let k = 0, n = 1 + Math.floor(Math.random() * 4); k < n; k++) {
-            this.noise(
-              this.ambBus!,
-              t,
-              0.003 + Math.random() * 0.006,
-              (0.008 + Math.random() * 0.014) * FIRE_VOLUME,
-              2500 + Math.random() * 3000,
-            );
-            t += 0.006 + Math.random() * 0.022;
-          }
-        }
-        if (Math.random() < 0.03)
-          this.sweep(
-            this.ambBus!,
-            240,
-            170,
-            90,
-            t0 + 0.01,
-            0.06,
-            0.012 * FIRE_VOLUME,
-            "sine",
-          );
+        if (Math.random() < 0.05)
+          this.softPop(this.ambBus!, this.ctx.currentTime + Math.random() * 0.04,
+                       0.05 + Math.random() * 0.05,
+                       (0.05 + Math.random() * 0.05) * FIRE_VOLUME,
+                       700 + Math.random() * 700);
       }, 45);
-      this.amb = { kind: "fire", srcs: [], timer };
+      this.amb = { kind: "fire", srcs: [bed.src, lfo], timer };
     }
   }
 
