@@ -1095,6 +1095,8 @@
             width:min(92%,380px);padding:8px 10px;border-radius:14px;
             background:rgba(255,255,255,.94);box-shadow:0 0 0 2px var(--edge),0 4px 0 var(--edge);
             pointer-events:auto;z-index:5;text-align:center}
+.offerstrip.corner{left:auto;right:10px;bottom:90px;transform:none;width:176px;text-align:left;padding:8px 26px 8px 10px}
+.offerstrip.corner .row.pair{flex-direction:column;gap:6px}
 .offerstrip .offertext{display:block;font-weight:700;font-size:13px;margin-bottom:6px;color:var(--ink)}
 .offerstrip .row.pair > button{font-size:13px;padding:8px 6px}
 

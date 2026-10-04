@@ -122,6 +122,8 @@ export interface WinCard {
   paid: number;
 }
 
+const SPRING_SHOP_TIP = 'A plain ramp cannot reach this one - the shop has Bouncy ramps.';
+
 export class GameController {
   phase: Phase = 'plan';
   /* ============================================================
@@ -284,6 +286,13 @@ export class GameController {
     for (const e of ['coins:changed', 'ramps:changed',
                      'springs:changed', 'spin:granted', 'cosmetics:changed'] as const)
       bus.on(e, () => this.changed());
+    /* The "the shop has Bouncy ramps" line is stale the moment one is bought
+       or won - drop it, so it does not hang on after a trip to the shop. */
+    bus.on('springs:changed', () => {
+      if (this.rewards.springs > 0 && this.flash === SPRING_SHOP_TIP) {
+        this.hideFlash(); this.changed();
+      }
+    });
   }
 
   /** Whether a drag on empty board may start a ramp at all: this level's own
@@ -312,6 +321,9 @@ export class GameController {
       && this.phase === 'plan' && !this.intros.length;
   }
   dismissStuck(): void { this.stuckDismissed = true; this.changed(); }
+  /** The optional "get a Bouncy ramp" panel, closed for this entry. */
+  springOfferDismissed = false;
+  dismissSpringOffer(): void { this.springOfferDismissed = true; this.changed(); }
 
   /** Take a ramp off the board (its × button). If that brings the board back
       within its own budget, a reserved spare goes back to the bag. */
@@ -1018,6 +1030,7 @@ export class GameController {
     this.tries = 0;
     this.restarts = 0;
     this.stuckDismissed = false;
+    this.springOfferDismissed = false;
     this.ballsMax = ballsFor(this.levels.level.id);
     this.ballsLeft = this.ballsMax;
     // every visit starts the patrol (and the storm) from the same phase
@@ -1262,9 +1275,9 @@ export class GameController {
      ============================================================ */
   private teachSpringBoard(): void {
     if (!this.levels.level.needsSpring) return;
-    this.showFlash(this.rewards.springs > 0
-      ? 'A plain ramp cannot reach this one - use a Bouncy ramp.'
-      : 'A plain ramp cannot reach this one - the shop has Bouncy ramps.');
+    /* bag empty: the optional corner panel offers the shop, no caption */
+    if (this.rewards.springs > 0)
+      this.showFlash('A plain ramp cannot reach this one - use a Bouncy ramp.');
   }
 
   /** Say so when the board's target holds a gift, every visit, until it has

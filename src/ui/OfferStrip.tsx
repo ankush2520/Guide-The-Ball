@@ -27,7 +27,7 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
   const [waiting, setWaiting] = useState(false);
 
   const needsSpring = !!levels.level.needsSpring && rewards.springsUnlocked
-    && rewards.springs - levels.springsReserved <= 0;
+    && rewards.springs - levels.springsReserved <= 0 && !controller.springOfferDismissed;
   const live = controller.phase === 'plan' && !controller.intro && adsReady;
   const stuck = live && !needsSpring && controller.stuckOffer;
   useAdOffer('spring', live && needsSpring);
@@ -65,8 +65,10 @@ export function OfferStrip({ onShop }: { onShop: () => void }) {
   const watch = ad('spring', () => rewards.grantSprings(1, 'grant'));
 
   return (
-    <div data-ui className="offerstrip" id="spring-offer">
-      <span className="offertext">This one needs a Bouncy ramp.</span>
+    <div data-ui className="offerstrip corner" id="spring-offer">
+      <button className="offerclose" id="btn-spring-offer-close" aria-label="Dismiss"
+              onClick={() => controller.dismissSpringOffer()}>&times;</button>
+      <span className="offertext">No Bouncy ramps left</span>
       <div className="row pair">
         <button id="btn-offer-shop" onClick={onShop}>Shop</button>
         {adsReady && (

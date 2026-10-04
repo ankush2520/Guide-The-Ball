@@ -786,7 +786,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 366, y: 40 },
     target: { x: 75, y: 726, r: 36 },
-    targetMove: { x0: 75, x1: 185, period: 122 },
+    targetMove: { x0: 75, x1: 185, period: 188 },
     bars: [
       { x1: 170, y1: 280, x2: 170, y2: 380 },
       { x1: 310, y1: 440, x2: 310, y2: 540 },
@@ -913,7 +913,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 132, y: 40 },
     target: { x: 315, y: 726, r: 36 },
-    targetMove: { x0: 315, x1: 425, period: 131 },
+    targetMove: { x0: 315, x1: 425, period: 202 },
     bars: [
       { x1: 420, y1: 440, x2: 320, y2: 380 },
       { x1: 60, y1: 440, x2: 160, y2: 380 },
@@ -1028,7 +1028,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 370, y: 40 },
     target: { x: 54, y: 726, r: 36 },
-    targetMove: { x0: 54, x1: 160, period: 135 },
+    targetMove: { x0: 54, x1: 160, period: 208 },
     movers: [
       {
         cx: 240,
@@ -1096,7 +1096,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 403, y: 40 },
     target: { x: 55, y: 726, r: 36 },
-    targetMove: { x0: 55, x1: 165, period: 124 },
+    targetMove: { x0: 55, x1: 165, period: 191 },
     bars: [{ x1: 345, y1: 450, x2: 425, y2: 470 }],
     movers: [
       {
@@ -1470,7 +1470,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 104, y: 40 },
     target: { x: 315, y: 726, r: 36 },
-    targetMove: { x0: 315, x1: 425, period: 135 },
+    targetMove: { x0: 315, x1: 425, period: 208 },
     movers: [
       {
         cx: 240,
@@ -1591,7 +1591,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 334, y: 40 },
     target: { x: 50, y: 726, r: 36 },
-    targetMove: { x0: 50, x1: 160, period: 145 },
+    targetMove: { x0: 50, x1: 160, period: 223 },
     movers: [
       {
         cx: 225,
@@ -1701,7 +1701,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 395, y: 40 },
     target: { x: 70, y: 726, r: 36 },
-    targetMove: { x0: 70, x1: 180, period: 140 },
+    targetMove: { x0: 70, x1: 180, period: 215 },
     bars: [
       { x1: 195, y1: 290, x2: 195, y2: 450 },
       { x1: 295, y1: 290, x2: 295, y2: 450 },
@@ -1791,7 +1791,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 109, y: 40 },
     target: { x: 315, y: 726, r: 36 },
-    targetMove: { x0: 315, x1: 425, period: 130 },
+    targetMove: { x0: 315, x1: 425, period: 200 },
     bars: [{ x1: 135, y1: 450, x2: 55, y2: 470 }],
     movers: [
       {
@@ -2208,7 +2208,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 128, y: 40 },
     target: { x: 270, y: 726, r: 36 },
-    targetMove: { x0: 270, x1: 380, period: 132 },
+    targetMove: { x0: 270, x1: 380, period: 203 },
     bars: [{ x1: 240, y1: 320, x2: 240, y2: 440 }],
     movers: [
       {
@@ -2345,7 +2345,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 141, y: 40 },
     target: { x: 320, y: 726, r: 36 },
-    targetMove: { x0: 320, x1: 430, period: 142 },
+    targetMove: { x0: 320, x1: 430, period: 218 },
     bars: [{ x1: 360, y1: 420, x2: 180, y2: 420 }],
     movers: [
       {
@@ -2521,7 +2521,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 345, y: 40 },
     target: { x: 55, y: 726, r: 36 },
-    targetMove: { x0: 55, x1: 165, period: 137 },
+    targetMove: { x0: 55, x1: 165, period: 211 },
     bars: [
       { x1: 120, y1: 350, x2: 120, y2: 430 },
       { x1: 240, y1: 350, x2: 240, y2: 430 },
@@ -2625,7 +2625,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 378, y: 40 },
     target: { x: 55, y: 726, r: 36 },
-    targetMove: { x0: 55, x1: 165, period: 127 },
+    targetMove: { x0: 55, x1: 165, period: 195 },
     bars: [{ x1: 345, y1: 450, x2: 425, y2: 470 }],
     movers: [
       {
@@ -3089,7 +3089,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 404, y: 40 },
     target: { x: 185, y: 726, r: 36 },
-    targetMove: { x0: 185, x1: 295, period: 129 },
+    targetMove: { x0: 185, x1: 295, period: 198 },
     crabs: [
       {
         cx: 283,
@@ -3222,7 +3222,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 165, y: 40 },
     target: { x: 310, y: 726, r: 36 },
-    targetMove: { x0: 310, x1: 420, period: 139 },
+    targetMove: { x0: 310, x1: 420, period: 214 },
     crabs: [
       {
         cx: 270,
@@ -3366,7 +3366,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 369, y: 40 },
     target: { x: 55, y: 726, r: 36 },
-    targetMove: { x0: 55, x1: 165, period: 134 },
+    targetMove: { x0: 55, x1: 165, period: 206 },
     bars: [
       { x1: 110, y1: 260, x2: 190, y2: 300 },
       { x1: 290, y1: 360, x2: 370, y2: 400 },
@@ -3451,7 +3451,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 402, y: 40 },
     target: { x: 55, y: 726, r: 36 },
-    targetMove: { x0: 55, x1: 165, period: 123 },
+    targetMove: { x0: 55, x1: 165, period: 189 },
     bars: [{ x1: 345, y1: 450, x2: 425, y2: 470 }],
     crabs: [
       {
@@ -3961,7 +3961,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 346, y: 40 },
     target: { x: 55, y: 726, r: 36 },
-    targetMove: { x0: 55, x1: 165, period: 125 },
+    targetMove: { x0: 55, x1: 165, period: 192 },
     bars: [
       { x1: 60, y1: 440, x2: 160, y2: 380 },
       { x1: 420, y1: 440, x2: 320, y2: 380 },
@@ -4085,7 +4085,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 108, y: 40 },
     target: { x: 320, y: 726, r: 36 },
-    targetMove: { x0: 320, x1: 430, period: 136 },
+    targetMove: { x0: 320, x1: 430, period: 209 },
     quicksand: [
       { x: 320, y: 560, r: 46 },
       { x: 170, y: 330, r: 38 },
@@ -4210,7 +4210,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 81, y: 40 },
     target: { x: 320, y: 726, r: 36 },
-    targetMove: { x0: 320, x1: 426, period: 141 },
+    targetMove: { x0: 320, x1: 426, period: 217 },
     quicksand: [
       { x: 320, y: 560, r: 41 },
       { x: 150, y: 330, r: 44 },
@@ -4300,7 +4300,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 99, y: 40 },
     target: { x: 315, y: 726, r: 36 },
-    targetMove: { x0: 315, x1: 425, period: 120 },
+    targetMove: { x0: 315, x1: 425, period: 185 },
     bars: [{ x1: 135, y1: 450, x2: 55, y2: 470 }],
     quicksand: [
       { x: 320, y: 560, r: 37 },
@@ -4771,7 +4771,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 118, y: 40 },
     target: { x: 320, y: 726, r: 36 },
-    targetMove: { x0: 320, x1: 429, period: 122 },
+    targetMove: { x0: 320, x1: 429, period: 188 },
     blackholes: [
       {
         x: 170,
@@ -4925,7 +4925,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 348, y: 40 },
     target: { x: 70, y: 726, r: 36 },
-    targetMove: { x0: 70, x1: 180, period: 132 },
+    targetMove: { x0: 70, x1: 180, period: 203 },
     bars: [
       { x1: 195, y1: 290, x2: 195, y2: 450 },
       { x1: 295, y1: 290, x2: 295, y2: 450 },
@@ -5093,7 +5093,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 105, y: 40 },
     target: { x: 295, y: 726, r: 36 },
-    targetMove: { x0: 295, x1: 405, period: 137 },
+    targetMove: { x0: 295, x1: 405, period: 211 },
     bars: [
       { x1: 310, y1: 280, x2: 310, y2: 380 },
       { x1: 170, y1: 440, x2: 170, y2: 540 },
@@ -5205,7 +5205,7 @@ export const RAW_LEVELS: RawLevel[] = [
     targetType: "OPEN",
     spawn: { x: 42, y: 40 },
     target: { x: 315, y: 726, r: 36 },
-    targetMove: { x0: 315, x1: 425, period: 117 },
+    targetMove: { x0: 315, x1: 425, period: 180 },
     bars: [{ x1: 135, y1: 450, x2: 55, y2: 470 }],
     blackholes: [
       {

@@ -1,4 +1,4 @@
-# Guide the Ball
+# Ball to Cup: Draw the Ramp
 
 A hyper-casual puzzle game. Place a limited number of ramps, then drop the ball
 and watch whether your plan lands it in the target. Plan-first, not reflex-based.
@@ -712,7 +712,7 @@ added, keep them peers.
 
 **Open, and not code problems:**
 
-- *"Not easily confused with similar-named games."* **Guide the Ball** is a
+- *"Not easily confused with similar-named games."* Renamed from **Guide the Ball** to **Ball to Cup: Draw the Ramp** for this reason; the old name was a
   generic name on a portal with a lot of ball games. This is the most likely
   thing to come back from review. Worth deciding before submission.
 - *"Frequently maintained and updated"* and *"major features should not change
