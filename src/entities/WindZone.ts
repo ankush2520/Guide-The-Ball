@@ -1,6 +1,7 @@
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { WindDef } from '../levels/types';
-import { PLAY } from '../physics/constants';
+import { PLAY, W } from '../physics/constants';
+import { windLook, windOnSteps } from '../levels/wind';
 import { INK } from '../render/palette';
 
 /* ============================================================
@@ -29,11 +30,12 @@ export class WindZone extends Entity<WindDef> {
     return Math.abs(this.def.ax || 0) >= Math.abs(this.def.ay || 0);
   }
 
-  draw({ ctx, clock }: DrawContext): void {
+  draw({ ctx, clock, simT }: DrawContext): void {
     const z = this.def;
+    const power = windLook(z, simT);                       // 0 off .. 1 full, eased
     const look = z.look ?? 'air';
     const x0 = Math.max(z.x, PLAY.x0), x1 = Math.min(z.x + z.w, PLAY.x1);
-    const y0 = z.y, h = z.h, y1 = y0 + h, span = x1 - x0;
+    const y0 = z.y, h = z.h, span = x1 - x0;
     if (span <= 0 || h <= 0) return;
     const dir = Math.sign(z.ax || 1);
     const s = Math.min(1.2, Math.abs(z.ax || 0.5));        // strength
@@ -43,19 +45,17 @@ export class WindZone extends Entity<WindDef> {
 
     // ---- the band: a soft tint, strongest in the middle, gone at the edges
     const tint = look === 'current' ? '255,255,255' : look === 'rain' ? '110,130,180' : '130,175,230';
-    const band = ctx.createLinearGradient(0, y0, 0, y1);
-    band.addColorStop(0, `rgba(${tint},0)`);
-    band.addColorStop(0.5, `rgba(${tint},${look === 'current' ? 0.2 : 0.17})`);
-    band.addColorStop(1, `rgba(${tint},0)`);
-    ctx.fillStyle = band;
-    ctx.fillRect(x0, y0, span, h);
+    ctx.globalAlpha = 0.35 + 0.65 * power;
+    ctx.drawImage(bandImage(Math.ceil(span), Math.ceil(h), tint, look === 'current' ? 0.2 : 0.17), x0, y0);
+    ctx.globalAlpha = 1;
 
     // ---- the fan, at the upwind edge (none under water)
     const fr = Math.max(16, Math.min(30, h * 0.26));
     const hasFan = look !== 'current';
-    const fanX = dir > 0 ? x0 + fr + 10 : x1 - fr - 10;
+    const fx0 = Math.max(x0, 0), fx1 = Math.min(x1, W);       // the board the player can always see
+    const fanX = dir > 0 ? fx0 + fr * 0.7 + 12 : fx1 - fr * 0.7 - 12;
     const start = hasFan ? fanX + dir * fr : dir > 0 ? x0 : x1;   // where gusts leave from
-    const run = hasFan ? span - fr * 2 - 10 : span;
+    const run = hasFan ? Math.max(40, (dir > 0 ? x1 - start : start - x0)) : span;
 
     // ---- gust lines: curly swooshes streaming downwind
     const n = Math.round(5 + s * 6);
@@ -66,7 +66,8 @@ export class WindZone extends Entity<WindDef> {
       const lane = y0 + h * (0.16 + 0.68 * frac(i * 0.618 + 0.13));
       const t = frac(clock * speed / (run + len) + i * 0.37);
       const head = start + dir * t * (run + len);
-      const fade = Math.min(1, t * 5, (1 - t) * 4);        // in at the fan, out far side
+      const fade = Math.min(1, t * 5, (1 - t) * 4) * power; // in at the fan, out far side; gone when off
+      if (fade <= 0.01) continue;
       const wob = look === 'current' ? 6 : 3.5;
       const pts: [number, number][] = [];
       for (let k = 0; k <= 10; k++) {
@@ -89,7 +90,8 @@ export class WindZone extends Entity<WindDef> {
     }
 
     // ---- what the gust carries
-    if (look === 'air') {
+    if (power < 0.4) { /* fan off: nothing is carried */ }
+    else if (look === 'air') {
       const leaves = ['#6cbf5a', '#e0a33c', '#8fcf6a', '#d98b3a'];
       for (let i = 0; i < 5; i++) {
         const t = frac(clock * speed * 0.8 / (run + 40) + i * 0.29);
@@ -120,18 +122,44 @@ export class WindZone extends Entity<WindDef> {
       }
     }
 
-    if (hasFan) drawFan(ctx, fanX, cy, fr, dir, clock * (8 + s * 14));
     ctx.restore();
+    // the fan is drawn OUTSIDE the band's clip, so its stand is never cut off; its blades
+    // turn only while it is on
+    if (hasFan) drawFan(ctx, fanX, cy, fr, dir, windOnSteps(z, simT) / 60 * (8 + s * 14), power > 0.5);
   }
 }
 
 function frac(n: number): number { return n - Math.floor(n); }
 
+/* The band's tint, faded out at ALL four edges (not a box), cached per size. */
+const BANDS = new Map<string, HTMLCanvasElement>();
+function bandImage(w: number, h: number, tint: string, a: number): HTMLCanvasElement {
+  const key = `${w}x${h}:${tint}:${a}`;
+  let c = BANDS.get(key);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h);
+  const g = c.getContext('2d')!;
+  const v = g.createLinearGradient(0, 0, 0, h);
+  v.addColorStop(0, `rgba(${tint},0)`); v.addColorStop(0.5, `rgba(${tint},${a})`); v.addColorStop(1, `rgba(${tint},0)`);
+  g.fillStyle = v; g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'destination-in';
+  const hz = g.createLinearGradient(0, 0, w, 0), e = Math.min(0.25, 60 / Math.max(1, w));
+  hz.addColorStop(0, 'rgba(0,0,0,0)'); hz.addColorStop(e, 'rgba(0,0,0,1)');
+  hz.addColorStop(1 - e, 'rgba(0,0,0,1)'); hz.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = hz; g.fillRect(0, 0, w, h);
+  if (BANDS.size > 40) BANDS.clear();
+  BANDS.set(key, c);
+  return c;
+}
+
 /** A table fan seen three-quarter on, facing `dir`: a round guard with
     spinning blades, the motor behind it, a stand and a base. */
 function drawFan(ctx: CanvasRenderingContext2D, x: number, y: number, r: number,
-                 dir: number, spin: number): void {
+                 dir: number, spin: number, on: boolean): void {
   ctx.save();
+  // the power light on the base: lit while it blows, dark when it is off
+  ctx.fillStyle = on ? '#ffe066' : '#5b6275'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x - dir * r * 0.18 + r * 0.42, y + r * 1.3, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.translate(x, y);
   // stand and base, down to the bottom of the guard and a little beyond
   ctx.fillStyle = '#9aa3b8'; ctx.strokeStyle = INK; ctx.lineWidth = 2;

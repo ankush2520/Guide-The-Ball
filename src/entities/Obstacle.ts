@@ -10,7 +10,12 @@ export class Obstacle extends Entity<Circle> {
   readonly kind: EntityKind = 'obstacle';
 
   draw({ ctx }: DrawContext): void {
-    const o = this.def;
+    drawObstacle(ctx, this.def);
+  }
+}
+
+/** The red sphere, at any position - also worn by the moving bumpers. */
+export function drawObstacle(ctx: CanvasRenderingContext2D, o: Circle): void {
     ctx.save();
     const ow = outlineFor(o.r);
     // a hard shadow seat, offset down - the sticker lifted off the board
@@ -38,5 +43,4 @@ export class Obstacle extends Entity<Circle> {
                 -0.7, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-  }
 }

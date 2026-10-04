@@ -31,6 +31,8 @@ import { Pillar } from './Pillar';
 import { Rain } from './Rain';
 import { Storm } from './Storm';
 import { Crab } from './Crab';
+import { Mover } from './Mover';
+import { Post } from './Post';
 import { Sea } from './Sea';
 import { Volcano } from './Volcano';
 import { Mountains } from './Mountains';
@@ -77,10 +79,13 @@ const REGISTRY: Partial<Record<EntityKind, Spec>> = {
                ctorFor: lv => (isMoving(lv) ? MovingTarget : Target) },
   /* a pillar's segments are walls to the physics, but the Pillar entity
      paints the whole column, so the wall painter skips them */
-  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !PILLAR_SEGS.has(s)) },
+  wall:      { ctor: Wall,         pick: lv => lv.walls.filter(s => !PILLAR_SEGS.has(s) && !s.ht) },
+  /* a post: a short standing bar, in its world's pillar material */
+  post:      { ctor: Post,         pick: lv => (lv.bars ?? []).map(s => ({ ...s, look: pillarLook(lv.id) })) },
   /* dressed in the material of the world it stands in - see PILLAR_LOOK */
   pillar:    { ctor: Pillar,       pick: lv => (lv.pillars ?? []).map(p => ({ ...p, look: p.look ?? pillarLook(lv.id) })) },
   obstacle:  { ctor: Obstacle,     pick: lv => lv.obstacles },
+  mover:     { ctor: Mover,        pick: lv => lv.movers },
   fire:      { ctor: FireObstacle, pick: lv => lv.fires },
   crab:      { ctor: Crab,         pick: lv => lv.crabs ?? [] },
   breakable: { ctor: Breakable,    pick: lv => lv.breakables },

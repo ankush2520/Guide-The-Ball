@@ -113,7 +113,7 @@ export const MAX_VX = TERMINAL_VY;
 
 // How much of the impact speed survives a bounce. Below ~0.85 the ball dies
 // on contact; above ~0.92 it never settles.
-export const RESTITUTION = 0.9;
+export const RESTITUTION = 0.75;
 
 // Floor on the speed a bounce leaves behind, so a glancing contact cannot
 // stop the ball dead on a ramp. It does not stop a ball settling into an
@@ -121,7 +121,8 @@ export const RESTITUTION = 0.9;
 export const MIN_BOUNCE = 1.6;
 
 export const RAMP_HT = 4.5;          // player ramp half-thickness
-export const WALL_HT = 5;            // static wall half-thickness
+export const WALL_HT = 5;
+export const POST_HT = 8;             // a level post's half-thickness: chunkier than a ramp, on purpose            // static wall half-thickness
 
 // Enough substeps that the ball never advances more than ~1.5px at a time,
 // however fast it is going - otherwise it tunnels through thin segments.

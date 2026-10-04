@@ -37,6 +37,8 @@ import { targetAt } from '../../levels/target';
 import { cupSegments, inCup, CUP_HT } from '../../levels/cup';
 import { strikeAt, STORM_R } from '../../levels/storm';
 import { crabAt } from '../../levels/crab';
+import { moverAt } from '../../levels/mover';
+import { windOn } from '../../levels/wind';
 import { holeState } from '../../levels/blackhole';
 import type { BallState, PhysicsEngine } from '../PhysicsEngine';
 import type { DropResult, Hit, HitKind, BounceRecord, SimulationResult } from '../types';
@@ -96,7 +98,7 @@ export const MATTER_PURE: MatterConfig = {
 /** What a body in the world represents, so a contact can be named. */
 /* 'cup' is the target's own walls (levels/cup): it bounces like a wall and
    reports to the rest of the game AS one, so it needs no HitKind of its own. */
-interface BodyTag { kind: HitKind | 'cup'; index: number; }
+interface BodyTag { kind: HitKind | 'cup' | 'mover'; index: number; }
 
 export class MatterBall implements BallState {
   px: number; py: number;
@@ -154,6 +156,9 @@ export class MatterBall implements BallState {
       patrolling target (see syncCup). */
   readonly cupBodies: MBody[] = [];
   cupSegs: Segment[] = [];
+  /** Moving bumpers: their bodies, and where each is right now (see syncMovers). */
+  readonly moverBodies: MBody[] = [];
+  moverPos: { x: number; y: number }[] = [];
   /** Contacts Matter reported this frame, drained after the step. */
   pending: { tag: BodyTag; nx: number; ny: number }[] = [];
 
@@ -187,8 +192,15 @@ export class MatterBall implements BallState {
     };
 
     // level walls - real collidable geometry, not just a bounds check
-    lv.walls.forEach((s, i) => add(segmentBody(s, WALL_HT), 'wall', i));
+    lv.walls.forEach((s, i) => add(segmentBody(s, s.ht ?? WALL_HT), 'wall', i));
     lv.obstacles.forEach((o, i) => add(circleBody(o, cfg.restitution), 'obstacle', i));
+    /* MOVING BUMPERS: solid circles that are carried along their track each step */
+    lv.movers.forEach((m, i) => {
+      const at = moverAt(m, t0);
+      const body = circleBody({ x: at.x, y: at.y, r: m.r }, cfg.restitution);
+      this.moverBodies.push(body); this.moverPos.push(at);
+      add(body, 'mover', i);
+    });
     /* THE CUP: solid sides and a floor, so the only way in is over the rim */
     this.cupSegs = cupSegments(targetAt(lv, t0));
     this.cupSegs.forEach((s, i) => {
@@ -413,6 +425,16 @@ function syncCup(b: MatterBall, lv: Level): void {
   b.cupSegs = segs;
 }
 
+/* A moving bumper is carried to where the track says it is this step, on the
+   same step clock the renderer paints it from. */
+function syncMovers(b: MatterBall, lv: Level): void {
+  lv.movers.forEach((m, i) => {
+    const at = moverAt(m, b.t0 + b.steps);
+    Body.setPosition(b.moverBodies[i], at);
+    b.moverPos[i] = at;
+  });
+}
+
 function segmentBody(s: Segment, halfT: number): MBody {
   const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
   const len = Math.hypot(dx, dy) || 1;
@@ -448,7 +470,7 @@ export class MatterEngine implements PhysicsEngine {
 
     // wind is an acceleration, so it goes on before the solve
     for (const z of lv.wind) {
-      if (inRect(b.x, b.y, z)) {
+      if (windOn(z, b.t0 + b.steps) && inRect(b.x, b.y, z)) {
         b.setVelocity(b.vx + (z.ax || 0), b.vy + (z.ay || 0));
         capSpeed(b, cfg);
       }
@@ -504,6 +526,7 @@ export class MatterEngine implements PhysicsEngine {
 
     b.pending.length = 0;
     if (lv.targetMove) syncCup(b, lv);
+    if (lv.movers.length) syncMovers(b, lv);
     stepMatter(b);
 
     /* ---- contacts Matter reported, applied now the solve is over ----
@@ -566,11 +589,11 @@ export class MatterEngine implements PhysicsEngine {
         }
         b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind === 'cup' ? 'wall' : c.tag.kind);
         inX = b.vx; inY = b.vy;
-      } else if (c.tag.kind === 'obstacle' || c.tag.kind === 'breakable') {
+      } else if (c.tag.kind === 'obstacle' || c.tag.kind === 'breakable' || c.tag.kind === 'mover') {
         b.hits++;
         if (cfg.jitter) scatter(b, c.nx, c.ny, inX, inY);
         if (cfg.minBounce !== null) enforceMinBounce(b, c.nx, c.ny, cfg.minBounce);
-        b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind);
+        b.noteHit(b.x, b.y, c.nx, c.ny, c.tag.kind === 'mover' ? 'obstacle' : c.tag.kind);
         if (c.tag.kind === 'breakable' && !b.broken[c.tag.index]) {
           b.broken[c.tag.index] = true;
           b.justBroke.push(c.tag.index);
@@ -755,7 +778,10 @@ function syncRamps(b: MatterBall, ramps: readonly Segment[]): void {
 function outwardNormal(b: MatterBall, tag: BodyTag, lv: Level,
                        ramps: readonly Segment[]): { x: number; y: number } {
   let cx: number, cy: number;
-  if (tag.kind === 'obstacle' || tag.kind === 'breakable') {
+  if (tag.kind === 'mover') {
+    const p = b.moverPos[tag.index];
+    cx = p.x; cy = p.y;
+  } else if (tag.kind === 'obstacle' || tag.kind === 'breakable') {
     const o = tag.kind === 'obstacle' ? lv.obstacles[tag.index] : lv.breakables[tag.index];
     cx = o.x; cy = o.y;
   } else {

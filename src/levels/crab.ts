@@ -55,11 +55,13 @@ export function crabAt(c: CrabDef, t: number): { x: number; y: number; r: number
     storm's full cycle. A board looks the same at step t as at step t0 only
     when t matches t0 on ALL of them - which is what a hint's drop moment
     needs. Empty on a board with no clock at all. */
-export function boardCycles(lv: { targetMove?: { period: number }; crabs?: CrabDef[];
+export function boardCycles(lv: { targetMove?: { period: number }; crabs?: CrabDef[]; movers?: { period: number }[]; wind?: { period?: number }[];
                                   storm?: { gaps: number[] } }): number[] {
   const out: number[] = [];
   if (lv.targetMove && lv.targetMove.period > 0) out.push(lv.targetMove.period);
   if (lv.crabs) for (const c of lv.crabs) out.push(c.period);
+  if (lv.movers) for (const m of lv.movers) out.push(m.period);
+  if (lv.wind) for (const z of lv.wind) if (z.period) out.push(z.period);
   if (lv.storm) out.push(lv.storm.gaps.reduce((a, b) => a + b, 0));
   return out;
 }

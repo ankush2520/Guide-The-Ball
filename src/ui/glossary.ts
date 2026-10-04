@@ -22,6 +22,7 @@
 import type { Circle, Level } from '../levels/types';
 import type { EntityKind } from '../entities/Entity';
 import { crabAt } from '../levels/crab';
+import { moverAt } from '../levels/mover';
 import { SPARE_FROM } from '../managers/RewardManager';
 
 /** What an intro's `has` may ask besides the level: facts about the player. */
@@ -62,6 +63,15 @@ export const GLOSSARY: GlossaryEntry[] = [
           'around it.',
     title: 'Bumper', icon: 'obstacle', intro: 'Knocks your ball off course. Same shot, same bounce.',
     highlight: lv => lv.obstacles },
+  { key: 'post', cls: 'ob', has: lv => (lv.bars ?? []).length > 0, name: 'Post', covers: ['post'],
+    long: 'A solid post standing on the board. It does not hurt and does not move - the ball ' +
+          'simply bounces off it like a wall, so use it or route around it.' },
+  { key: 'mover', cls: 'ob', has: lv => lv.movers.length > 0, name: 'Moving bumper', covers: ['mover'],
+    long: 'A bumper that glides along a short track. It bounces the ball exactly like a still ' +
+          'one and never ends your drop - but where it is depends on WHEN you drop, so watch ' +
+          'its lane and time the shot.',
+    title: 'Moving bumper', icon: 'obstacle', intro: 'It slides along its track. Watch it, then time your drop.',
+    highlight: (lv, t) => lv.movers.map(m => { const p = moverAt(m, t); return { x: p.x, y: p.y, r: m.r + 8 }; }) },
   /* Directly after the obstacle, because the ONE thing a player has to learn
      here is the difference between the two, and a list that separates them
      makes that comparison harder than it needs to be. */
@@ -86,10 +96,11 @@ export const GLOSSARY: GlossaryEntry[] = [
     title: 'Moving cup', icon: 'movingTarget', intro: "It's already moving. Time your drop to land in it.",
     highlight: lv => [lv.target] },
   { key: 'wind', cls: 'wd', has: lv => lv.wind.length > 0, name: 'Wind', covers: ['wind'],
-    long: 'Pushes the ball steadily while it is inside the band, and stops the moment it leaves. ' +
+    long: 'Pushes the ball while it is inside the band and the fan is ON - fans switch on and off, ' +
+          'so time your drop. It stops the moment the ball leaves. ' +
           'The fan and the gusts coming off it show which way it blows (under the sea it is a ' +
           'current, and the bubbles show the way).',
-    title: 'Wind', icon: 'wind', intro: "Pushes your ball while it's inside. The fan and gusts show which way.",
+    title: 'Wind', icon: 'wind', intro: "Fans switch on and off. While on, they push your ball - time your drop!",
     highlight: lv => lv.wind.map(z => ({ x: Math.max(40, Math.min(440, z.x + z.w / 2)), y: z.y + z.h / 2, r: Math.min(60, z.h / 2) })) },
   { key: 'thunder', cls: 'th', has: lv => !!lv.storm, name: 'Thunder', covers: ['storm', 'rain'],
     long: 'Lightning strikes a fixed set of spots in a fixed order, over and over. Each spot ' +

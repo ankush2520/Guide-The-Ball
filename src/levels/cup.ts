@@ -18,10 +18,12 @@ import type { Circle, Segment } from './types';
 import { BALL_R } from '../physics/constants';
 
 export const CUP = {
-  mouthY: -0.42,   // the rim, above the centre
-  mouthHX: 0.92,   // half-width at the rim
-  baseY: 0.80,     // the floor
-  baseHX: 0.64,    // half-width at the floor
+  /* a real cup's proportions: about one and a third times as tall as it is wide,
+     with straight sides */
+  mouthY: -1.0,    // the rim, above the centre
+  mouthHX: 0.736,  // half-width at the rim
+  baseY: 1.01,     // the floor
+  baseHX: 0.736,   // half-width at the floor: the same as the rim
 } as const;
 
 /** Half-thickness of the cup's walls in the physics. */

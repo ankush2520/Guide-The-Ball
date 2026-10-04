@@ -26,6 +26,9 @@ export interface Segment {
      builds, so an ordinary ramp is exactly the object it always was. */
   spring?: boolean;
   springPaid?: boolean;
+  /** A level POST's collision half-thickness (absent on everything else, which
+      uses WALL_HT / RAMP_HT). Set by initLevel on `bars`. */
+  ht?: number;
 }
 
 /** An axis-aligned rectangle. Zones NEVER move: a region that slides through
@@ -38,7 +41,12 @@ export interface BoosterDef extends Circle { angle: number; speed: number; }
 /** `look` is set when the level loads (levels/index.ts), from what else is on
     the board - it only changes how the wind is DRAWN: leaves in open air,
     slanting rain in a storm, a water current under the sea. */
-export interface WindDef extends Rect { ax?: number; ay?: number; look?: 'air' | 'rain' | 'current'; }
+export interface WindDef extends Rect {
+  ax?: number; ay?: number; look?: 'air' | 'rain' | 'current';
+  /** The fan's on/off cycle in steps: it blows for `on` of every `period`,
+      shifted by `offset` (see levels/wind.ts). Filled in by initLevel. */
+  period?: number; on?: number; offset?: number;
+}
 export type SlipperyDef = Rect;
 /** QUICKSAND (Ancient Egypt): a round pit. Inside it the ball keeps sinking
     under gravity but loses most of its speed every step. */
@@ -85,6 +93,18 @@ export type CrabPattern = 'orbit' | 'eight' | 'flower' | 'scuttle';
 export interface CrabDef {
   cx: number; cy: number; rx: number; ry: number;
   pattern: CrabPattern; period: number; phase?: number; r: number;
+}
+
+/** A MOVING BUMPER: a red obstacle that glides along a short path and bounces
+    the ball like any other (it never ends a drop). `pattern` is the path:
+    'slide' side to side, 'rise' up and down (both reach `range` either side of
+    (cx, cy)), 'orbit' a circle of radius `range`. One lap every `period` steps,
+    starting `phase` (0..1) of the way round. Runs on the step clock, so the
+    one the player watches is the one the ball meets (see levels/mover.ts). */
+export type MoverPattern = 'slide' | 'rise' | 'orbit';
+export interface MoverDef {
+  cx: number; cy: number; r: number;
+  pattern: MoverPattern; range: number; period: number; phase?: number;
 }
 
 /** A FIRE obstacle. Geometrically a circle like the red one, and deliberately
@@ -145,6 +165,10 @@ export interface RawLevel {
   pillars?: PillarDef[];
   storm?: StormDef;
   crabs?: CrabDef[];
+  movers?: MoverDef[];
+  /** Short STATIC bars (posts) standing on the board: solid level walls,
+      drawn and collided exactly like the target's walls. */
+  bars?: Segment[];
   /** Optional bonus pickups. Scenery to the physics, like stars: a box can
       never change where the ball goes, which is what makes it safe to add to
       a level whose solution is already proved. */
@@ -191,6 +215,7 @@ export interface Level extends RawLevel {
   breakables: BreakableDef[];
   stars: StarDef[];
   fires: FireDef[];
+  movers: MoverDef[];
   boxes: BoxDef[];
   pillars: PillarDef[];
   walls: Segment[];

@@ -23,7 +23,7 @@ import { INK, WALL } from '../render/palette';
    ============================================================ */
 
 interface Mat { top: string; bottom: string; line: string; }
-const MATS: Record<PillarLook, Mat> = {
+export const MATS: Record<PillarLook, Mat> = {
   tree:   { top: '#c68a50', bottom: '#8d5a2e', line: 'rgba(92,52,20,.55)' },
   basalt: { top: '#5d4f58', bottom: '#352b33', line: 'rgba(20,14,20,.55)' },
   mint:   { top: '#d9efe4', bottom: '#94c7ae', line: 'rgba(60,120,95,.45)' },

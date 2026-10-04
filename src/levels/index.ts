@@ -4,9 +4,10 @@ import type { Level, RawLevel, Country } from './types';
 import { RAW_LEVELS } from './levels.data';
 import { COUNTRIES } from './countries.data';
 import { buildWalls } from './walls';
+import { WIND_PERIOD, WIND_ON } from './wind';
 import { pillarSegments } from './pillars';
 import { validatePatrol } from './patrol';
-import { WIND_CAP, W } from '../physics/constants';
+import { WIND_CAP, W, POST_HT } from '../physics/constants';
 import { clamp } from '../physics/math';
 
 export function initLevel(raw: RawLevel): Level {
@@ -21,6 +22,7 @@ export function initLevel(raw: RawLevel): Level {
     breakables: raw.breakables ?? [],
     stars: raw.stars ?? [],
     fires: raw.fires ?? [],
+    movers: raw.movers ?? [],
     boxes: raw.boxes ?? [],
     pillars: raw.pillars ?? [],
     walls: [],
@@ -40,7 +42,7 @@ export function initLevel(raw: RawLevel): Level {
      design box runs on out to the edge of the PLAY area (which is wider -
      see constants.ts), so a gust never stops halfway across what the player
      can see: drawn and pushed alike. */
-  lv.wind = lv.wind.map(z => {
+  lv.wind = lv.wind.map((z, i) => {
     const w = { ...z };
     w.ax = clamp(w.ax || 0, -WIND_CAP, WIND_CAP);
     w.ay = clamp(w.ay || 0, -WIND_CAP, WIND_CAP);
@@ -49,9 +51,14 @@ export function initLevel(raw: RawLevel): Level {
     if (right >= W) right = W + 1000;
     w.x = left; w.w = right - left;
     w.look = lv.storm ? 'rain' : lv.crabs && lv.crabs.length ? 'current' : 'air';
+    /* every FAN switches on and off (a sea current has no fan, and keeps flowing);
+       zones on one board are staggered */
+    if (w.period === undefined && w.look !== 'current') { w.period = WIND_PERIOD; w.on = WIND_ON; w.offset = (i * 137) % WIND_PERIOD; }
     return w;
   });
-  lv.walls = [...buildWalls(lv, lv.target), ...lv.pillars.flatMap(p => pillarSegments(p))];
+  /* posts: short standing bars, thicker than a ramp so they never read as one */
+  if (lv.bars) lv.bars = lv.bars.map(b => ({ x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2, ht: POST_HT }));
+  lv.walls = [...buildWalls(lv, lv.target), ...lv.pillars.flatMap(p => pillarSegments(p)), ...(lv.bars ?? [])];
   return lv;
 }
 

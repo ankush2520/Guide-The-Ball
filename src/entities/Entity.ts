@@ -55,8 +55,8 @@ export type EntityKind =
   | 'quicksand'                                          // ground: a hazard zone
   | 'blackhole'             // ground: world scenery
   | 'target'
-  | 'wall' | 'pillar'
-  | 'obstacle' | 'fire' | 'crab'
+  | 'wall' | 'pillar' | 'post'
+  | 'obstacle' | 'mover' | 'fire' | 'crab'
   | 'breakable' | 'booster' | 'star' | 'box' | 'storm'
   /* the two the PLAYER makes */
   | 'ramp';
@@ -69,10 +69,10 @@ export const LAYER: Record<EntityKind, number> = {
   meadow: 0, cliffs: 0, egypt: 0, space: 0,
   quicksand: 0,
   target: 1,
-  wall: 2, pillar: 2,
+  wall: 2, pillar: 2, post: 2,
   /* Fire shares the obstacle's layer: they are the same class of furniture
      and are read against each other, so neither may cover the other. */
-  obstacle: 3, fire: 3,
+  obstacle: 3, fire: 3, mover: 3,
   /* over the other furniture: it swims past things */
   crab: 4,
   /* a black hole swirls over the furniture near it, as a crab swims past */
