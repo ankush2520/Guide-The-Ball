@@ -19,8 +19,7 @@
    every reward in this game is paid in. Deliberately NOT the
    obstacle's red: a bonus must never read as a hazard.
 
-   Once taken it goes to a dashed outline, the same way a
-   collected star does, so the board still says what was there.
+   Once taken it disappears completely - no outline is left behind.
    ============================================================ */
 import { Entity, type DrawContext, type EntityKind } from './Entity';
 import type { BoxDef } from '../levels/types';
@@ -56,25 +55,11 @@ export class MysteryBox extends Entity<BoxDef> {
     const half = w / 2, top = -h / 2;
     const tie = w * 0.2;                      // ribbon width
 
+    /* Once taken, the gift is simply GONE - nothing is left on the board. */
+    if (taken) return;
+
     ctx.save();
     ctx.translate(p.x, p.y + bob);
-
-    if (taken) {
-      /* The empty spot. Dashed, low contrast, no glow - present enough to say
-         "you already got this one", quiet enough never to be mistaken for a
-         thing still worth steering at. The ribbon's cross is kept, faintly,
-         so the outline still reads as the gift that was there. */
-      ctx.strokeStyle = 'rgba(42,35,80,.30)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.roundRect(-half, top, w, h, 4);
-      ctx.moveTo(0, top); ctx.lineTo(0, top + h);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-      return;
-    }
 
     const glow = 0.5 + 0.5 * Math.sin(t);
     const bloom = ctx.createRadialGradient(0, 0, BOX_R * 0.4, 0, 0, BOX_R * BOX_GLOW);
