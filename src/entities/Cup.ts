@@ -6,7 +6,7 @@
 
      meadow     a glass of water, with ice
      volcano    a coffee mug, steaming
-     mountains  a beer stein with a foam head
+     mountains  a root-beer mug with a creamy foam head
      cliffs     a teacup on its saucer, steaming
      reef       a tropical juice glass: straw, umbrella, orange slice
      egypt      a glass of lemonade: lemon wheel, ice, mint
@@ -65,7 +65,7 @@ interface Drink {
 const DRINKS: Record<CupTheme, Drink> = {
   meadow:    { glass: true,  body: ['', '', ''], rim: '#e9f6ff', liquid: ['rgba(120,200,255,.55)', 'rgba(60,150,230,.7)'], surface: '#bfe6ff', level: 0.22 },
   volcano:   { glass: false, body: ['#ffffff', '#f1ece6', '#c9bfb4'], rim: '#ffffff', liquid: ['#6b3f22', '#3d2414'], surface: '#7a4a2a', level: 0.14, handle: '#efe9e2' },
-  mountains: { glass: true,  body: ['', '', ''], rim: '#f4fbff', liquid: ['rgba(255,190,60,.85)', 'rgba(214,128,20,.92)'], surface: '#fffaf0', level: 0.06, handle: 'rgba(225,240,250,.85)' },
+  mountains: { glass: true,  body: ['', '', ''], rim: '#f4fbff', liquid: ['rgba(160,100,58,.92)', 'rgba(84,46,22,.96)'], surface: '#fff1dd', level: 0.06, handle: 'rgba(225,240,250,.85)' },
   cliffs:    { glass: false, body: ['#ffffff', '#f3f6fb', '#c6cfe0'], rim: '#ffffff', liquid: ['#c77a35', '#8a4a16'], surface: '#c98a4a', level: 0.14, handle: '#eef2f8' },
   reef:      { glass: true,  body: ['', '', ''], rim: '#f4fbff', liquid: ['rgba(255,170,60,.85)', 'rgba(255,90,90,.9)'], surface: '#ffc070', level: 0.16 },
   egypt:     { glass: true,  body: ['', '', ''], rim: '#f4fbff', liquid: ['rgba(255,245,170,.7)', 'rgba(250,225,90,.8)'], surface: '#fff6c4', level: 0.18 },
@@ -223,7 +223,7 @@ const SURFACE: Partial<Record<CupTheme, SurfaceFn>> = {
     ctx.strokeStyle = 'rgba(210,160,110,.8)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(0, sy, srx * 0.82, sry * 0.8, 0, 0, Math.PI * 2); ctx.stroke();
   },
-  // beer: the foam head, bubbly
+  // root beer: the foam head, bubbly
   mountains: (ctx, r, sy, srx, sry) => {
     ctx.fillStyle = 'rgba(255,255,255,.95)';
     for (let i = 0; i < 7; i++) {
@@ -317,7 +317,7 @@ const DECOR: Partial<Record<CupTheme, Fn>> = {
 
 /* over the finished cup */
 const OVER: Partial<Record<CupTheme, Fn>> = {
-  // beer: foam spilling over the front lip
+  // root beer: foam spilling over the front lip
   mountains: (ctx, r) => {
     ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(42,35,80,.35)'; ctx.lineWidth = 1;
     const my = MOUTH_Y * r;

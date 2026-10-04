@@ -35,6 +35,15 @@ const LAYOUTS: Record<string, Layout> = {
     title: { x: 400, y: 1030, size: 128, sub: 54, maxW: 740 } },
   square: { W: 800, H: 800, box: { x: 150, y: 10, s: 0.56 },
     title: { x: 400, y: 655, size: 100, sub: 42, maxW: 740 } },
+  itch: { W: 1260, H: 1000, box: { x: 313, y: 10, s: 0.66 },
+    title: { x: 630, y: 790, size: 150, sub: 62, maxW: 1100 } },
+  gd512: { W: 512, H: 512, box: { x: 112, y: 4, s: 0.37 },
+    title: { x: 256, y: 405, size: 62, sub: 27, maxW: 470 } },
+  gd384: { W: 512, H: 384, box: { x: 160, y: 2, s: 0.255 },
+    title: { x: 256, y: 322, size: 52, sub: 22, maxW: 470 } },
+  gd200: { W: 200, H: 120, box: { x: 40, y: 2, s: 0.115 } },
+  gdwide: { W: 1280, H: 550, box: { x: 690, y: 6, s: 0.52 },
+    title: { x: 350, y: 250, size: 120, sub: 50, maxW: 620 } },
   icon: { W: 512, H: 512, box: { x: 8, y: 4, s: 0.5 } },
 };
 

@@ -10,6 +10,11 @@
        rewarded / midgame           SDK.ad.requestAd(type, { adStarted, adFinished, adError })
        gameplay events              SDK.game.gameplayStart() / gameplayStop()
 
+     GameDistribution             window.gdsdk (GD_OPTIONS set in the page head)
+       interstitial                 gdsdk.showAd()
+       rewarded                     gdsdk.showAd('rewarded') + the SDK_REWARDED_WATCH_COMPLETE event
+       pause / resume               SDK_GAME_PAUSE / SDK_GAME_START events
+
      Poki                         window.PokiSDK
        init()                       PokiSDK.init()
        rewarded                     PokiSDK.rewardedBreak(beforeAd) -> Promise<boolean>
@@ -36,7 +41,7 @@
 import { Sound } from '../audio/Sound';
 import { track } from '../analytics/track';
 
-type Platform = 'crazygames' | 'poki' | 'dev' | 'none';
+type Platform = 'crazygames' | 'poki' | 'gamedistribution' | 'dev' | 'none';
 
 interface CrazySDK {
   init(): Promise<void>;
@@ -53,10 +58,18 @@ interface PokiSDK {
   commercialBreak(before?: () => void): Promise<void>;
   rewardedBreak(before?: () => void): Promise<boolean>;
 }
+interface GDSDK {
+  showAd(type?: 'rewarded' | 'interstitial'): Promise<unknown>;
+  preloadAd?(type: 'rewarded' | 'interstitial'): Promise<unknown>;
+}
 declare global {
   interface Window {
     CrazyGames?: { SDK?: CrazySDK };
     PokiSDK?: PokiSDK;
+    gdsdk?: GDSDK;
+    /* the build's inline GD_OPTIONS forwards every SDK event here */
+    __gdOnEvent?: (e: { name: string }) => void;
+    GD_OPTIONS_SET?: boolean;
   }
 }
 
@@ -68,6 +81,7 @@ class AdsImpl {
   private ready = false;
   private playing = false;          // gameplayStart has been sent and not yet stopped
   private busy = false;             // an ad is on screen
+  private gdRewardDone = false;     // GameDistribution: the watch-complete event arrived
   /* The UI's view of available(), so every ad button appears the moment the
      SDK answers (init is async and nothing else re-renders on it) and
      disables itself for as long as an ad is on screen. */
@@ -99,6 +113,16 @@ class AdsImpl {
         /* VITE_NO_ADS: the Basic Launch build. CrazyGames allows no ads in
            that phase, so every ad button stays hidden whatever the SDK says. */
         this.ready = cg.environment !== 'disabled' && !import.meta.env.VITE_NO_ADS;
+        return;
+      }
+      if (window.gdsdk && window.GD_OPTIONS_SET) {
+        this.platform = 'gamedistribution';
+        this.ready = true;
+        window.__gdOnEvent = e => {
+          if (e.name === 'SDK_GAME_PAUSE') Sound.pause();
+          else if (e.name === 'SDK_GAME_START') Sound.nudge();
+          else if (e.name === 'SDK_REWARDED_WATCH_COMPLETE') this.gdRewardDone = true;
+        };
         return;
       }
       const poki = window.PokiSDK;
@@ -154,6 +178,12 @@ class AdsImpl {
           });
         case 'poki':
           return await window.PokiSDK!.rewardedBreak(() => Sound.pause());
+        case 'gamedistribution':
+          /* the reward is for the watch-complete EVENT, never for the promise
+             alone - a promise that resolves on a skipped or empty ad must not pay */
+          this.gdRewardDone = false;
+          try { await window.gdsdk!.showAd('rewarded'); } catch { return false; }
+          return this.gdRewardDone;
         case 'dev':
           Sound.pause();
           await new Promise(r => setTimeout(r, 1000));
@@ -190,6 +220,8 @@ class AdsImpl {
         });
       } else if (this.platform === 'poki') {
         await window.PokiSDK!.commercialBreak(() => Sound.pause());
+      } else if (this.platform === 'gamedistribution') {
+        await window.gdsdk!.showAd();
       }
     } catch { /* no ad is fine */ }
     finally {
