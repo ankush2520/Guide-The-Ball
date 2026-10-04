@@ -30,11 +30,11 @@ interface Layout {
 
 const LAYOUTS: Record<string, Layout> = {
   landscape: { W: 1920, H: 1080, box: { x: 930, y: 40, s: 0.95 },
-    title: { x: 470, y: 430, size: 176, sub: 74, maxW: 840 } },
-  portrait: { W: 800, H: 1200, box: { x: 18, y: 345, s: 0.8 },
-    title: { x: 400, y: 140, size: 128, sub: 54, maxW: 740 } },
-  square: { W: 800, H: 800, box: { x: 110, y: 205, s: 0.595 },
-    title: { x: 400, y: 92, size: 104, sub: 44, maxW: 740 } },
+    title: { x: 450, y: 640, size: 176, sub: 72, maxW: 800 } },
+  portrait: { W: 800, H: 1200, box: { x: 40, y: 40, s: 0.82 },
+    title: { x: 400, y: 1030, size: 128, sub: 54, maxW: 740 } },
+  square: { W: 800, H: 800, box: { x: 150, y: 10, s: 0.56 },
+    title: { x: 400, y: 655, size: 100, sub: 42, maxW: 740 } },
   icon: { W: 512, H: 512, box: { x: 8, y: 4, s: 0.5 } },
 };
 
