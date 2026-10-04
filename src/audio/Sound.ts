@@ -282,7 +282,7 @@ class SoundEngine {
     this.ctx.onstatechange = () => {
       if (!this.ctx) return;
       if (this.ctx.state === "running") this.startMusic();
-      else this.stopMusic();
+      else { this.stopMusic(); if (!this.kicking && !this.isMuted) this.needsKick = true; }
     };
 
     const c = this.ctx;
@@ -544,8 +544,52 @@ class SoundEngine {
       hear means nothing to hold. */
   unlock = (): void => {
     if (this.isMuted) return;
-    if (this.ensure()) this.resumeCtx();
+    if (!this.ensure()) return;
+    if (this.needsKick) this.kick();
+    else this.resumeCtx();
   };
+
+  /* AFTER A LOCK SCREEN. iOS (and some Android browsers) can hand the
+     context back reporting 'running' while the output is dead - so a plain
+     resume() does nothing, and the only cure players found was turning the
+     sound off and on in Settings. That toggle is a suspend() then a resume(),
+     so do exactly that ourselves, on the first tap after coming back. The
+     flag stays set until a kick inside a gesture has actually run. */
+  private needsKick = false;
+  private kicking = false;
+  private kick(): void {
+    const c = this.ctx;
+    if (!c || this.kicking) return;
+    this.needsKick = false;
+    this.kicking = true;
+    this.stopMusic();
+    const back = () => {
+      try {
+        c.resume()?.then(
+          () => {
+            if (this.master) {
+              this.master.gain.cancelScheduledValues(c.currentTime);
+              this.master.gain.setValueAtTime(this.isMuted ? 0 : 1, c.currentTime);
+            }
+            this.startMusic();
+            /* the level's loop died with the old output - rebuild it */
+            if (this.amb) {
+              for (const src of this.amb.srcs) { try { src.stop(); } catch { /* stopped */ } }
+              if (this.amb.timer) clearInterval(this.amb.timer);
+              this.amb = null;
+            }
+            this.applyAmbience();
+            this.kicking = false;
+          },
+          () => { this.kicking = false; this.needsKick = true; },
+        );
+      } catch { this.kicking = false; this.needsKick = true; }
+    };
+    /* both calls made right here, inside the tap - iOS only lets resume()
+       through from a gesture, and the two are queued in order */
+    try { c.suspend().catch(() => {}); } catch { /* ignore */ }
+    back();
+  }
 
   /** For everything that is NOT a gesture - coming back from the background, a
       bfcache restore, a sound effect finding the context asleep. It nudges a
@@ -559,6 +603,7 @@ class SoundEngine {
       sitting in another tab is not still holding the phone's audio while the
       player watches something else. nudge() on the way back resumes it. */
   pause = (): void => {
+    this.needsKick = true;
     this.stopMusic();
     try {
       this.ctx?.suspend();
